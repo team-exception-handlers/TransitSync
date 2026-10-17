@@ -96,6 +96,7 @@ These come from the Mathematical Foundations wiki page. Do not break them.
 - Before starting a task, read the issue and its parent user story
 - Stay inside the task's scope. If something else needs changing, say so at the end instead of doing it
 - When a task is done, suggest a commit message in the present tense that references the issue, e.g. `Add event queue and clock (#42)`
+- Every feature or fix PR fills the AI declaration in `.github/pull_request_template.md`: the level for the code the PR changes and the list of AI-assisted files. Draft the matching row (and, for at least half of features, a development example) for `AI_USAGE.md`. File headers, the PR declaration and `AI_USAGE.md` must agree
 
 ## Tests
 
