@@ -20,6 +20,11 @@ EVENTS_FILE = "events.jsonl"
 SUMMARY_FILE = "summary.json"
 
 
+def partial_path(path: Path) -> Path:
+    """Where a file is written before it is complete: ``<name>.partial``."""
+    return path.with_name(path.name + ".partial")
+
+
 def encode_record(event: Event) -> str:
     """One event as a single compact JSON line (without the newline).
 
@@ -38,7 +43,7 @@ class EventLogWriter:
 
     def __init__(self, path: Path) -> None:
         self._path = path
-        self._partial = path.with_name(path.name + ".partial")
+        self._partial = partial_path(path)
         self._file: IO[str] | None = None
 
     def __enter__(self) -> Self:

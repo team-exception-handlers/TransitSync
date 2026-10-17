@@ -15,11 +15,13 @@ from simulator.engine.event_queue import (
 )
 from simulator.engine.events import (
     EVENT_PRIORITY,
+    SCHEDULE_AT_CURRENT_TIME,
     Alighting,
     Boarding,
     DepartureDue,
     EventType,
     Hold,
+    HoldEnd,
     MissedConnection,
     PassengerArrival,
     TrainArrival,
@@ -51,6 +53,7 @@ def make_event(event_type, time_s, tag="x"):
         EventType.HOLD: lambda: Hold(
             time_s=time_s, requested_s=0, applied_s=0, reason="none", **train
         ),
+        EventType.HOLD_END: lambda: HoldEnd(time_s=time_s, **train),
         EventType.PASSENGER_ARRIVAL: lambda: PassengerArrival(
             time_s=time_s, group_id="g", **passenger
         ),
@@ -81,10 +84,10 @@ def test_events_scheduled_out_of_order_are_processed_in_time_order():
 
 def test_same_time_events_resolve_by_documented_priority():
     # Scheduled in reverse platform order; processed arrival -> boarding ->
-    # departure, as documented in simulator.engine.events
+    # departure due, as documented in simulator.engine.events
     scheduler = Scheduler()
     for event_type in (
-        EventType.TRAIN_DEPARTURE,
+        EventType.DEPARTURE_DUE,
         EventType.BOARDING,
         EventType.TRAIN_ARRIVAL,
     ):
@@ -92,7 +95,7 @@ def test_same_time_events_resolve_by_documented_priority():
     assert [event.event_type for event in run_all(scheduler)] == [
         EventType.TRAIN_ARRIVAL,
         EventType.BOARDING,
-        EventType.TRAIN_DEPARTURE,
+        EventType.DEPARTURE_DUE,
     ]
 
 
@@ -129,26 +132,29 @@ def test_handler_can_schedule_follow_up_events():
         if event.event_type is EventType.TRAIN_ARRIVAL:
             # Same instant but later in the tie order, then a later time
             scheduler.schedule(make_event(EventType.ALIGHTING, 100.0))
-            scheduler.schedule(make_event(EventType.TRAIN_DEPARTURE, 130.0))
+            scheduler.schedule(make_event(EventType.DEPARTURE_DUE, 130.0))
 
     processed = []
     scheduler.run_until(1000.0, lambda e: (processed.append(e), handler(e)))
     assert [(e.event_type, e.time_s) for e in processed] == [
         (EventType.TRAIN_ARRIVAL, 100.0),
         (EventType.ALIGHTING, 100.0),
-        (EventType.TRAIN_DEPARTURE, 130.0),
+        (EventType.DEPARTURE_DUE, 130.0),
     ]
 
 
 def test_hold_decision_at_departure_due_can_record_and_delay_the_departure():
-    # Sequence diagram flow: dwell ends at 150 s, a 30 s hold is decided,
-    # recorded at 150 s, and the departure follows at 180 s
+    # Sequence diagram flow: dwell ends at 150 s, a 30 s hold is decided and
+    # recorded at 150 s, the hold ends at 180 s and the departure is created
+    # then, at the moment the train leaves
     scheduler = Scheduler()
     scheduler.schedule(make_event(EventType.DEPARTURE_DUE, 150.0))
 
     def handler(event):
         if event.event_type is EventType.DEPARTURE_DUE:
             scheduler.schedule(make_event(EventType.HOLD, 150.0))
+            scheduler.schedule(make_event(EventType.HOLD_END, 180.0))
+        elif event.event_type is EventType.HOLD_END:
             scheduler.schedule(make_event(EventType.TRAIN_DEPARTURE, 180.0))
 
     processed = []
@@ -156,8 +162,29 @@ def test_hold_decision_at_departure_due_can_record_and_delay_the_departure():
     assert [(e.event_type, e.time_s) for e in processed] == [
         (EventType.DEPARTURE_DUE, 150.0),
         (EventType.HOLD, 150.0),
+        (EventType.HOLD_END, 180.0),
         (EventType.TRAIN_DEPARTURE, 180.0),
     ]
+
+
+def test_departure_scheduled_ahead_of_time_is_rejected():
+    # Created at the 150 s decision for a 180 s departure, its counts would
+    # miss anyone boarding during the hold
+    scheduler = Scheduler()
+    scheduler.schedule(make_event(EventType.DEPARTURE_DUE, 150.0))
+    run_all(scheduler)
+    with pytest.raises(SchedulingError, match="must be created when it happens"):
+        scheduler.schedule(make_event(EventType.TRAIN_DEPARTURE, 180.0))
+    assert scheduler.pending == 0
+
+
+def test_departure_at_the_current_time_is_accepted():
+    scheduler = Scheduler()
+    scheduler.schedule(make_event(EventType.DEPARTURE_DUE, 150.0))
+    run_all(scheduler)
+    scheduler.schedule(make_event(EventType.TRAIN_DEPARTURE, 150.0))
+    processed = run_all(scheduler)
+    assert [e.event_type for e in processed] == [EventType.TRAIN_DEPARTURE]
 
 
 def test_scheduling_before_the_clock_is_rejected():
@@ -169,9 +196,9 @@ def test_scheduling_before_the_clock_is_rejected():
 
 
 def test_scheduling_earlier_in_tie_order_at_current_time_is_rejected():
-    # Boarding at 100 s cannot happen after the train left at 100 s
+    # Boarding at 100 s cannot happen after the hold ended at 100 s
     scheduler = Scheduler()
-    scheduler.schedule(make_event(EventType.TRAIN_DEPARTURE, 100.0))
+    scheduler.schedule(make_event(EventType.HOLD_END, 100.0))
     run_all(scheduler)
     with pytest.raises(SchedulingError, match="tie order"):
         scheduler.schedule(make_event(EventType.BOARDING, 100.0))
@@ -226,11 +253,15 @@ def test_end_time_before_the_clock_is_rejected():
         scheduler.run_until(50.0, lambda _event: None)
 
 
+# Types that may be scheduled ahead of time. The others can only be scheduled
+# at the current time, which the dedicated tests above cover.
+_AHEAD_TYPES = [t for t in EventType if t not in SCHEDULE_AT_CURRENT_TIME]
+
 # Small times keep collisions (ties) frequent in generated cases
 _scheduled = st.lists(
     st.tuples(
         st.integers(min_value=0, max_value=20).map(float),
-        st.sampled_from(list(EventType)),
+        st.sampled_from(_AHEAD_TYPES),
     ),
     max_size=40,
 )
@@ -258,7 +289,7 @@ def test_processing_order_never_goes_backwards(scheduled):
     assert clock_seen == sorted(clock_seen)
 
 
-@given(st.permutations(list(EventType)), st.randoms(use_true_random=False))
+@given(st.permutations(_AHEAD_TYPES), st.randoms(use_true_random=False))
 def test_order_does_not_depend_on_scheduling_order_for_distinct_keys(event_types, rng):
     # Distinct (time, priority) keys: scheduling order must not matter
     events = [make_event(t, float(i % 3)) for i, t in enumerate(event_types)]

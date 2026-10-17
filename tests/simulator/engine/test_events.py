@@ -18,6 +18,7 @@ from simulator.engine.events import (
     EventSchemaError,
     EventType,
     Hold,
+    HoldEnd,
     MissedConnection,
     PassengerArrival,
     TrainArrival,
@@ -71,6 +72,9 @@ SAMPLE_EVENTS = [
     MissedConnection(
         time_s=180.0, passenger_id="p-2", train_id="metro-1", platform_id="green-west"
     ),
+    HoldEnd(
+        time_s=180.0, train_id="metro-1", station_id="mcgill", platform_id="green-west"
+    ),
     DepartureDue(
         time_s=150.0,
         train_id="metro-1",
@@ -105,14 +109,16 @@ def _departure(**overrides):
     return TrainDeparture(**(values | overrides))
 
 
-def test_event_types_match_the_issue_list_plus_the_decision_point():
-    # The seven types listed in Task 1.1.1, plus departure_due: the point where
-    # the hold decision is taken (Architecture sequence diagram)
+def test_event_types_match_the_issue_list_plus_the_decision_points():
+    # The seven types listed in Task 1.1.1, plus departure_due, where the hold
+    # decision is taken (Architecture sequence diagram), and hold_end, where a
+    # held train's departure record is created
     assert {event_type.value for event_type in EventType} == {
         "train_arrival",
         "departure_due",
         "train_departure",
         "hold",
+        "hold_end",
         "passenger_arrival",
         "boarding",
         "alighting",
@@ -135,6 +141,7 @@ def test_priority_order_matches_the_documented_platform_sequence():
         EventType.BOARDING,
         EventType.DEPARTURE_DUE,
         EventType.HOLD,
+        EventType.HOLD_END,
         EventType.TRAIN_DEPARTURE,
         EventType.MISSED_CONNECTION,
     ]

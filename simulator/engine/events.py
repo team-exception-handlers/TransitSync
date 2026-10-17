@@ -34,17 +34,25 @@ The order follows what happens at a platform in one instant:
 5. ``DEPARTURE_DUE``: the dwell has ended, so the hold decision is taken now,
    once boarding at this instant is known
 6. ``HOLD``: the decision taken at ``DEPARTURE_DUE`` is recorded
-7. ``TRAIN_DEPARTURE``: the train leaves
-8. ``MISSED_CONNECTION``: a connection is only missed once the train has left
+7. ``HOLD_END``: a hold ends, once boarding at this instant is known
+8. ``TRAIN_DEPARTURE``: the train leaves
+9. ``MISSED_CONNECTION``: a connection is only missed once the train has left
 
 Every event except ``DEPARTURE_DUE`` records something that happened.
 ``DEPARTURE_DUE`` is the decision point of the Architecture sequence diagram:
 train logic schedules it when the train arrives, and handling it builds the
-observation, asks the strategy, records the ``Hold`` and schedules the
-``TrainDeparture``. The decision cannot be taken at arrival instead, because
-the prediction error depends on how far ahead the strategy looks (Mathematical
-Foundations section 7) and Metro dwell depends on who boards during the dwell
-(section 4).
+observation, asks the strategy and records the ``Hold``. The decision cannot
+be taken at arrival instead, because the prediction error depends on how far
+ahead the strategy looks (Mathematical Foundations section 7) and Metro dwell
+depends on who boards during the dwell (section 4).
+
+Departure records: the counts on ``TrainDeparture`` are only final when the
+train leaves, so the event is created at that instant and never ahead of time.
+With no hold, the ``DEPARTURE_DUE`` handler creates it at the same time. With
+a hold, the handler schedules a ``HOLD_END`` at the end of the hold instead,
+and handling ``HOLD_END`` creates the ``TrainDeparture``. Anyone who boards
+during the hold is then counted. The scheduler enforces this through
+``SCHEDULE_AT_CURRENT_TIME``.
 """
 
 import math
@@ -52,7 +60,7 @@ from dataclasses import dataclass, field, fields
 from enum import StrEnum
 from typing import Any, ClassVar
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Field kinds, stored in dataclass field metadata and checked in __post_init__
 _KIND = "kind"
@@ -69,6 +77,7 @@ class EventType(StrEnum):
     DEPARTURE_DUE = "departure_due"
     TRAIN_DEPARTURE = "train_departure"
     HOLD = "hold"
+    HOLD_END = "hold_end"
     PASSENGER_ARRIVAL = "passenger_arrival"
     BOARDING = "boarding"
     ALIGHTING = "alighting"
@@ -84,9 +93,15 @@ EVENT_PRIORITY: dict[EventType, int] = {
     EventType.BOARDING: 3,
     EventType.DEPARTURE_DUE: 4,
     EventType.HOLD: 5,
-    EventType.TRAIN_DEPARTURE: 6,
-    EventType.MISSED_CONNECTION: 7,
+    EventType.HOLD_END: 6,
+    EventType.TRAIN_DEPARTURE: 7,
+    EventType.MISSED_CONNECTION: 8,
 }
+
+# Events whose fields are only final at the instant they happen. The scheduler
+# only accepts them at the current time, so a departure can never carry counts
+# taken before boarding ended (see "Departure records" above).
+SCHEDULE_AT_CURRENT_TIME: frozenset[EventType] = frozenset({EventType.TRAIN_DEPARTURE})
 
 
 class EventSchemaError(ValueError):
@@ -195,8 +210,9 @@ class DepartureDue(Event):
     """A train's dwell has ended and it is ready to leave.
 
     This is the decision point for holding: whoever handles it decides the
-    hold, records it as a ``Hold`` and schedules the ``TrainDeparture``. With
-    no control strategy the departure follows at the same time.
+    hold and records it as a ``Hold``. With no hold (or no control strategy)
+    the handler creates the ``TrainDeparture`` at the same time. With a hold
+    it schedules a ``HoldEnd`` at the end of the hold instead.
 
     Attributes:
         scheduled_s: timetabled departure time, in seconds. ``time_s`` can be
@@ -215,7 +231,10 @@ class TrainDeparture(Event):
     """A train leaves a platform.
 
     The three counts cover every passenger at this stop, transferring or not,
-    and use the symbols of Mathematical Foundations sections 1 and 4.
+    and use the symbols of Mathematical Foundations sections 1 and 4. The
+    event is created at the moment the train leaves, while handling
+    ``DepartureDue`` (no hold) or ``HoldEnd``, so the counts include anyone
+    who boarded during a hold. The scheduler rejects it at any other time.
 
     Attributes:
         scheduled_s: timetabled departure time, in seconds.
@@ -267,6 +286,21 @@ class Hold(Event):
                 f"Hold.applied_s ({self.applied_s}) must not exceed "
                 f"Hold.requested_s ({self.requested_s})"
             )
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class HoldEnd(Event):
+    """A hold on a train has ended and the train is free to leave.
+
+    Scheduled when a hold is applied, at the decision time plus
+    ``Hold.applied_s``. Whoever handles it creates the ``TrainDeparture`` at
+    the same time, with the counts as they are after the hold.
+    """
+
+    event_type: ClassVar[EventType] = EventType.HOLD_END
+    train_id: str = _id_field()
+    station_id: str = _id_field()
+    platform_id: str = _id_field()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -330,6 +364,7 @@ EVENT_CLASSES: dict[EventType, type[Event]] = {
         DepartureDue,
         TrainDeparture,
         Hold,
+        HoldEnd,
         PassengerArrival,
         Boarding,
         Alighting,

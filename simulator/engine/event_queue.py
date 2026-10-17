@@ -20,7 +20,11 @@ import logging
 import math
 from collections.abc import Callable
 
-from simulator.engine.events import EVENT_PRIORITY, Event
+from simulator.engine.events import (
+    EVENT_PRIORITY,
+    SCHEDULE_AT_CURRENT_TIME,
+    Event,
+)
 
 log = logging.getLogger(__name__)
 
@@ -105,14 +109,21 @@ class Scheduler:
         schema, so only the position relative to the clock is checked here.
 
         Raises:
-            SchedulingError: the event is earlier than the current time, or
-                is at the current time but would come before the event that
-                was just processed in the tie order.
+            SchedulingError: the event is earlier than the current time, is
+                at the current time but would come before the event that was
+                just processed in the tie order, or is a type in
+                ``SCHEDULE_AT_CURRENT_TIME`` scheduled for a later time.
         """
         if event.time_s < self._now:
             raise SchedulingError(
                 f"cannot schedule {event.event_type.value} at {event.time_s} s, "
                 f"the clock is already at {self._now} s"
+            )
+        if event.event_type in SCHEDULE_AT_CURRENT_TIME and event.time_s != self._now:
+            raise SchedulingError(
+                f"cannot schedule {event.event_type.value} at {event.time_s} s: "
+                f"it must be created when it happens, at the current time "
+                f"({self._now} s), so its counts are final"
             )
         if self._last_key is not None and _order_key(event) < self._last_key:
             raise SchedulingError(

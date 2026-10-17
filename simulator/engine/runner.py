@@ -21,6 +21,10 @@ Output, written to ``output_dir``:
 
 - ``events.jsonl``: every processed event, one JSON record per line
 - ``summary.json``: counts for the run
+
+The two files always come from the same run. A folder that already holds
+either file is rejected before the run starts, and a run that fails removes
+everything it wrote, so a failed rerun never leaves old and new results mixed.
 """
 
 import logging
@@ -35,6 +39,7 @@ from simulator.engine.event_log import (
     SUMMARY_FILE,
     EventLogWriter,
     RunSummary,
+    partial_path,
     write_summary,
 )
 from simulator.engine.event_queue import Scheduler
@@ -105,6 +110,31 @@ def _check_scenario(scenario: Scenario) -> None:
         )
 
 
+def _check_output_dir(events_path: Path, summary_path: Path) -> None:
+    """Reject a folder that already holds the output of another run."""
+    existing = [path.name for path in (events_path, summary_path) if path.exists()]
+    if existing:
+        raise RunError(
+            f"{events_path.parent} already contains run output "
+            f"({', '.join(existing)}); use an empty or new folder"
+        )
+
+
+def _discard_output(events_path: Path, summary_path: Path) -> None:
+    """Remove every file a failed run wrote, finished or partial.
+
+    Safe because ``_check_output_dir`` made sure none of them existed before
+    the run. A file that cannot be removed is logged, not raised, so the
+    error that failed the run is the one the caller sees.
+    """
+    for path in (events_path, summary_path):
+        for leftover in (path, partial_path(path)):
+            try:
+                leftover.unlink(missing_ok=True)
+            except OSError as error:
+                log.warning("could not remove %s: %s", leftover, error)
+
+
 def _process_events(
     scheduler: Scheduler,
     components: Sequence[Component],
@@ -140,12 +170,17 @@ def run_scenario(
         build_streams: builds the random substreams from the master seed.
         build_components: builds the components from the scenario and streams.
         output_dir: folder for the event log and summary. Created if missing.
+            Must not already contain an event log or summary.
 
     Raises:
         ValueError: the scenario duration or master seed is invalid.
-        RunError: the output could not be written.
+        RunError: the output folder already holds run output, or the output
+            could not be written. Nothing from this run is left behind.
     """
     _check_scenario(scenario)
+    events_path = output_dir / EVENTS_FILE
+    summary_path = output_dir / SUMMARY_FILE
+    _check_output_dir(events_path, summary_path)
     streams = build_streams(scenario.master_seed)
     components = list(build_components(scenario, streams))
     scheduler = Scheduler()
@@ -154,8 +189,6 @@ def run_scenario(
 
     seed = scenario.master_seed
     summary = RunSummary(master_seed=seed, duration_s=float(scenario.duration_s))
-    events_path = output_dir / EVENTS_FILE
-    summary_path = output_dir / SUMMARY_FILE
     log.info("starting run: seed=%d duration=%s s", seed, scenario.duration_s)
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -164,8 +197,14 @@ def run_scenario(
         )
         write_summary(summary, summary_path)
     except OSError as error:
+        _discard_output(events_path, summary_path)
         log.error("could not write run output to %s: %s", output_dir, error)
         raise RunError(f"could not write run output to {output_dir}") from error
+    except BaseException:
+        # Any other failure (a component error, Ctrl+C) also removes the
+        # partial output, then propagates unchanged
+        _discard_output(events_path, summary_path)
+        raise
 
     log.info(
         "finished run: seed=%d events=%d pending=%d",

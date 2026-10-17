@@ -49,8 +49,10 @@ Always run Python tools through `.venv`; the system Python (3.14) does not have 
 
 - `simulator/engine/events.py` is the frozen event schema. Any change to an event type or field bumps `SCHEMA_VERSION`
 - Transferring passengers get one event per passenger (`passenger_id`, plus `group_id` for the transfer burst). Everyone else only appears as counts on `TrainDeparture` (`boarded_count` B, `alighted_count` A, `onboard_load` L)
+- `TrainDeparture` is created at the moment the train leaves, never ahead of time, so B, A and L include anyone who boarded during a hold. No hold: the `DepartureDue` handler creates it. Hold: that handler records the `Hold` and schedules a `HoldEnd`, whose handler creates it. The scheduler rejects a `TrainDeparture` not at the current time
 - Same-time events follow `EVENT_PRIORITY`, then scheduling order. The scheduler rejects events in the past or earlier in the tie order than the event just processed
 - The runner depends on small interfaces in `simulator/engine/runner.py`: `Scenario` (#98), `StreamFactory` (#9) and `ComponentFactory` / `Component` (#97, US-1.2, US-1.3). The stand-ins in `tests/conftest.py` are removed once the real ones are merged
+- `run_scenario` rejects an output folder that already has `events.jsonl` or `summary.json`, and a failed run removes everything it wrote
 - Output files are byte-reproducible: fixed key order, `\n` line endings, no wall clock time or paths
 
 ## Rules for the simulator

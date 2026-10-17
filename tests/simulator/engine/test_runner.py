@@ -18,7 +18,9 @@ from dataclasses import replace
 
 import pytest
 
+from simulator.engine import runner
 from simulator.engine.event_log import EVENTS_FILE, SUMMARY_FILE
+from simulator.engine.events import Boarding, PassengerArrival
 from simulator.engine.runner import RunError, run_scenario
 
 EXPECTED_TIMELINE = [
@@ -40,6 +42,58 @@ def _read_log(path):
 
 def _timeline(records):
     return [(r["event_type"], r["train_id"], r["time_s"]) for r in records]
+
+
+def _output_files(folder):
+    return sorted(path.name for path in folder.iterdir())
+
+
+class TransferPassengers:
+    """Transferring passengers who reach a platform and board one train.
+
+    Stands in for passenger logic (US-1.3): each passenger arrives at a given
+    time and boards ``train_id`` at that same instant.
+    """
+
+    def __init__(self, train_id, platform_id, arrival_times_s):
+        self._train_id = train_id
+        self._platform_id = platform_id
+        self._arrival_times_s = arrival_times_s
+
+    def start(self, scheduler):
+        for index, time_s in enumerate(self._arrival_times_s):
+            scheduler.schedule(
+                PassengerArrival(
+                    time_s=time_s,
+                    passenger_id=f"p-{index}",
+                    group_id="g-1",
+                    platform_id=self._platform_id,
+                )
+            )
+
+    def handle(self, event, scheduler):
+        if isinstance(event, PassengerArrival):
+            scheduler.schedule(
+                Boarding(
+                    time_s=event.time_s,
+                    passenger_id=event.passenger_id,
+                    train_id=self._train_id,
+                    platform_id=self._platform_id,
+                )
+            )
+
+
+REM_PLATFORM = "STA_ZCD_BT_QUAI_01_MCG"
+
+
+def _with_passengers(held_rem_component, arrival_times_s):
+    """Held rem-1 plus passengers who board it at the given times."""
+
+    def build(_scenario, _streams):
+        passengers = TransferPassengers("rem-1", REM_PLATFORM, arrival_times_s)
+        return [held_rem_component, passengers]
+
+    return build
 
 
 def test_smoke_run_with_no_control_strategy_writes_the_expected_log(
@@ -175,5 +229,97 @@ def test_failing_component_leaves_no_complete_log(
 
     with pytest.raises(RuntimeError, match="component failed"):
         run_scenario(minimal_scenario, build_streams, build, tmp_path)
-    assert not (tmp_path / EVENTS_FILE).exists()
-    assert not (tmp_path / SUMMARY_FILE).exists()
+    # Not even the partial log is left behind
+    assert _output_files(tmp_path) == []
+
+
+def test_passenger_boarding_during_a_hold_is_counted_on_the_departure(
+    tmp_path, minimal_scenario, build_streams, held_rem_component
+):
+    # One passenger boards during the dwell (140), one during the hold (170).
+    # The departure is created at 190, when the hold ends, so both count.
+    build = _with_passengers(held_rem_component, (140.0, 170.0))
+    result = run_scenario(minimal_scenario, build_streams, build, tmp_path)
+    records = _read_log(result.events_path)
+    assert [(r["event_type"], r["time_s"]) for r in records] == [
+        ("train_arrival", 120.0),
+        ("passenger_arrival", 140.0),
+        ("boarding", 140.0),
+        ("departure_due", 150.0),
+        ("hold", 150.0),
+        ("passenger_arrival", 170.0),
+        ("boarding", 170.0),
+        ("hold_end", 190.0),
+        ("train_departure", 190.0),
+    ]
+    departure = records[-1]
+    assert departure["hold_s"] == 40.0
+    assert departure["scheduled_s"] == 150.0
+    assert departure["boarded_count"] == 2
+    assert departure["alighted_count"] == 0
+    assert departure["onboard_load"] == 2
+
+
+def test_passenger_arriving_exactly_as_the_hold_ends_still_boards(
+    tmp_path, minimal_scenario, build_streams, held_rem_component
+):
+    # Boundary: boarding at 190 comes before hold_end and train_departure at
+    # 190 in the tie order, so the passenger is on the departing train
+    build = _with_passengers(held_rem_component, (190.0,))
+    result = run_scenario(minimal_scenario, build_streams, build, tmp_path)
+    records = _read_log(result.events_path)
+    assert [r["event_type"] for r in records[-4:]] == [
+        "passenger_arrival",
+        "boarding",
+        "hold_end",
+        "train_departure",
+    ]
+    assert records[-1]["boarded_count"] == 1
+    assert records[-1]["onboard_load"] == 1
+
+
+def test_rerun_into_a_folder_with_previous_output_is_rejected_and_keeps_it(
+    tmp_path, minimal_scenario, build_streams, build_tiny_network
+):
+    first = run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
+    events_before = first.events_path.read_bytes()
+    summary_before = first.summary_path.read_bytes()
+
+    with pytest.raises(RunError, match="already contains run output"):
+        run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
+    # The earlier run's files are untouched and nothing new was added
+    assert first.events_path.read_bytes() == events_before
+    assert first.summary_path.read_bytes() == summary_before
+    assert _output_files(tmp_path) == [EVENTS_FILE, SUMMARY_FILE]
+
+
+@pytest.mark.parametrize("leftover", [EVENTS_FILE, SUMMARY_FILE])
+def test_folder_with_either_output_file_is_rejected_naming_it(
+    tmp_path, minimal_scenario, build_streams, build_tiny_network, leftover
+):
+    (tmp_path / leftover).write_text("from an older run")
+    with pytest.raises(RunError, match=leftover):
+        run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
+    assert _output_files(tmp_path) == [leftover]
+
+
+def test_existing_folder_with_unrelated_files_is_accepted(
+    tmp_path, minimal_scenario, build_streams, build_tiny_network
+):
+    (tmp_path / "notes.txt").write_text("not run output")
+    run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
+    assert _output_files(tmp_path) == [EVENTS_FILE, "notes.txt", SUMMARY_FILE]
+
+
+def test_failed_summary_write_leaves_no_output(
+    tmp_path, minimal_scenario, build_streams, build_tiny_network, monkeypatch
+):
+    # The event log is complete by then, but without its summary it must not
+    # be left behind on its own
+    def failing_write(_summary, _path):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(runner, "write_summary", failing_write)
+    with pytest.raises(RunError, match="could not write run output"):
+        run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
+    assert _output_files(tmp_path) == []
