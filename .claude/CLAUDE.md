@@ -79,7 +79,7 @@ These come from the Mathematical Foundations wiki page. Do not break them.
 
 ## Wiki
 
-- The wiki is cloned locally at `../TransitSync.wiki`. Read it there, never edit it
+- The wiki can be cloned locally at `../TransitSync.wiki`.
 - Key pages: Mathematical Foundations, Reading GTFS Data, Security
 - Mathematical Foundations is the source of truth for formulas. If code and the page disagree, stop and point out the difference instead of picking one
 
