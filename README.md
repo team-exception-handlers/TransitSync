@@ -73,6 +73,7 @@ Each test folder under `run-output` contains `events.jsonl` (one line per event,
 | `simulator/engine/event_queue.py` | Event queue and simulation clock |
 | `simulator/engine/event_log.py` | Event log writer and run summary |
 | `simulator/engine/runner.py` | Runs one scenario and writes its output |
+| `simulator/passengers/corridor.py` | Capacity-limited transfer corridor queue |
 | `tests/` | pytest and Hypothesis tests, mirroring the source tree |
 
 The developer guide on the wiki ("Engine Core Developer Guide") explains how the US-1.1 tasks plug into the runner.
@@ -108,6 +109,19 @@ log: components still process every event, and `summary.json` still counts all
 events. The summary's sorted `skipped_event_types` list records which event
 types were omitted, and is empty for a full log. A filtered log cannot
 reconstruct the omitted passenger timelines.
+
+### Transfer corridor queueing
+
+`CorridorQueue` limits passage through a transfer corridor to a configured
+number of passengers per minute. Passengers are admitted first-in, first-out
+into evenly spaced slots of `60 / capacity_per_minute` seconds. A passenger
+arriving after the queue clears passes immediately; unused capacity is not
+saved for a later burst.
+
+Calling `admit(passenger_id, arrival_s)` returns the passenger's bottleneck
+arrival time, actual passage time and queueing delay, all in seconds. Passenger
+generation and walking-time sampling can therefore supply arrival times without
+the corridor depending on their unfinished implementations.
 
 ## Team
 
