@@ -9,24 +9,21 @@ clock time, file paths).
 """
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from types import TracebackType
 from typing import IO, Any, Self
 
-from simulator.engine.events import SCHEMA_VERSION, Event, EventType
+from simulator.engine.events import EVENT_CLASSES, SCHEMA_VERSION, Event, EventType
 
 EVENTS_FILE = "events.jsonl"
 SUMMARY_FILE = "summary.json"
 
-# Skip these records for sweep runs while still processing passenger events.
+# Skip passenger records for sweep runs, deriving their types from the schema.
 PASSENGER_EVENT_TYPES: frozenset[EventType] = frozenset(
-    {
-        EventType.ALIGHTING,
-        EventType.PASSENGER_ARRIVAL,
-        EventType.BOARDING,
-        EventType.MISSED_CONNECTION,
-    }
+    cls.event_type
+    for cls in EVENT_CLASSES.values()
+    if "passenger_id" in {event_field.name for event_field in fields(cls)}
 )
 
 
