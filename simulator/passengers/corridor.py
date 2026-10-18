@@ -49,6 +49,8 @@ class CorridorQueue:
         """
         arrival = self._validate_arrival(arrival_s)
         passage_s = max(arrival, self._next_passage_s)
+        if math.isclose(passage_s, arrival, rel_tol=0.0, abs_tol=1e-9):
+            passage_s = arrival
         result = CorridorPassage(
             passenger_id=passenger_id,
             arrival_s=arrival,

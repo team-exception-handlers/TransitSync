@@ -49,6 +49,17 @@ def test_arrival_at_the_next_slot_has_no_queueing_delay():
     assert boundary.queue_delay_s == 0
 
 
+def test_fractional_slot_boundary_has_no_rounding_delay():
+    queue = CorridorQueue(capacity_per_minute=45)
+    for index in range(45):
+        queue.admit(f"burst-{index}", 0)
+
+    boundary = queue.admit("boundary", 60)
+
+    assert boundary.passage_s == 60
+    assert boundary.queue_delay_s == 0
+
+
 def test_idle_time_does_not_bank_future_capacity():
     queue = CorridorQueue(capacity_per_minute=2)
 
