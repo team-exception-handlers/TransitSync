@@ -6,6 +6,7 @@ import json
 import pytest
 
 from simulator.engine.event_log import (
+    SUMMARY_SCHEMA_VERSION,
     EventLogWriter,
     RunSummary,
     encode_record,
@@ -72,6 +73,22 @@ def test_empty_summary_has_zero_counts(tmp_path):
     path = tmp_path / "summary.json"
     write_summary(RunSummary(master_seed=0, duration_s=0.0), path)
     written = json.loads(path.read_text(encoding="utf-8"))
+    assert written["schema_version"] == SUMMARY_SCHEMA_VERSION
     assert written["events_processed"] == 0
     assert written["end_time_s"] == 0.0
     assert set(written["events_by_type"].values()) == {0}
+    assert written["skipped_event_types"] == []
+
+
+def test_summary_lists_skipped_event_types_in_stable_order():
+    summary = RunSummary(
+        master_seed=0,
+        duration_s=60.0,
+        skipped_event_types=frozenset(
+            {EventType.MISSED_CONNECTION, EventType.ALIGHTING}
+        ),
+    )
+    assert summary.to_dict()["skipped_event_types"] == [
+        "alighting",
+        "missed_connection",
+    ]

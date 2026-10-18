@@ -19,7 +19,7 @@ dispatch order is deterministic. No control strategy is involved yet.
 
 Output, written to ``output_dir``:
 
-- ``events.jsonl``: every processed event, one JSON record per line
+- ``events.jsonl``: processed events except skipped types, one JSON record per line
 - ``summary.json``: counts for the run
 
 The two files always come from the same run. A folder that already holds
@@ -29,7 +29,7 @@ everything it wrote, so a failed rerun never leaves old and new results mixed.
 
 import logging
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Sequence, Set
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
@@ -43,7 +43,7 @@ from simulator.engine.event_log import (
     write_summary,
 )
 from simulator.engine.event_queue import Scheduler
-from simulator.engine.events import Event
+from simulator.engine.events import Event, EventType
 
 log = logging.getLogger(__name__)
 
@@ -110,6 +110,19 @@ def _check_scenario(scenario: Scenario) -> None:
         )
 
 
+def _check_skipped_event_types(
+    skip_event_types: Set[EventType] | None,
+) -> frozenset[EventType]:
+    """Validate and copy the log filter before components start."""
+    if skip_event_types is None:
+        return frozenset()
+    if not isinstance(skip_event_types, Set) or any(
+        not isinstance(event_type, EventType) for event_type in skip_event_types
+    ):
+        raise ValueError("skip_event_types must be a set of EventType values")
+    return frozenset(skip_event_types)
+
+
 def _check_output_dir(events_path: Path, summary_path: Path) -> None:
     """Reject a folder that already holds the output of another run."""
     existing = [path.name for path in (events_path, summary_path) if path.exists()]
@@ -141,14 +154,16 @@ def _process_events(
     summary: RunSummary,
     events_path: Path,
     end_s: float,
+    skip_event_types: frozenset[EventType],
 ) -> None:
-    """Run the event loop to ``end_s`` (seconds), logging every event."""
+    """Process all events up to ``end_s`` seconds, logging selected types."""
     with EventLogWriter(events_path) as event_log:
 
         def process(event: Event) -> None:
             # Log first, so the log shows the event before anything the
             # components schedule in response to it
-            event_log.write(event)
+            if event.event_type not in skip_event_types:
+                event_log.write(event)
             summary.record(event)
             for component in components:
                 component.handle(event, scheduler)
@@ -162,6 +177,8 @@ def run_scenario(
     build_streams: StreamFactory,
     build_components: ComponentFactory,
     output_dir: Path,
+    *,
+    skip_event_types: Set[EventType] | None = None,
 ) -> RunResult:
     """Run one scenario from time 0 to ``scenario.duration_s``.
 
@@ -171,13 +188,18 @@ def run_scenario(
         build_components: builds the components from the scenario and streams.
         output_dir: folder for the event log and summary. Created if missing.
             Must not already contain an event log or summary.
+        skip_event_types: event types omitted from the log (US-1.3, #21).
+            Defaults to logging everything. Use ``PASSENGER_EVENT_TYPES``
+            from ``event_log`` to disable detailed passenger recording.
+            All events still reach components and contribute to the summary.
 
     Raises:
-        ValueError: the scenario duration or master seed is invalid.
+        ValueError: the scenario duration, master seed or log filter is invalid.
         RunError: the output folder already holds run output, or the output
             could not be written. Nothing from this run is left behind.
     """
     _check_scenario(scenario)
+    skipped_types = _check_skipped_event_types(skip_event_types)
     events_path = output_dir / EVENTS_FILE
     summary_path = output_dir / SUMMARY_FILE
     _check_output_dir(events_path, summary_path)
@@ -188,12 +210,21 @@ def run_scenario(
         component.start(scheduler)
 
     seed = scenario.master_seed
-    summary = RunSummary(master_seed=seed, duration_s=float(scenario.duration_s))
+    summary = RunSummary(
+        master_seed=seed,
+        duration_s=float(scenario.duration_s),
+        skipped_event_types=skipped_types,
+    )
     log.info("starting run: seed=%d duration=%s s", seed, scenario.duration_s)
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
         _process_events(
-            scheduler, components, summary, events_path, scenario.duration_s
+            scheduler,
+            components,
+            summary,
+            events_path,
+            scenario.duration_s,
+            skipped_types,
         )
         write_summary(summary, summary_path)
     except OSError as error:
