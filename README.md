@@ -77,6 +77,36 @@ Each test folder under `run-output` contains `events.jsonl` (one line per event,
 
 The developer guide on the wiki ("Engine Core Developer Guide") explains how the US-1.1 tasks plug into the runner.
 
+### Passenger event recording
+
+By default, `run_scenario` records every processed event in `events.jsonl`.
+Each passenger record includes `passenger_id`, `time_s` (seconds) and
+`schema_version`. Selecting records for one passenger preserves their timeline
+order, including events with the same timestamp. The passenger components are
+responsible for emitting alighting, platform arrival, boarding and missed
+connection events as those transitions happen.
+
+For sweep runs, pass the passenger event types to the optional log filter:
+
+```python
+from simulator.engine.event_log import PASSENGER_EVENT_TYPES
+from simulator.engine.runner import run_scenario
+
+# Uses the same scenario, factories and output directory as a regular run.
+result = run_scenario(
+    scenario,
+    build_streams,
+    build_components,
+    output_dir,
+    skip_event_types=PASSENGER_EVENT_TYPES,
+)
+```
+
+`skip_event_types` accepts a set or frozenset of `EventType` members. Omitting
+it, or passing an empty set, logs everything. Filtering only affects the event
+log: components still process every event, and `summary.json` still counts all
+events. A filtered log cannot reconstruct the omitted passenger timelines.
+
 ## Team
 
 Built by The Exception Handlers, a Concordia University software engineering capstone team.

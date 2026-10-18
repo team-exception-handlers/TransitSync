@@ -19,6 +19,16 @@ from simulator.engine.events import SCHEMA_VERSION, Event, EventType
 EVENTS_FILE = "events.jsonl"
 SUMMARY_FILE = "summary.json"
 
+# Skip these records for sweep runs while still processing passenger events.
+PASSENGER_EVENT_TYPES: frozenset[EventType] = frozenset(
+    {
+        EventType.ALIGHTING,
+        EventType.PASSENGER_ARRIVAL,
+        EventType.BOARDING,
+        EventType.MISSED_CONNECTION,
+    }
+)
+
 
 def partial_path(path: Path) -> Path:
     """Where a file is written before it is complete: ``<name>.partial``."""
