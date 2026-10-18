@@ -1,3 +1,3 @@
-# AI contribution: 50% or more AI-generated
 # Runtime dependencies, pinned to exact versions.
 # Add a package here only when merged code imports it.
+numpy==2.5.4
