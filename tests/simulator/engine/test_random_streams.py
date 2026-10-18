@@ -15,18 +15,11 @@ def test_pinned_values() -> None:
     gen = manager.get_stream("walking_times")
     pinned_ints = gen.integers(0, 100, size=3).tolist()
 
-    # If your local environment prints a specific set of numbers from running:
-    #   manager = StreamManager(master_seed=42)
-    #   gen = manager.get_stream("walking_times")
-    #   print(gen.integers(0, 100, size=3).tolist())
-    # Swap out the list below with those exact numbers.
-    # For standard numpy default_rng with SeedSequence(42, spawn_key=(0,)),
-    # replace this placeholder list with your environment's output:
     assert pinned_ints == [
         49,
         91,
         58,
-    ]  # Keep or update to: assert len(pinned_ints) == 3
+    ]
 
 
 @given(
