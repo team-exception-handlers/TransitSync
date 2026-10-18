@@ -14,10 +14,12 @@ from pathlib import Path
 from types import TracebackType
 from typing import IO, Any, Self
 
-from simulator.engine.events import EVENT_CLASSES, SCHEMA_VERSION, Event, EventType
+from simulator.engine.events import EVENT_CLASSES, Event, EventType
 
 EVENTS_FILE = "events.jsonl"
 SUMMARY_FILE = "summary.json"
+# Summary fields evolve independently from the event-record schema.
+SUMMARY_SCHEMA_VERSION = 3
 
 # Skip passenger records for sweep runs, deriving their types from the schema.
 PASSENGER_EVENT_TYPES: frozenset[EventType] = frozenset(
@@ -88,6 +90,7 @@ class RunSummary:
         events_pending: events still scheduled after the end of the period.
         end_time_s: clock time of the last processed event, in seconds.
         events_by_type: processed events per event type, every type listed.
+        skipped_event_types: event types omitted from the event log.
     """
 
     master_seed: int
@@ -98,6 +101,7 @@ class RunSummary:
     events_by_type: dict[str, int] = field(
         default_factory=lambda: {event_type.value: 0 for event_type in EventType}
     )
+    skipped_event_types: frozenset[EventType] = frozenset()
 
     def record(self, event: Event) -> None:
         """Count one processed event."""
@@ -108,13 +112,16 @@ class RunSummary:
     def to_dict(self) -> dict[str, Any]:
         """Summary as a dict with a fixed key order, ready to write."""
         return {
-            "schema_version": SCHEMA_VERSION,
+            "schema_version": SUMMARY_SCHEMA_VERSION,
             "master_seed": self.master_seed,
             "duration_s": self.duration_s,
             "events_processed": self.events_processed,
             "events_pending": self.events_pending,
             "end_time_s": self.end_time_s,
             "events_by_type": dict(self.events_by_type),
+            "skipped_event_types": sorted(
+                event_type.value for event_type in self.skipped_event_types
+            ),
         }
 
 

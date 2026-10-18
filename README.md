@@ -105,7 +105,9 @@ result = run_scenario(
 `skip_event_types` accepts a set or frozenset of `EventType` members. Omitting
 it, or passing an empty set, logs everything. Filtering only affects the event
 log: components still process every event, and `summary.json` still counts all
-events. A filtered log cannot reconstruct the omitted passenger timelines.
+events. The summary's sorted `skipped_event_types` list records which event
+types were omitted, and is empty for a full log. A filtered log cannot
+reconstruct the omitted passenger timelines.
 
 ## Team
 

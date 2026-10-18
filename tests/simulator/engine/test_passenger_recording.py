@@ -182,7 +182,13 @@ def test_log_filter_preserves_processing_and_summary(
         if EventType(json.loads(line)["event_type"]) not in skipped
     ]
     assert filtered.events_path.read_bytes() == b"".join(expected_lines)
-    assert filtered.summary_path.read_bytes() == full.summary_path.read_bytes()
+    full_summary = json.loads(full.summary_path.read_text(encoding="utf-8"))
+    filtered_summary = json.loads(filtered.summary_path.read_text(encoding="utf-8"))
+    assert full_summary.pop("skipped_event_types") == []
+    assert filtered_summary.pop("skipped_event_types") == sorted(
+        event_type.value for event_type in skipped
+    )
+    assert filtered_summary == full_summary
     assert journeys[0].seen == journeys[1].seen
     assert journeys[0].boarded == journeys[1].boarded == ["p-1", "p-2"]
     assert filtered.summary.events_processed == 8

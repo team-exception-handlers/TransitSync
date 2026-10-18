@@ -210,7 +210,11 @@ def run_scenario(
         component.start(scheduler)
 
     seed = scenario.master_seed
-    summary = RunSummary(master_seed=seed, duration_s=float(scenario.duration_s))
+    summary = RunSummary(
+        master_seed=seed,
+        duration_s=float(scenario.duration_s),
+        skipped_event_types=skipped_types,
+    )
     log.info("starting run: seed=%d duration=%s s", seed, scenario.duration_s)
     try:
         output_dir.mkdir(parents=True, exist_ok=True)
