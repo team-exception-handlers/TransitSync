@@ -1,3 +1,4 @@
+# AI contribution: No substantial AI-generated code
 """Queue passengers when a transfer corridor gets crowded.
 
 This implements US-1.3, Task 1.3.4 (#20), following the queueing model in
