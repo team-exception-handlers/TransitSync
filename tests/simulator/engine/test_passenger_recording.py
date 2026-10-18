@@ -27,6 +27,8 @@ class PassengerJourney:
     then boards the next train at 40 s.
 
     Only passenger events matter here, so the metro trains are not simulated.
+    Metro-1 is understood to have departed before 35 s; its departure event is
+    intentionally omitted from this scripted stand-in.
     """
 
     def __init__(self):
