@@ -3,7 +3,17 @@
 
 from __future__ import annotations
 
+import hashlib
 import random
+
+STREAM_NAMES = (
+    "walking_times",
+    "group_sizes",
+    "run_times",
+    "disruptions",
+    "loads",
+    "prediction_errors",
+)
 
 
 class StreamManager:
@@ -14,18 +24,20 @@ class StreamManager:
 
     def __init__(self, master_seed: int) -> None:
         self.master_seed = master_seed
-        # Initialize a root RNG to spawn sub-seeds deterministically
-        self._root_rng = random.Random(master_seed)
         self._streams: dict[str, random.Random] = {}
 
     def get_stream(self, name: str) -> random.Random:
-        """Retrieve or create an isolated random
+        """Retrieve or create an isolated random stream
 
-        stream for a given component/stream name.
+        for a given component/stream name.
         """
+        if name not in STREAM_NAMES:
+            raise ValueError(f"unknown stream {name!r}")
+
         if name not in self._streams:
-            # Derive a unique, deterministic seed for this specific stream name
-            derived_seed = self._root_rng.randint(0, 2**31 - 1)
+            key = f"{self.master_seed}:{name}".encode()
+            hash_digest = hashlib.sha256(key).digest()
+            derived_seed = int.from_bytes(hash_digest[:8], byteorder="big")
             self._streams[name] = random.Random(derived_seed)
         return self._streams[name]
 
@@ -34,5 +46,4 @@ class StreamManager:
 
         streams back to their initial states.
         """
-        self._root_rng = random.Random(self.master_seed)
         self._streams.clear()
