@@ -1,3 +1,4 @@
+# AI contribution: 50% or more AI-generated
 """Unit tests for seed management and stream separation."""
 
 from simulator.engine.random_streams import StreamManager

@@ -1,3 +1,4 @@
+# AI contribution: 50% or more AI-generated
 """Seed management and stream separation for reproducible simulations."""
 
 from __future__ import annotations
