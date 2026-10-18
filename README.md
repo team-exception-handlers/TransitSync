@@ -26,7 +26,56 @@ This is a 1 year software engineering capstone project at Concordia University, 
 
 ## Getting started
 
-Setup instructions will be added when the first runnable version is available.
+The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. There is no user interface or command-line program yet; a run is started from Python or from the tests.
+
+### Requirements
+
+- Python 3.12 or newer (`py --list` shows the installed versions on Windows)
+- Git
+
+### Setup
+
+```powershell
+git clone https://github.com/Gur-Lal/TransitSync.git
+cd TransitSync
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements-dev.txt
+```
+
+On macOS or Linux, the environment is created with `python3.12 -m venv .venv` and activated with `source .venv/bin/activate`.
+
+If PowerShell blocks `Activate.ps1`, running `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once allows it. In VS Code, the interpreter is set to `.venv\Scripts\python.exe` through **Python: Select Interpreter**.
+
+### Running the checks
+
+```powershell
+pytest -v                 # all tests, one line per test
+ruff check .              # lint, including the complexity and function size limits
+ruff format --check .     # formatting
+```
+
+### Seeing a simulation run
+
+The smoke test runs a small timetable at McGill (one REM train, two green line trains) and writes the run output. Keeping the output folder shows the files a run produces:
+
+```powershell
+pytest tests/simulator/engine/test_runner.py --basetemp=run-output
+```
+
+Each test folder under `run-output` contains `events.jsonl` (one line per event, in processing order) and `summary.json` (event counts for the run).
+
+### Code layout
+
+| Path | Contents |
+|---|---|
+| `simulator/engine/events.py` | Event types, the versioned record schema and the tie order for events at the same time |
+| `simulator/engine/event_queue.py` | Event queue and simulation clock |
+| `simulator/engine/event_log.py` | Event log writer and run summary |
+| `simulator/engine/runner.py` | Runs one scenario and writes its output |
+| `tests/` | pytest and Hypothesis tests, mirroring the source tree |
+
+The developer guide on the wiki ("Engine Core Developer Guide") explains how the US-1.1 tasks plug into the runner.
 
 ## Team
 

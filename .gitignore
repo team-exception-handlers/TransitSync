@@ -1,2 +1,12 @@
 .env
 .claude/settings.local.json
+
+# Python environment and tool caches
+.venv/
+__pycache__/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+
+# Local raw GTFS files
+data/

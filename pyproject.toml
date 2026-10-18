@@ -1,0 +1,28 @@
+# AI contribution: 50% or more AI-generated
+[project]
+name = "transitsync"
+version = "0.1.0"
+description = "Simulation and decision support for Metro and REM transfer coordination"
+requires-python = ">=3.12"
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+# Skill docs and their example scripts are reference material, not project code
+extend-exclude = [".claude"]
+
+[tool.ruff.lint]
+# C90 and PLR0915 enforce the rubric limits on complexity and function size
+select = ["E", "W", "F", "I", "B", "UP", "N", "C90", "PLR0915"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15
+
+[tool.ruff.lint.pylint]
+max-statements = 50
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+# importlib mode stops tests/simulator from shadowing the simulator package
+addopts = "--import-mode=importlib"
