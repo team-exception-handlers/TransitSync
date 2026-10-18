@@ -25,6 +25,8 @@ class PassengerJourney:
     Both passengers alight at 10 s. The first reaches the metro at 20 s and
     boards immediately. The second arrives at 35 s, misses a connection,
     then boards the next train at 40 s.
+
+    Only passenger events matter here, so the metro trains are not simulated.
     """
 
     def __init__(self):
