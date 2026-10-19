@@ -1,5 +1,8 @@
-from dataclasses import dataclass
+# AI contribution: Below 50% AI-generated
+
 import math
+from dataclasses import dataclass
+
 
 @dataclass(frozen=True, slots=True)
 class ScheduledStop:
@@ -14,14 +17,12 @@ class ScheduledStop:
         if not self.station_id or not self.platform_id:
             raise ValueError("Station and platform IDs cannot be empty")
 
-        if not (
-            math.isfinite(self.arrival_s)
-            and math.isfinite(self.departure_s)
-        ):
+        if not (math.isfinite(self.arrival_s) and math.isfinite(self.departure_s)):
             raise ValueError("Stop times must be finite")
 
         if self.arrival_s < 0 or self.departure_s < self.arrival_s:
             raise ValueError("Invalid stop arrival/departure times")
+
 
 @dataclass(slots=True)
 class Train:
@@ -57,7 +58,7 @@ class Train:
         if not math.isfinite(self.layover_slack) or self.layover_slack < 0:
             raise ValueError("Layover slack must be finite and non-negative")
 
-        for previous, current in zip(self.schedule, self.schedule[1:]):
+        for previous, current in zip(self.schedule, self.schedule[1:], strict=False):
             if current.arrival_s < previous.departure_s:
                 raise ValueError("Train stops must be chronological")
 
@@ -73,10 +74,10 @@ class Train:
         """Add passengers without exceeding capacity."""
         if isinstance(count, bool) or not isinstance(count, int):
             raise ValueError("Boarding count must be an integer")
-        
+
         if count < 0 or count > self.available_capacity:
             raise ValueError("Invalid boarding count")
-        
+
         self.onboard_load += count
 
     def alight(self, count: int) -> None:
@@ -89,7 +90,11 @@ class Train:
 
         self.onboard_load -= count
 
-    def update_delay(self, actual_s: float, scheduled_s: float,) -> None:
+    def update_delay(
+        self,
+        actual_s: float,
+        scheduled_s: float,
+    ) -> None:
         """Update schedule deviation: positive means late"""
         if not math.isfinite(actual_s) or not math.isfinite(scheduled_s):
             raise ValueError("Times must be finite")
@@ -103,4 +108,3 @@ class Train:
 
         self.current_stop_index += 1
         return True
-    
