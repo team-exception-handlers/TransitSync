@@ -1,3 +1,4 @@
+# AI contribution: 50% or more AI-generated
 """Test simulation determinism and manifest integration (US-1.1, #10 and #11)."""
 
 from __future__ import annotations
