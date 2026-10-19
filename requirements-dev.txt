@@ -1,5 +1,5 @@
-# AI contribution: 50% or more AI-generated
 -r requirements.txt
 hypothesis==6.170.1
 pytest==9.1.1
 ruff==0.17.1
+pytest-cov==7.1.0
