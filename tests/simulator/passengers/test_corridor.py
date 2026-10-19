@@ -72,6 +72,26 @@ def test_idle_time_does_not_bank_future_capacity():
     assert [passage.queue_delay_s for passage in passages] == [0, 0, 30]
 
 
+def test_fixed_walking_times_schedule_delayed_platform_arrivals():
+    train_arrival_s = 100
+    walking_times_s = [20, 20, 35]
+    queue = CorridorQueue(capacity_per_minute=2)
+    scheduler = Scheduler()
+
+    passages = admit_all(
+        queue, [train_arrival_s + walk_s for walk_s in walking_times_s]
+    )
+    for passage in passages:
+        scheduler.schedule(
+            PassengerArrival(
+                time_s=passage.passage_s,
+                passenger_id=passage.passenger_id,
+                group_id="rem-1",
+                platform_id="metro",
+            )
+        )
+
+
 def test_walking_sampler_schedules_delayed_platform_arrivals():
     """Ensure the real WalkingTimeSampler integrates with CorridorQueue
     and schedules arrivals."""
