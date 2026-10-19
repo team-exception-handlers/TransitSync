@@ -34,7 +34,7 @@ def generate_from_schedule(departure_times_s: Sequence [float], route: Sequence[
 
         trains.append(train)
 
-        return trains
+    return trains
 
 def generate_from_headway(start_s:float, end_s: float, headway_s: float, route: Sequence[ScheduledStop], capacity: int, line_id: str, layover_slack_s: float = 0.0,) -> list[Train]:
     """Generate trains at uniform departure intervals."""
@@ -60,4 +60,4 @@ def generate_from_headway(start_s:float, end_s: float, headway_s: float, route: 
         departure_times.append(departure)
         index += 1
 
-        return generate_from_schedule(departure_times_s = departure_times, route = route, capacity = capacity, line_id = line_id, layover_slack_s = layover_slack_s,)
+    return generate_from_schedule(departure_times_s = departure_times, route = route, capacity = capacity, line_id = line_id, layover_slack_s = layover_slack_s,)
