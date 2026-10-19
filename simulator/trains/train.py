@@ -35,6 +35,8 @@ class Train:
     current_delay: float = 0.0
     layover_slack: float = 0.0
     current_stop_index: int = 0
+    generated_delay_s: float = 0.0
+    inherited_delay_s: float = 0.0
 
     def __post_init__(self) -> None:
         if not self.id:
