@@ -89,7 +89,7 @@ class Train:
 
     def update_delay(self, actual_s: float, scheduled_s: float,) -> None:
         """Update schedule deviation: positive means late"""
-        if not math.isfinite(actual_s) or not math.isfinite(schedule_s):
+        if not math.isfinite(actual_s) or not math.isfinite(scheduled_s):
             raise ValueError("Times must be finite")
 
         self.current_delay = actual_s - scheduled_s
