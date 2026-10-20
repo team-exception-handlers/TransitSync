@@ -1,6 +1,5 @@
 # AI contribution: 50% or more AI-generated
-"""Boarding and destination-based alighting (US-1.3, Task 1.3.5, #100).
-
+""" 
 Times are simulation seconds. Reuse the shared passenger snapshots from #18 and
 the live trains from #12. Doors are open from actual arrival through actual
 departure; the engine's tie order permits an exact-departure-time connection.
