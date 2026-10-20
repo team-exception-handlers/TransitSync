@@ -102,6 +102,10 @@ def load_scenario_json(content: str, datasets: dict[str, DatasetMetadata]) -> Sc
         raise ScenarioValidationError(
             f"scenario JSON is invalid at line {error.lineno}, column {error.colno}"
         ) from error
+    except ValueError as error:
+        raise ScenarioValidationError(
+            "scenario JSON contains an integer with too many digits"
+        ) from error
     if not isinstance(values, dict):
         raise ScenarioValidationError("scenario must be a JSON object")
     return _scenario_from_mapping(values, datasets)
@@ -170,10 +174,17 @@ def _scenario_from_mapping(
     interchanges = _parse_interchanges(values.get("interchanges"), dataset)
     timezone = _parse_timezone(values.get("timezone", DEFAULT_TIMEZONE))
     dst_fold = _parse_fold(values.get("dst_fold"))
-    resolved_start = _resolve_local_start(service_date, start_time, timezone, dst_fold)
-    _check_saved_resolution(values, resolved_start)
-    _check_workload(duration_s, repetitions)
-    _check_coverage(dataset, resolved_start, duration_s, interchanges)
+    try:
+        resolved_start = _resolve_local_start(
+            service_date, start_time, timezone, dst_fold
+        )
+        _check_saved_resolution(values, resolved_start)
+        _check_workload(duration_s, repetitions)
+        _check_coverage(dataset, resolved_start, duration_s, interchanges)
+    except OverflowError as error:
+        raise ScenarioValidationError(
+            "date: requested simulation window exceeds the supported date range"
+        ) from error
     return Scenario(
         dataset_id=dataset.dataset_id,
         service_date=service_date,

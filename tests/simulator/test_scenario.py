@@ -2,6 +2,7 @@
 """Scenario validation against saved schedules and Toronto calendar time."""
 
 import json
+import sys
 from dataclasses import replace
 from datetime import date
 
@@ -165,6 +166,28 @@ def test_unknown_field_suggests_correction(dataset):
 def test_rejects_malformed_json_or_non_object(content, dataset):
     with pytest.raises(ScenarioValidationError, match="scenario"):
         load_scenario_json(content, {dataset.dataset_id: dataset})
+
+
+def test_json_integer_over_digit_limit_returns_validation_error(dataset):
+    previous_limit = sys.get_int_max_str_digits()
+    try:
+        sys.set_int_max_str_digits(4300)
+        content = '{"repetitions": ' + "9" * 4301 + "}"
+        with pytest.raises(ScenarioValidationError, match="scenario JSON.*integer"):
+            load_scenario_json(content, {dataset.dataset_id: dataset})
+    finally:
+        sys.set_int_max_str_digits(previous_limit)
+
+
+def test_start_beyond_utc_date_range_returns_validation_error(dataset):
+    with pytest.raises(ScenarioValidationError, match="date:.*supported date range"):
+        load(dataset, date="9999-12-31", start_time="23:30")
+
+
+def test_end_beyond_supported_date_range_returns_validation_error(dataset):
+    dataset = replace(dataset, coverage_end=date.max)
+    with pytest.raises(ScenarioValidationError, match="date:.*supported date range"):
+        load(dataset, date="9999-12-31", start_time="12:00", duration_s=86400)
 
 
 def test_loads_saved_scenario_file(dataset, tmp_path):
