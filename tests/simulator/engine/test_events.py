@@ -14,6 +14,7 @@ from simulator.engine.events import (
     SCHEMA_VERSION,
     Alighting,
     Boarding,
+    CorridorArrival,
     DepartureDue,
     EventSchemaError,
     EventType,
@@ -59,6 +60,9 @@ SAMPLE_EVENTS = [
     ),
     PassengerArrival(
         time_s=140.0, passenger_id="p-1", group_id="g-1", platform_id="green-west"
+    ),
+    CorridorArrival(
+        time_s=135.0, passenger_id="p-1", group_id="g-1", platform_id="green-west"
     ),
     Boarding(
         time_s=145.0, passenger_id="p-1", train_id="metro-1", platform_id="green-west"
@@ -121,6 +125,7 @@ def test_event_types_match_the_issue_list_plus_the_decision_points():
         "hold",
         "hold_end",
         "passenger_arrival",
+        "corridor_arrival",
         "boarding",
         "alighting",
         "missed_connection",
@@ -138,6 +143,7 @@ def test_priority_order_matches_the_documented_platform_sequence():
     assert ordered == [
         EventType.TRAIN_ARRIVAL,
         EventType.ALIGHTING,
+        EventType.CORRIDOR_ARRIVAL,
         EventType.PASSENGER_ARRIVAL,
         EventType.BOARDING,
         EventType.DEPARTURE_DUE,
@@ -194,7 +200,13 @@ def test_departure_record_has_fixed_keys_and_values():
 
 
 def test_passenger_events_identify_one_passenger_without_a_count():
-    passenger_classes = [PassengerArrival, Boarding, Alighting, MissedConnection]
+    passenger_classes = [
+        CorridorArrival,
+        PassengerArrival,
+        Boarding,
+        Alighting,
+        MissedConnection,
+    ]
     for cls in passenger_classes:
         names = {event_field.name for event_field in dataclasses.fields(cls)}
         assert "passenger_id" in names

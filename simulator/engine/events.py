@@ -28,15 +28,17 @@ The order follows what happens at a platform in one instant:
 
 1. ``TRAIN_ARRIVAL``: the train reaches the platform
 2. ``ALIGHTING``: passengers get off before anyone gets on
-3. ``PASSENGER_ARRIVAL``: a passenger reaching the platform at this instant
+3. ``CORRIDOR_ARRIVAL``: a walk ends and the passenger joins the corridor queue
+4. ``PASSENGER_ARRIVAL``: a passenger reaching the platform at this instant
    can still board
-4. ``BOARDING``: passengers get on during the dwell
-5. ``DEPARTURE_DUE``: the dwell has ended, so the hold decision is taken now,
+5. ``BOARDING``: passengers get on during the dwell
+6. ``DEPARTURE_DUE``: the dwell has ended, so the hold decision is taken now,
    once boarding at this instant is known
-6. ``HOLD``: the decision taken at ``DEPARTURE_DUE`` is recorded
-7. ``HOLD_END``: a hold ends, once boarding at this instant is known
-8. ``TRAIN_DEPARTURE``: the train leaves
-9. ``MISSED_CONNECTION``: a connection is only missed once the train has left
+7. ``HOLD``: the decision taken at ``DEPARTURE_DUE`` is recorded
+8. ``HOLD_END``: a hold ends, once boarding at this instant is known
+9. ``DEPARTURE_CLEARANCE``: a departure delayed by the minimum gap is reconsidered
+10. ``TRAIN_DEPARTURE``: the train leaves
+11. ``MISSED_CONNECTION``: a connection is only missed once the train has left
 
 Every event except ``DEPARTURE_DUE`` records something that happened.
 ``DEPARTURE_DUE`` is the decision point of the Architecture sequence diagram:
@@ -60,7 +62,7 @@ from dataclasses import dataclass, field, fields
 from enum import StrEnum
 from typing import Any, ClassVar
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Field kinds, stored in dataclass field metadata and checked in __post_init__
 _KIND = "kind"
@@ -83,6 +85,7 @@ class EventType(StrEnum):
     ALIGHTING = "alighting"
     MISSED_CONNECTION = "missed_connection"
     DEPARTURE_CLEARANCE = "departure_clearance"
+    CORRIDOR_ARRIVAL = "corridor_arrival"
 
 
 # Single source of truth for tie-breaking. See the module docstring for why
@@ -90,14 +93,15 @@ class EventType(StrEnum):
 EVENT_PRIORITY: dict[EventType, int] = {
     EventType.TRAIN_ARRIVAL: 0,
     EventType.ALIGHTING: 1,
-    EventType.PASSENGER_ARRIVAL: 2,
-    EventType.BOARDING: 3,
-    EventType.DEPARTURE_DUE: 4,
-    EventType.HOLD: 5,
-    EventType.HOLD_END: 6,
-    EventType.DEPARTURE_CLEARANCE: 7,
-    EventType.TRAIN_DEPARTURE: 8,
-    EventType.MISSED_CONNECTION: 9,
+    EventType.CORRIDOR_ARRIVAL: 2,
+    EventType.PASSENGER_ARRIVAL: 3,
+    EventType.BOARDING: 4,
+    EventType.DEPARTURE_DUE: 5,
+    EventType.HOLD: 6,
+    EventType.HOLD_END: 7,
+    EventType.DEPARTURE_CLEARANCE: 8,
+    EventType.TRAIN_DEPARTURE: 9,
+    EventType.MISSED_CONNECTION: 10,
 }
 
 # Events whose fields are only final at the instant they happen. The scheduler
@@ -309,6 +313,21 @@ class HoldEnd(Event):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
+class CorridorArrival(Event):
+    """A transfer walk ends at the corridor bottleneck (Task #18).
+
+    Queue admission occurs when this event is processed, so overlapping groups
+    cannot reserve slots ahead of passengers who physically reach it earlier.
+    ``PassengerArrival`` records the later platform arrival after queueing.
+    """
+
+    event_type: ClassVar[EventType] = EventType.CORRIDOR_ARRIVAL
+    passenger_id: str = _id_field()
+    group_id: str = _id_field()
+    platform_id: str = _id_field()
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
 class PassengerArrival(Event):
     """A transferring passenger reaches the platform of their next train.
 
@@ -385,6 +404,7 @@ EVENT_CLASSES: dict[EventType, type[Event]] = {
         Alighting,
         MissedConnection,
         DepartureClearance,
+        CorridorArrival,
     )
 }
 

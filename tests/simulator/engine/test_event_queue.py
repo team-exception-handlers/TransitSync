@@ -18,6 +18,7 @@ from simulator.engine.events import (
     SCHEDULE_AT_CURRENT_TIME,
     Alighting,
     Boarding,
+    CorridorArrival,
     DepartureClearance,
     DepartureDue,
     EventType,
@@ -56,6 +57,9 @@ def make_event(event_type, time_s, tag="x"):
         ),
         EventType.HOLD_END: lambda: HoldEnd(time_s=time_s, **train),
         EventType.PASSENGER_ARRIVAL: lambda: PassengerArrival(
+            time_s=time_s, group_id="g", **passenger
+        ),
+        EventType.CORRIDOR_ARRIVAL: lambda: CorridorArrival(
             time_s=time_s, group_id="g", **passenger
         ),
         EventType.BOARDING: lambda: Boarding(time_s=time_s, train_id="t", **passenger),
