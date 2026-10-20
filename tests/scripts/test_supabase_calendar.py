@@ -180,14 +180,14 @@ def test_null_required_database_values_are_rejected(monkeypatch, field, value):
         read_active_services("rem", date(2026, 10, 5))
 
 
-def test_query_failure_is_sanitized_and_closes_connection(monkeypatch, capsys):
+def test_query_failure_is_sanitized_and_closes_connection(monkeypatch, capsys, caplog):
     conn, _ = database(monkeypatch)
     conn.execute.side_effect = psycopg.OperationalError("private database details")
     assert main(["--feed", "rem", "--date", "2026-10-05"]) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
-    assert "Could not read Supabase" in captured.err
-    assert "private database details" not in captured.err
+    assert "Could not read Supabase" in caplog.text
+    assert "private database details" not in captured.err + caplog.text
     assert conn.__exit__.called
 
 
@@ -221,14 +221,14 @@ def test_missing_credentials_have_clear_error(monkeypatch):
         read_active_services("rem", date(2026, 10, 5))
 
 
-def test_cli_does_not_leak_connection_errors(monkeypatch, capsys):
+def test_cli_does_not_leak_connection_errors(monkeypatch, capsys, caplog):
     _, connect = database(monkeypatch)
     connect.side_effect = psycopg.OperationalError("password=secret internal host")
     assert main(["--feed", "rem", "--date", "2026-10-05"]) == 1
     captured = capsys.readouterr()
-    assert "Could not read" in captured.err
-    assert "secret" not in captured.err
-    assert "Traceback" not in captured.err
+    assert "Could not read" in caplog.text
+    assert "secret" not in captured.err + caplog.text
+    assert "Traceback" not in captured.err + caplog.text
     assert captured.out == ""
 
 
@@ -310,22 +310,22 @@ def test_cli_complete_environment_skips_invalid_local_file(monkeypatch, local_en
     assert connect.call_args.kwargs["sslrootcert"] == "/exported/ca.crt"
 
 
-def test_cli_missing_local_url_is_actionable(monkeypatch, local_env, capsys):
+def test_cli_missing_local_url_is_actionable(monkeypatch, local_env, caplog):
     _, connect = database(monkeypatch)
     monkeypatch.delenv("SUPABASE_DB_URL")
     assert main(["--feed", "rem", "--date", "2026-10-05"]) == 1
-    assert "SUPABASE_DB_URL" in capsys.readouterr().err
+    assert "SUPABASE_DB_URL" in caplog.text
     connect.assert_not_called()
 
 
 def test_cli_invalid_env_encoding_does_not_expose_contents(
-    monkeypatch, local_env, capsys
+    monkeypatch, local_env, capsys, caplog
 ):
     _, connect = database(monkeypatch)
     monkeypatch.delenv("SUPABASE_DB_URL")
     local_env.write_bytes(b"SUPABASE_DB_URL=\xffprivate-value")
     assert main(["--feed", "rem", "--date", "2026-10-05"]) == 1
     captured = capsys.readouterr()
-    assert "UTF-8" in captured.err
-    assert "private-value" not in captured.err
+    assert "UTF-8" in caplog.text
+    assert "private-value" not in captured.err + caplog.text
     connect.assert_not_called()

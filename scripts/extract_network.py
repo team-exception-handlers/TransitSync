@@ -3,15 +3,18 @@
 
 import argparse
 import json
-import sys
+import logging
 import tempfile
 from datetime import date
 from pathlib import Path
 
+from scripts.extraction_logging import configure_logging
 from scripts.supabase_calendar import SupabaseReadError, _load_local_connection_settings
 from scripts.supabase_schedule import DEFAULT_MAPPING, load_mapping, read_schedules
 from simulator.network_config import load_network, parse_timetable, validate_network
 from simulator.timetable import summarize_headways
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "config/reference_network"
 MAP_EVIDENCE = [
@@ -192,9 +195,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--sunday", type=date.fromisoformat, default=date(2026, 10, 11))
     args = parser.parse_args(argv)
+    configure_logging()
     references = {
         name: getattr(args, name) for name in ("weekday", "saturday", "sunday")
     }
+    logger.info("Starting reference extraction: dates=%s", references)
     try:
         if (
             references["weekday"].weekday() > 4
@@ -212,14 +217,14 @@ def main(argv: list[str] | None = None) -> int:
             previews, {k: v.isoformat() for k, v in references.items()}, MAP_EVIDENCE
         )
         write_config(config, args.output_dir)
+        logger.info("Reference extraction completed: schedules=%d", len(previews))
     except (ValueError, SupabaseReadError) as error:
-        print(str(error), file=sys.stderr)
+        logger.error("Reference extraction failed: %s", error)
         return 1
     except OSError:
-        print(
+        logger.error(
             "Could not save configuration; check output path and permissions. "
             "Prior output was preserved.",
-            file=sys.stderr,
         )
         return 1
     print(f"Saved three reference schedules and report under {args.output_dir}")

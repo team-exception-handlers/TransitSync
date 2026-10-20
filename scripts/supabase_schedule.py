@@ -3,8 +3,8 @@
 
 import argparse
 import json
+import logging
 import os
-import sys
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
@@ -12,6 +12,7 @@ from pathlib import Path
 import psycopg
 from psycopg.rows import dict_row
 
+from scripts.extraction_logging import configure_logging
 from scripts.gtfs_schedule import extract_trips
 from scripts.supabase_calendar import (
     SupabaseReadError,
@@ -20,6 +21,8 @@ from scripts.supabase_calendar import (
 )
 from simulator.network_config import REM_ATTRIBUTION
 from simulator.timetable import Platform, require_text
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_MAPPING = (
     Path(__file__).resolve().parents[1] / "config/interchange_mapping.json"
@@ -138,7 +141,14 @@ def _read_feed(connection, feed_id, platforms, service_date) -> tuple[dict, tupl
 def _daily_preview(connection, mappings, service_date) -> dict:
     feeds, trips = [], []
     for feed_id, platforms in sorted(mappings.items()):
+        logger.info("Reading timetable: feed=%r service_date=%s", feed_id, service_date)
         feed, retained = _read_feed(connection, feed_id, platforms, service_date)
+        logger.info(
+            "Timetable read completed: feed=%r service_date=%s trips=%d",
+            feed_id,
+            service_date,
+            len(retained),
+        )
         feeds.append(feed)
         trips.extend(trip.to_dict() for trip in retained)
     return {
@@ -183,6 +193,11 @@ def read_schedules(mappings, service_dates: tuple[date, ...]) -> list[dict]:
             connection.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
             return [_daily_preview(connection, mappings, day) for day in service_dates]
     except psycopg.Error:
+        logger.error(
+            "Timetable read failed: feeds=%r service_dates=%s",
+            sorted(mappings),
+            ",".join(day.isoformat() for day in service_dates),
+        )
         raise SupabaseReadError(
             "Could not read Supabase timetable. Check connection, TLS and SELECT "
             "permissions, including repaired pickup_type/drop_off_type columns."
@@ -219,12 +234,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mapping", type=Path, default=DEFAULT_MAPPING)
     parser.add_argument("--date", type=date.fromisoformat, required=True)
     args = parser.parse_args(argv)
+    configure_logging()
     try:
         mappings = load_mapping(args.mapping)
         _load_local_connection_settings()
         result = read_daily_schedule(mappings, args.date)
     except (ValueError, SupabaseReadError) as error:
-        print(str(error), file=sys.stderr)
+        logger.error("Timetable command failed: service_date=%s: %s", args.date, error)
         return 1
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))
     return 0

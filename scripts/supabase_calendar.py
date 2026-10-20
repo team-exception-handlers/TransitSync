@@ -3,8 +3,8 @@
 
 import argparse
 import json
+import logging
 import os
-import sys
 from datetime import date
 from pathlib import Path
 
@@ -12,7 +12,10 @@ import psycopg
 from dotenv import dotenv_values
 from psycopg.rows import dict_row
 
+from scripts.extraction_logging import configure_logging
 from scripts.gtfs_calendar import active_service_ids
+
+logger = logging.getLogger(__name__)
 
 PROJECT_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
@@ -94,6 +97,7 @@ def read_active_services(feed_id: str, service_date: date) -> tuple[str, ...]:
     url = os.environ.get("SUPABASE_DB_URL")
     if not url or not url.strip():
         raise ValueError("Set SUPABASE_DB_URL in the process environment first")
+    logger.info("Reading calendar: feed=%r service_date=%s", feed_id, service_date)
     try:
         with psycopg.connect(
             url,
@@ -105,12 +109,22 @@ def read_active_services(feed_id: str, service_date: date) -> tuple[str, ...]:
         ) as connection:
             connection.read_only = True
             connection.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
-            return _read_calendar(connection, feed_id.strip(), service_date)
+            services = _read_calendar(connection, feed_id.strip(), service_date)
     except psycopg.Error:
+        logger.error(
+            "Calendar read failed: feed=%r service_date=%s", feed_id, service_date
+        )
         raise SupabaseReadError(
             "Could not read Supabase GTFS data. Check connection settings, "
             "network access, TLS certificates, and SELECT permissions."
         ) from None
+    logger.info(
+        "Calendar read completed: feed=%r service_date=%s services=%d",
+        feed_id,
+        service_date,
+        len(services),
+    )
+    return services
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -119,11 +133,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--feed", required=True, help="Exact gtfs.feeds feed_id")
     parser.add_argument("--date", required=True, type=date.fromisoformat)
     args = parser.parse_args(argv)
+    configure_logging()
     try:
         _load_local_connection_settings()
         services = read_active_services(args.feed, args.date)
     except (ValueError, SupabaseReadError) as error:
-        print(str(error), file=sys.stderr)
+        logger.error(
+            "Calendar command failed: feed=%r service_date=%s: %s",
+            args.feed,
+            args.date,
+            error,
+        )
         return 1
     print(
         json.dumps(
