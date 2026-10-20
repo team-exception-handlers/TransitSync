@@ -27,8 +27,11 @@ either file is rejected before the run starts, and a run that fails removes
 everything it wrote, so a failed rerun never leaves old and new results mixed.
 """
 
+import datetime
+import json
 import logging
 import math
+import subprocess
 from collections.abc import Callable, Sequence, Set
 from dataclasses import dataclass
 from pathlib import Path
@@ -44,6 +47,8 @@ from simulator.engine.event_log import (
 )
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import Event, EventType
+
+MANIFEST_FILE = "manifest.json"
 
 log = logging.getLogger(__name__)
 
@@ -91,6 +96,7 @@ class RunResult:
     summary: RunSummary
     events_path: Path
     summary_path: Path
+    manifest_path: Path
 
 
 def _check_scenario(scenario: Scenario) -> None:
@@ -123,9 +129,17 @@ def _check_skipped_event_types(
     return frozenset(skip_event_types)
 
 
-def _check_output_dir(events_path: Path, summary_path: Path) -> None:
-    """Reject a folder that already holds the output of another run."""
-    existing = [path.name for path in (events_path, summary_path) if path.exists()]
+def _check_output_dir(
+    events_path: Path,
+    summary_path: Path,
+    manifest_path: Path,
+) -> None:
+    """Reject a folder that already holds output from another run."""
+    existing = [
+        path.name
+        for path in (events_path, summary_path, manifest_path)
+        if path.exists()
+    ]
     if existing:
         raise RunError(
             f"{events_path.parent} already contains run output "
@@ -133,14 +147,13 @@ def _check_output_dir(events_path: Path, summary_path: Path) -> None:
         )
 
 
-def _discard_output(events_path: Path, summary_path: Path) -> None:
-    """Remove every file a failed run wrote, finished or partial.
-
-    Safe because ``_check_output_dir`` made sure none of them existed before
-    the run. A file that cannot be removed is logged, not raised, so the
-    error that failed the run is the one the caller sees.
-    """
-    for path in (events_path, summary_path):
+def _discard_output(
+    events_path: Path,
+    summary_path: Path,
+    manifest_path: Path,
+) -> None:
+    """Remove every finished or partial output written by a failed run."""
+    for path in (events_path, summary_path, manifest_path):
         for leftover in (path, partial_path(path)):
             try:
                 leftover.unlink(missing_ok=True)
@@ -170,6 +183,39 @@ def _process_events(
 
         scheduler.run_until(end_s, process)
     summary.events_pending = scheduler.pending
+
+
+def _get_code_version() -> str:
+    """Return the current Git commit, or 'unknown' if unavailable."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def _write_manifest(path: Path, scenario: Scenario) -> None:
+    """Write metadata describing the scenario and code used for a run."""
+    manifest = {
+        "master_seed": scenario.master_seed,
+        "duration_s": float(scenario.duration_s),
+        "code_version": _get_code_version(),
+        "gtfs_version": getattr(scenario, "gtfs_version", "unknown"),
+        "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
+    }
+
+    parameters = getattr(scenario, "parameters", None)
+    if parameters is not None:
+        manifest["parameters"] = parameters
+
+    with path.open("w", encoding="utf-8", newline="\n") as file:
+        json.dump(manifest, file, indent=2, sort_keys=True, allow_nan=False)
+        file.write("\n")
 
 
 def run_scenario(
@@ -202,7 +248,8 @@ def run_scenario(
     skipped_types = _check_skipped_event_types(skip_event_types)
     events_path = output_dir / EVENTS_FILE
     summary_path = output_dir / SUMMARY_FILE
-    _check_output_dir(events_path, summary_path)
+    manifest_path = output_dir / MANIFEST_FILE
+    _check_output_dir(events_path, summary_path, manifest_path)
     streams = build_streams(scenario.master_seed)
     components = list(build_components(scenario, streams))
     scheduler = Scheduler()
@@ -227,14 +274,15 @@ def run_scenario(
             skipped_types,
         )
         write_summary(summary, summary_path)
+        _write_manifest(manifest_path, scenario)
     except OSError as error:
-        _discard_output(events_path, summary_path)
+        _discard_output(events_path, summary_path, manifest_path)
         log.error("could not write run output to %s: %s", output_dir, error)
         raise RunError(f"could not write run output to {output_dir}") from error
     except BaseException:
         # Any other failure (a component error, Ctrl+C) also removes the
         # partial output, then propagates unchanged
-        _discard_output(events_path, summary_path)
+        _discard_output(events_path, summary_path, manifest_path)
         raise
 
     log.info(
@@ -244,5 +292,8 @@ def run_scenario(
         summary.events_pending,
     )
     return RunResult(
-        summary=summary, events_path=events_path, summary_path=summary_path
+        summary=summary,
+        events_path=events_path,
+        summary_path=summary_path,
+        manifest_path=manifest_path,
     )
