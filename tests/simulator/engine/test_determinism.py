@@ -10,7 +10,11 @@ from pathlib import Path
 import pytest
 
 from simulator.engine.events import TrainArrival
+from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import RunError, run_scenario
+
+# Number of seeded train arrivals each test run schedules
+ARRIVALS = 3
 
 
 @dataclass
@@ -21,33 +25,45 @@ class DummyScenario:
     parameters: dict | None = None
 
 
-class DummyComponent:
+class SeededComponent:
+    """Schedules train arrivals at times drawn from the ``run_times`` stream.
+
+    The arrival times depend only on the master seed, so the event log changes
+    when the seed changes and repeats exactly when it does not.
+    """
+
+    def __init__(self, streams: StreamManager) -> None:
+        self._rng = streams.get_stream("run_times")
+
     def start(self, scheduler) -> None:
-        """Schedule a real event so the event log and summary are non-empty."""
-        scheduler.schedule(
-            TrainArrival(
-                time_s=10.0,
-                train_id="train-1",
-                station_id="station-1",
-                platform_id="platform-1",
-                scheduled_s=10.0,
-                disruption_delay_s=0.0,
+        for index, time_s in enumerate(self._rng.uniform(10.0, 290.0, ARRIVALS)):
+            scheduler.schedule(
+                TrainArrival(
+                    time_s=float(time_s),
+                    train_id=f"train-{index}",
+                    station_id="station-1",
+                    platform_id="platform-1",
+                    scheduled_s=float(time_s),
+                    disruption_delay_s=0.0,
+                )
             )
-        )
 
     def handle(self, event, scheduler) -> None:
-        """Handle a scheduled event."""
-        pass
+        """No follow-up events: the seeded arrivals are all this test needs."""
 
 
-def build_streams(seed: int) -> object:
-    """Return a placeholder random stream object for testing."""
-    return object()
+def build_components(scenario: object, streams: StreamManager) -> list:
+    """Return the seeded component used by the tests."""
+    return [SeededComponent(streams)]
 
 
-def build_components(scenario: object, streams: object) -> list:
-    """Return the dummy component used by the tests."""
-    return [DummyComponent()]
+def _run(tmp_path: Path, name: str, master_seed: int):
+    return run_scenario(
+        DummyScenario(duration_s=300.0, master_seed=master_seed),
+        StreamManager,
+        build_components,
+        tmp_path / name,
+    )
 
 
 def test_scenario_determinism(tmp_path: Path) -> None:
@@ -60,13 +76,13 @@ def test_scenario_determinism(tmp_path: Path) -> None:
 
     first = run_scenario(
         scenario,
-        build_streams,
+        StreamManager,
         build_components,
         tmp_path / "run-1",
     )
     second = run_scenario(
         scenario,
-        build_streams,
+        StreamManager,
         build_components,
         tmp_path / "run-2",
     )
@@ -75,9 +91,9 @@ def test_scenario_determinism(tmp_path: Path) -> None:
     assert first.events_path.read_bytes() == second.events_path.read_bytes()
     assert first.summary_path.read_bytes() == second.summary_path.read_bytes()
 
-    # Verify that both runs actually processed the scheduled event.
-    assert first.summary.events_processed == 1
-    assert second.summary.events_processed == 1
+    # Verify that both runs actually processed the seeded arrivals.
+    assert first.summary.events_processed == ARRIVALS
+    assert second.summary.events_processed == ARRIVALS
 
     # Read and validate both manifests.
     first_manifest = json.loads(first.manifest_path.read_text(encoding="utf-8"))
@@ -96,6 +112,31 @@ def test_scenario_determinism(tmp_path: Path) -> None:
     assert first_manifest == second_manifest
 
 
+def _arrival_times(result) -> list[float]:
+    lines = result.events_path.read_text(encoding="utf-8").splitlines()
+    return sorted(json.loads(line)["time_s"] for line in lines)
+
+
+def test_different_seed_changes_the_event_log(tmp_path: Path) -> None:
+    """A different master seed draws different arrival times."""
+    first = _run(tmp_path, "seed-123", master_seed=123)
+    other = _run(tmp_path, "seed-124", master_seed=124)
+
+    assert first.events_path.read_bytes() != other.events_path.read_bytes()
+    # The change comes from the sampled times, not only from the seed field
+    assert _arrival_times(first) != _arrival_times(other)
+    assert other.summary.events_processed == ARRIVALS
+
+
+def test_arrival_times_come_from_the_seeded_stream(tmp_path: Path) -> None:
+    """The logged times are the draws from the run_times stream for that seed."""
+    expected = StreamManager(123).get_stream("run_times").uniform(10.0, 290.0, ARRIVALS)
+    result = _run(tmp_path, "seed-123", master_seed=123)
+
+    assert _arrival_times(result) == sorted(float(time_s) for time_s in expected)
+    assert all(10.0 <= time_s < 290.0 for time_s in _arrival_times(result))
+
+
 def test_existing_manifest_rejects_run(tmp_path: Path) -> None:
     """An existing manifest must not be overwritten by a new run."""
     output_dir = tmp_path / "existing-run"
@@ -108,7 +149,7 @@ def test_existing_manifest_rejects_run(tmp_path: Path) -> None:
     with pytest.raises(RunError):
         run_scenario(
             DummyScenario(duration_s=300.0, master_seed=123),
-            build_streams,
+            StreamManager,
             build_components,
             output_dir,
         )
