@@ -18,6 +18,7 @@ from simulator.engine.events import (
     SCHEDULE_AT_CURRENT_TIME,
     Alighting,
     Boarding,
+    DepartureClearance,
     DepartureDue,
     EventType,
     Hold,
@@ -63,6 +64,10 @@ def make_event(event_type, time_s, tag="x"):
         ),
         EventType.MISSED_CONNECTION: lambda: MissedConnection(
             time_s=time_s, train_id="t", **passenger
+        ),
+        EventType.DEPARTURE_CLEARANCE: lambda: DepartureClearance(
+            time_s=time_s,
+            **train,
         ),
     }
     return builders[event_type]()
