@@ -116,6 +116,7 @@ def test_event_types_match_the_issue_list_plus_the_decision_points():
     assert {event_type.value for event_type in EventType} == {
         "train_arrival",
         "departure_due",
+        "departure_clearance",
         "train_departure",
         "hold",
         "hold_end",
@@ -142,6 +143,7 @@ def test_priority_order_matches_the_documented_platform_sequence():
         EventType.DEPARTURE_DUE,
         EventType.HOLD,
         EventType.HOLD_END,
+        EventType.DEPARTURE_CLEARANCE,
         EventType.TRAIN_DEPARTURE,
         EventType.MISSED_CONNECTION,
     ]
@@ -186,6 +188,8 @@ def test_departure_record_has_fixed_keys_and_values():
         ("boarded_count", 85),
         ("alighted_count", 60),
         ("onboard_load", 640),
+        ("generated_delay_s", 0.0),
+        ("inherited_delay_s", 0.0),
     ]
 
 
