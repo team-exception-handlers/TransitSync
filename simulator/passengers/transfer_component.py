@@ -1,13 +1,13 @@
-# AI contribution: 50% or below AI-generated
+# AI contribution: 50% or more AI-generated
 """
 Mathematical Foundations section 2: create a whole group at a feeder arrival,
 then apply individual walking times. Section 5: enter the corridor in simulation
 time order, including when walks from different groups overlap. Times are seconds.
 """
 
-from collections.abc import Mapping, Sequence 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from types import MappingProxyType 
+from types import MappingProxyType
 
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import (
@@ -129,9 +129,10 @@ class TransferComponent:
         elif isinstance(event, PassengerArrival):
             if event.passenger_id in self.passages:
                 passenger = self.passengers[event.passenger_id]
-                self.passengers[event.passenger_id] = replace(
-                    passenger, state=PassengerState.WAITING
-                )
+                if passenger.state is PassengerState.WALKING:
+                    self.passengers[event.passenger_id] = replace(
+                        passenger, state=PassengerState.WAITING
+                    )
 
     def _on_train_arrival(self, event: TrainArrival, scheduler: Scheduler) -> None:
         key = (event.station_id, event.platform_id)
