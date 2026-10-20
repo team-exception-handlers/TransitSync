@@ -60,7 +60,7 @@ from dataclasses import dataclass, field, fields
 from enum import StrEnum
 from typing import Any, ClassVar
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Field kinds, stored in dataclass field metadata and checked in __post_init__
 _KIND = "kind"
@@ -82,6 +82,7 @@ class EventType(StrEnum):
     BOARDING = "boarding"
     ALIGHTING = "alighting"
     MISSED_CONNECTION = "missed_connection"
+    DEPARTURE_CLEARANCE = "departure_clearance"
 
 
 # Single source of truth for tie-breaking. See the module docstring for why
@@ -94,8 +95,9 @@ EVENT_PRIORITY: dict[EventType, int] = {
     EventType.DEPARTURE_DUE: 4,
     EventType.HOLD: 5,
     EventType.HOLD_END: 6,
-    EventType.TRAIN_DEPARTURE: 7,
-    EventType.MISSED_CONNECTION: 8,
+    EventType.DEPARTURE_CLEARANCE: 7,
+    EventType.TRAIN_DEPARTURE: 8,
+    EventType.MISSED_CONNECTION: 9,
 }
 
 # Events whose fields are only final at the instant they happen. The scheduler
@@ -255,6 +257,9 @@ class TrainDeparture(Event):
     boarded_count: int = _count_field()
     alighted_count: int = _count_field()
     onboard_load: int = _count_field()
+    generated_delay_s: float = field(default=0.0, metadata={_KIND: _SECONDS})
+
+    inherited_delay_s: float = field(default=0.0, metadata={_KIND: _SECONDS})
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -357,6 +362,16 @@ class MissedConnection(Event):
     platform_id: str = _id_field()
 
 
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DepartureClearance(Event):
+    """A previously delayed train is eligible to depart"""
+
+    event_type: ClassVar[EventType] = EventType.DEPARTURE_CLEARANCE
+    train_id: str = _id_field()
+    station_id: str = _id_field()
+    platform_id: str = _id_field()
+
+
 EVENT_CLASSES: dict[EventType, type[Event]] = {
     cls.event_type: cls
     for cls in (
@@ -369,6 +384,7 @@ EVENT_CLASSES: dict[EventType, type[Event]] = {
         Boarding,
         Alighting,
         MissedConnection,
+        DepartureClearance,
     )
 }
 
