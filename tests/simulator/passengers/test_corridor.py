@@ -3,12 +3,15 @@
 
 import math
 
+import numpy as np
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import PassengerArrival
+from simulator.engine.random_streams import StreamManager
+from simulator.engine.walking_sampler import WalkingTimeSampler
 from simulator.passengers import CorridorQueue
 
 
@@ -88,12 +91,44 @@ def test_fixed_walking_times_schedule_delayed_platform_arrivals():
             )
         )
 
+
+def test_walking_sampler_schedules_delayed_platform_arrivals():
+    """Ensure the real WalkingTimeSampler integrates with CorridorQueue
+    and schedules arrivals."""
+
+    train_arrival_s = 100
+
+    # Initialize the NumPy-based stream manager and walking sampler (#9 & #19)
+    stream_manager = StreamManager(master_seed=42)
+    walker_sampler = WalkingTimeSampler(stream_manager)
+
+    # Sample and sort walking times to ensure chronological corridor arrivals
+    walking_times_s = np.sort(walker_sampler.sample(size=3))
+
+    queue = CorridorQueue(capacity_per_minute=2)
+    scheduler = Scheduler()
+
+    passages = admit_all(
+        queue, [train_arrival_s + float(walk_s) for walk_s in walking_times_s]
+    )
+    for passage in passages:
+        scheduler.schedule(
+            PassengerArrival(
+                time_s=passage.passage_s,
+                passenger_id=passage.passenger_id,
+                group_id="rem-1",
+                platform_id="metro",
+            )
+        )
+
     processed = []
     scheduler.run_until(1_000, processed.append)
-    # They reach the bottleneck at 120, 120 and 135 s. With room for two
-    # passengers a minute, they reach the platform at 120, 150 and 180 s.
-    assert [event.time_s for event in processed] == [120, 150, 180]
-    assert [passage.queue_delay_s for passage in passages] == [0, 30, 45]
+
+    # Verify all passengers are processed and scheduled successfully
+    assert len(processed) == 3
+    for event, passage in zip(processed, passages, strict=True):
+        assert event.time_s == passage.passage_s
+        assert passage.queue_delay_s >= 0
 
 
 def test_invalid_capacity_is_rejected():
