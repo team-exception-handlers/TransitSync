@@ -63,6 +63,32 @@ class TrainComponent:
 
         self._last_arrival: dict[str, float] = {}
         self._last_departure: dict[str, float] = {}
+        self._boarded: dict[Visit, int] = {}
+        self._alighted: dict[Visit, int] = {}
+
+    def board_passenger(self, train_id: str) -> None:
+        """Board one tracked passenger and count it for this stop (#100)."""
+        train = self.trains[train_id]
+        train.board(1)
+        visit = (train_id, train.current_stop_index)
+        self._boarded[visit] = self._boarded.get(visit, 0) + 1
+
+    def alight_passenger(self, train_id: str) -> None:
+        """Alight one tracked passenger and count it for this stop (#100)."""
+        train = self.trains[train_id]
+        train.alight(1)
+        visit = (train_id, train.current_stop_index)
+        self._alighted[visit] = self._alighted.get(visit, 0) + 1
+
+    def record_external_alighting(self, train_id: str) -> None:
+        """Count an external transfer entering the model after alighting (#100).
+
+        These newly generated people were never included in the existing live
+        aggregate load. Count their recorded movement without subtracting twice.
+        """
+        train = self.trains[train_id]
+        visit = (train_id, train.current_stop_index)
+        self._alighted[visit] = self._alighted.get(visit, 0) + 1
 
     def _next_visit(self, platform: str, cursors: dict[str, int]) -> Visit | None:
         """Return the next train visit in platform order"""
@@ -257,8 +283,8 @@ class TrainComponent:
                 scheduled_s=stop.departure_s,
                 disruption_delay_s=0.0,
                 hold_s=0.0,
-                boarded_count=0,
-                alighted_count=0,
+                boarded_count=self._boarded.get(visit, 0),
+                alighted_count=self._alighted.get(visit, 0),
                 onboard_load=train.onboard_load,
                 generated_delay_s=train.generated_delay_s,
                 inherited_delay_s=train.inherited_delay_s,
