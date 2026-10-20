@@ -1,6 +1,5 @@
 # AI contribution: 50% or more AI-generated
-""" 
-Times are simulation seconds. Reuse the shared passenger snapshots from #18 and
+"""Times are simulation seconds. Reuse the shared passenger snapshots from #18 and
 the live trains from #12. Doors are open from actual arrival through actual
 departure; the engine's tie order permits an exact-departure-time connection.
 Train capacity is enforced here; dwell/door-flow calibration is separate.
