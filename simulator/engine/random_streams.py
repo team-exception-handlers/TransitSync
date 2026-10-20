@@ -14,6 +14,7 @@ STREAM_NAMES = (
     "disruptions",
     "loads",
     "prediction_errors",
+    "destinations",
 )
 
 
