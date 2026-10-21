@@ -1,3 +1,7 @@
 # Runtime dependencies, pinned to exact versions.
 # Add a package here only when merged code imports it.
 numpy==2.5.4
+
+# Supabase access and local connection settings.
+psycopg[binary]==3.3.6
+python-dotenv==1.2.4
