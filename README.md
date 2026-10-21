@@ -123,6 +123,49 @@ arrival time, actual passage time and queueing delay, all in seconds. Passenger
 generation and walking-time sampling can therefore supply arrival times without
 the corridor depending on their unfinished implementations.
 
+### Dwell time model
+
+`simulator.trains.dwell.DwellModel` computes stop dwell in seconds:
+
+```python
+from simulator.trains.dwell import DwellModel
+
+# Illustrative coefficients only; supply calibrated values for a real scenario.
+model = DwellModel(
+    base_dwell_s=20.0,
+    boarding_s_per_passenger=1.5,
+    alighting_s_per_passenger=0.75,
+)
+assert model.compute(boarded_count=10, alighted_count=8) == 41.0
+```
+
+The example is hand-calculated as `20 + 1.5 * 10 + 0.75 * 8 = 41` seconds.
+The counts are passengers who actually board or alight at this stop; passengers
+left on the platform do not contribute to the boarding count.
+
+Run the focused checks with:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests/simulator/trains/test_dwell.py -v
+```
+
+Tests cover zero passenger movements, each flow separately, mixed flows,
+increasing counts, disabled terms, invalid inputs and arithmetic overflow.
+
+The formula is `base + boarding_coefficient * B + alighting_coefficient * A`.
+This additive approximation treats boarding and alighting as sequential service;
+coefficients describe effective throughput across the train. They are required
+configuration inputs, with no assumed calibrated defaults. All coefficients must
+be finite and non-negative; counts must be non-negative integers. With no
+passenger movements, dwell equals the base. A zero coefficient disables its term.
+
+[Task #22](https://github.com/team-exception-handlers/TransitSync/issues/22)
+supplies this standalone calculation and hand-calculated tests in
+[PR #136](https://github.com/team-exception-handlers/TransitSync/pull/136).
+`TrainComponent` still uses scheduled dwell: live passenger counts and dynamic
+departure scheduling require integration with boarding/alighting (#100).
+Crowding penalties are separate work (#23).
+
 ## Team
 
 Built by The Exception Handlers, a Concordia University software engineering capstone team.
