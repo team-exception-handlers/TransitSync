@@ -30,7 +30,7 @@ def database(
     results[3].fetchall.return_value = list(exceptions)
     connection.execute.side_effect = results
     connect = MagicMock(return_value=connection)
-    monkeypatch.setattr("scripts.supabase_calendar.psycopg.connect", connect)
+    monkeypatch.setattr("scripts.supabase_connection.psycopg.connect", connect)
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://example.invalid/test")
     monkeypatch.delenv("SUPABASE_SSL_ROOT_CERT", raising=False)
     return connection, connect

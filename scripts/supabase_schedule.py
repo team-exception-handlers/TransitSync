@@ -4,13 +4,11 @@
 import argparse
 import json
 import logging
-import os
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
 
 import psycopg
-from psycopg.rows import dict_row
 
 from scripts.extraction_logging import configure_logging
 from scripts.gtfs_schedule import extract_trips
@@ -19,6 +17,7 @@ from scripts.supabase_calendar import (
     _load_local_connection_settings,
     _read_calendar,
 )
+from scripts.supabase_connection import read_only_connection
 from simulator.network_config import REM_ATTRIBUTION
 from simulator.timetable import Platform, require_text
 
@@ -102,6 +101,11 @@ def load_mapping(path: Path) -> dict[str, tuple[Platform, ...]]:
 
 def _read_feed(connection, feed_id, platforms, service_date) -> tuple[dict, tuple]:
     services = _read_calendar(connection, feed_id, service_date)
+    if not services:
+        raise ValueError(
+            f"feed {feed_id!r}, service_date {service_date}: "
+            "no active services for extraction"
+        )
     feed = connection.execute(FEED_QUERY, (feed_id,)).fetchone()
     require_text(feed.get("feed_version"), "feed_version")
     require_text(feed.get("agency"), "agency")
@@ -177,20 +181,8 @@ def read_schedules(mappings, service_dates: tuple[date, ...]) -> list[dict]:
     ):
         raise ValueError("service_dates must contain unique datetime.date values")
     _check_mappings(mappings)
-    url = os.environ.get("SUPABASE_DB_URL")
-    if not url or not url.strip():
-        raise ValueError("Set SUPABASE_DB_URL in the process environment first")
     try:
-        with psycopg.connect(
-            url,
-            row_factory=dict_row,
-            connect_timeout=10,
-            sslmode="verify-full",
-            sslrootcert=os.environ.get("SUPABASE_SSL_ROOT_CERT") or "system",
-            prepare_threshold=None,
-        ) as connection:
-            connection.read_only = True
-            connection.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
+        with read_only_connection() as connection:
             return [_daily_preview(connection, mappings, day) for day in service_dates]
     except psycopg.Error:
         logger.error(

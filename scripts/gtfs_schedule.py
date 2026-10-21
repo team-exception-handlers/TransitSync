@@ -134,11 +134,13 @@ def extract_trips(
 ) -> tuple[ScheduledTrip, ...]:
     """Extract active interchange visits for one feed.
 
-    Callers check calendars and coverage. Validate full trips before trimming;
-    invalid data raises instead of producing empty service.
+    Callers check calendars and coverage. Require at least one active service
+    and validate full trips before trimming; invalid inputs raise an error.
     """
     feed_id = require_text(feed_id, "feed_id")
     active = {require_text(s, "service_id") for s in service_ids}
+    if not active:
+        raise ValueError(f"feed {feed_id!r}: no active services for extraction")
     route_index = _index(routes, feed_id, "route_id")
     stop_index = _index(stops, feed_id, "stop_id")
     trip_index = _index(trips, feed_id, "trip_id")

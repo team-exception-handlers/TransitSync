@@ -241,7 +241,12 @@ def test_other_feed_and_inactive_trip_rows_do_not_contaminate_selected_schedule(
 ):
     rows = [visit("MCG", 1, 100), visit("MCG", 1, 0) | {"feed_id": "other"}]
     assert len(extract(platform, rows)) == 1
-    assert extract(platform, rows, services=()) == ()
+    assert extract(platform, rows, services=("different-service",)) == ()
+
+
+def test_no_active_services_are_rejected(platform):
+    with pytest.raises(ValueError, match="feed 'rem'.*no active services"):
+        extract(platform, [], services=iter(()))
 
 
 def test_distinct_identical_trains_are_preserved(platform):

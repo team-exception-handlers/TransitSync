@@ -95,16 +95,20 @@ def connect_database(monkeypatch, *, empty=False):
 
     connection.execute.side_effect = execute
     connect = MagicMock(return_value=connection)
-    monkeypatch.setattr(reader.psycopg, "connect", connect)
+    monkeypatch.setattr("scripts.supabase_connection.psycopg.connect", connect)
     monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://example.invalid/test")
     monkeypatch.delenv("SUPABASE_SSL_ROOT_CERT", raising=False)
     return connection, connect, rows
 
 
+@pytest.mark.parametrize("certificate", [None, "/configured/ca.crt"])
 def test_reader_flows_native_rows_through_calendar_and_complete_trip_extraction(
     monkeypatch,
+    certificate,
 ):
     connection, connect, _ = connect_database(monkeypatch)
+    if certificate is not None:
+        monkeypatch.setenv("SUPABASE_SSL_ROOT_CERT", certificate)
     result = reader.read_daily_schedule({"rem": (PLATFORM,)}, DAY)
     assert result["service_date"] == "2026-10-05"
     assert result["feeds"][0]["feed_version"] == "v1"
@@ -118,6 +122,9 @@ def test_reader_flows_native_rows_through_calendar_and_complete_trip_extraction(
     assert connection.isolation_level == psycopg.IsolationLevel.REPEATABLE_READ
     assert connect.call_args.kwargs["sslmode"] == "verify-full"
     assert connect.call_args.kwargs["connect_timeout"] == 10
+    assert connect.call_args.kwargs["sslrootcert"] == (certificate or "system")
+    assert connect.call_args.kwargs["prepare_threshold"] is None
+    assert connection.__exit__.called
     for call in connection.execute.call_args_list:
         query = call.args[0]
         if "FROM gtfs." in query:
@@ -126,10 +133,14 @@ def test_reader_flows_native_rows_through_calendar_and_complete_trip_extraction(
             assert "rem" not in query
 
 
-def test_empty_active_service_is_valid_but_missing_trip_rows_are_not(monkeypatch):
+def test_no_active_services_rejects_extraction_with_feed_and_date(monkeypatch):
     _, _, rows = connect_database(monkeypatch)
     rows["gtfs.calendar"] = []
-    assert reader.read_daily_schedule({"rem": (PLATFORM,)}, DAY)["trips"] == []
+    with pytest.raises(ValueError, match="feed 'rem'.*2026-10-05.*no active services"):
+        reader.read_daily_schedule({"rem": (PLATFORM,)}, DAY)
+
+
+def test_missing_trip_stop_times_are_rejected(monkeypatch):
     _, _, rows = connect_database(monkeypatch)
     rows["gtfs.stop_times"] = []
     with pytest.raises(ValueError, match="stop_times"):

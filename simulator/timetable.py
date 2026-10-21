@@ -162,6 +162,7 @@ class ScheduledTrip:
 
 
 TIME_BANDS = ("early", "am", "midday", "pm", "evening", "late")
+BAND_STARTS_S = (6 * 3600, 9 * 3600, 15 * 3600, 18 * 3600, 21 * 3600)
 
 
 def _headway_bands(departures: list[int]) -> list[dict]:
@@ -172,7 +173,7 @@ def _headway_bands(departures: list[int]) -> list[dict]:
     gaps = [[] for _ in TIME_BANDS]
     ordered = sorted(departures)
     for index, departure in enumerate(ordered):
-        band = bisect_right((21600, 32400, 54000, 64800, 75600), departure)
+        band = bisect_right(BAND_STARTS_S, departure)
         times[band].append(departure)
         if index:
             gaps[band].append(departure - ordered[index - 1])

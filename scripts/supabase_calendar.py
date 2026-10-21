@@ -10,10 +10,10 @@ from pathlib import Path
 
 import psycopg
 from dotenv import dotenv_values
-from psycopg.rows import dict_row
 
 from scripts.extraction_logging import configure_logging
 from scripts.gtfs_calendar import active_service_ids
+from scripts.supabase_connection import read_only_connection
 
 logger = logging.getLogger(__name__)
 
@@ -94,21 +94,9 @@ def read_active_services(feed_id: str, service_date: date) -> tuple[str, ...]:
         raise ValueError("feed_id must be non-empty text")
     if type(service_date) is not date:
         raise ValueError("service_date must be a datetime.date, without a time")
-    url = os.environ.get("SUPABASE_DB_URL")
-    if not url or not url.strip():
-        raise ValueError("Set SUPABASE_DB_URL in the process environment first")
     logger.info("Reading calendar: feed=%r service_date=%s", feed_id, service_date)
     try:
-        with psycopg.connect(
-            url,
-            row_factory=dict_row,
-            connect_timeout=10,
-            sslmode="verify-full",
-            sslrootcert=os.environ.get("SUPABASE_SSL_ROOT_CERT") or "system",
-            prepare_threshold=None,
-        ) as connection:
-            connection.read_only = True
-            connection.isolation_level = psycopg.IsolationLevel.REPEATABLE_READ
+        with read_only_connection() as connection:
             services = _read_calendar(connection, feed_id.strip(), service_date)
     except psycopg.Error:
         logger.error(

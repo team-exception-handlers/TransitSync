@@ -80,6 +80,30 @@ def test_cli_builds_real_reader_output_with_mocked_connection(
     assert "Saved three reference schedules" in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("existing", [False, True])
+def test_no_active_services_prevent_publication(
+    tmp_path, monkeypatch, caplog, config, existing
+):
+    from scripts import extract_network as cli
+    from tests.scripts.test_supabase_schedule import PLATFORM, connect_database
+
+    _, _, rows = connect_database(monkeypatch)
+    rows["gtfs.calendar"] = []
+    monkeypatch.setattr(cli, "load_mapping", lambda path: {"rem": (PLATFORM,)})
+    monkeypatch.setattr(cli, "_load_local_connection_settings", lambda: None)
+    output = tmp_path / "result"
+    if existing:
+        write_config(config, output)
+    before = {p.name: p.read_bytes() for p in output.iterdir()} if existing else {}
+    assert cli.main(["--output-dir", str(output)]) == 1
+    assert "feed 'rem'" in caplog.text
+    assert "2026-10-05" in caplog.text and "no active services" in caplog.text
+    if existing:
+        assert before == {p.name: p.read_bytes() for p in output.iterdir()}
+    else:
+        assert not output.exists()
+
+
 def test_report_is_stable_after_json_round_trip(config):
     import json
 
