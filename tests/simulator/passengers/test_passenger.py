@@ -9,7 +9,7 @@ from simulator.passengers.passenger import Passenger, PassengerState
 
 
 def test_passenger_has_identity_origin_destination_and_initial_state():
-    passenger = Passenger("p-1", "mcgill", "bonaventure")
+    passenger = Passenger("p-1", " mcgill ", "bonaventure ")
 
     assert passenger.passenger_id == "p-1"
     assert passenger.origin == "mcgill"
@@ -38,9 +38,12 @@ def test_invalid_identifier_is_rejected_naming_the_field(name, invalid):
         Passenger(**values)
 
 
-def test_destination_must_differ_from_origin():
+@pytest.mark.parametrize(
+    "origin,destination", [("mcgill", "mcgill"), (" mcgill ", "mcgill ")]
+)
+def test_destination_must_differ_from_origin(origin, destination):
     with pytest.raises(ValueError, match="destination"):
-        Passenger("p-1", "mcgill", "mcgill")
+        Passenger("p-1", origin, destination)
 
 
 @pytest.mark.parametrize("invalid", [None, "created"])

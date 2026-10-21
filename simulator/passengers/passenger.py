@@ -36,6 +36,8 @@ class Passenger:
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"Passenger.{name} must be a non-empty string")
+            if name in ("origin", "destination"):
+                object.__setattr__(self, name, value.strip())
         if self.origin == self.destination:
             raise ValueError("Passenger.destination must differ from origin")
         if not isinstance(self.state, PassengerState):

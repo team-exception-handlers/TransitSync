@@ -134,6 +134,10 @@ has a `passenger_id`, an origin station, a different destination station, and a
 `WALKING`, `WAITING`, `ON_BOARD` and `COMPLETED`. Passenger snapshots are immutable;
 movement components can use `dataclasses.replace` to update their state.
 
+Leading and trailing whitespace is removed from origin and destination station
+IDs before they are compared and stored. A destination that becomes the origin,
+or duplicates another destination after trimming, is rejected before sampling.
+
 Demand is configured as ordered, non-overlapping time bands. Times are simulation
 seconds and rates are passengers per minute. Gaps and times outside the bands
 have zero demand. For example:

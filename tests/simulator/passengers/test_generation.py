@@ -134,6 +134,19 @@ def test_destination_mapping_order_does_not_change_generated_passengers():
     )
 
 
+def test_station_whitespace_does_not_change_generated_passengers():
+    first = PassengerGenerator(StreamManager(42))
+    second = PassengerGenerator(StreamManager(42))
+    passengers = generate(
+        first,
+        origin=" mcgill ",
+        transfer_fractions={"bonaventure ": 0.25, " edouard-montpetit": 0.75},
+    )
+
+    assert passengers
+    assert passengers == generate(second)
+
+
 @pytest.mark.parametrize(
     "overrides,message",
     [
@@ -143,6 +156,15 @@ def test_destination_mapping_order_does_not_change_generated_passengers():
         ({"transfer_fractions": None}, "transfer_fractions"),
         ({"transfer_fractions": {}}, "transfer_fractions"),
         ({"transfer_fractions": {"mcgill": 1}}, "destination"),
+        ({"transfer_fractions": {"mcgill ": 1}}, "destination"),
+        (
+            {"origin": " mcgill ", "transfer_fractions": {"mcgill": 1}},
+            "destination",
+        ),
+        (
+            {"transfer_fractions": {"bonaventure": 0.5, " bonaventure ": 0.5}},
+            "unique",
+        ),
         ({"transfer_fractions": {None: 1}}, "destination"),
         ({"transfer_fractions": {"bonaventure": 0.5}}, "sum to 1"),
         ({"transfer_fractions": {"bonaventure": -0.1}}, "transfer_fractions"),

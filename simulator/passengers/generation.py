@@ -21,16 +21,24 @@ def _destination_distribution(
     """Validate and canonicalise the complete destination distribution."""
     if not isinstance(origin, str) or not origin.strip():
         raise ValueError("origin must be a non-empty station identifier")
+    origin = origin.strip()
     if not isinstance(transfer_fractions, Mapping) or not transfer_fractions:
         raise ValueError("transfer_fractions must be a non-empty destination mapping")
     shares = []
+    seen_destinations: set[str] = set()
     for destination, fraction in transfer_fractions.items():
         if not isinstance(destination, str) or not destination.strip():
             raise ValueError(
                 "transfer_fractions destination must be a non-empty string"
             )
+        destination = destination.strip()
         if destination == origin:
             raise ValueError("transfer_fractions destination must differ from origin")
+        if destination in seen_destinations:
+            raise ValueError(
+                "transfer_fractions destinations must be unique after trimming"
+            )
+        seen_destinations.add(destination)
         if (
             isinstance(fraction, bool)
             or not isinstance(fraction, int | float)
