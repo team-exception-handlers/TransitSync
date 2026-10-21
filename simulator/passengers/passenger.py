@@ -1,6 +1,5 @@
-# AI contribution: 50% or less AI-generated
-"""Passenger identity and state for US-1.3, Task 1.3.1 (#17).
-
+# AI contribution: 50% or more AI-generated
+"""
 Origin and destination are station identifiers. Platform locations, train
 membership and state transitions belong to the movement components (#18, #100).
 """
