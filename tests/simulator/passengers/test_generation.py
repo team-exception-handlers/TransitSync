@@ -2,7 +2,7 @@
 """"""
 
 import math
-from collections import Counter 
+from collections import Counter
 
 import numpy as np
 import pytest
