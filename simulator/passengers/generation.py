@@ -55,9 +55,10 @@ class PassengerGenerator:
     """Create passenger batches with reproducible counts and destinations.
 
     Use one generator per run to keep IDs unique across origins and batches.
-    Multiple generators need distinct ``id_prefix`` values. Time windows are
-    supplied by the caller, which is responsible for avoiding double-counting
-    demand across repeated or overlapping windows for the same passenger source.
+    Multiple generators need distinct ``id_prefix`` values. Numeric suffixes use
+    at least 12 digits. Time windows are supplied by the caller, which is
+    responsible for avoiding double-counting demand across repeated or overlapping
+    windows for the same passenger source.
     """
 
     def __init__(
@@ -104,7 +105,7 @@ class PassengerGenerator:
         )
         passengers = [
             Passenger(
-                passenger_id=f"{self._id_prefix}-{self._next_id + index:06d}",
+                passenger_id=f"{self._id_prefix}-{self._next_id + index:012d}",
                 origin=origin,
                 destination=str(destination),
             )

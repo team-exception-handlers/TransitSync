@@ -77,14 +77,31 @@ def test_ids_are_unique_across_batches_and_origins(monkeypatch):
     )
 
     assert [p.passenger_id for p in first + second] == [
-        "passenger-000001",
-        "passenger-000002",
-        "passenger-000003",
-        "passenger-000004",
-        "passenger-000005",
-        "passenger-000006",
+        "passenger-000000000001",
+        "passenger-000000000002",
+        "passenger-000000000003",
+        "passenger-000000000004",
+        "passenger-000000000005",
+        "passenger-000000000006",
     ]
     assert all(p.destination == "mcgill" for p in second)
+
+
+def test_ids_keep_text_sort_order_across_one_million_passengers(monkeypatch):
+    generator, _ = generator_with_count(monkeypatch, count=2)
+    # Reach the boundary with four passengers rather than allocating a million.
+    monkeypatch.setattr(generator, "_next_id", 999_998)
+    first = generate(generator)
+    second = generate(generator, start_s=60, end_s=120)
+    ids = [passenger.passenger_id for passenger in first + second]
+
+    assert ids == sorted(ids)
+    assert ids == [
+        "passenger-000000999998",
+        "passenger-000000999999",
+        "passenger-000001000000",
+        "passenger-000001000001",
+    ]
 
 
 def test_zero_share_destinations_are_never_assigned(monkeypatch):
@@ -156,8 +173,8 @@ def test_distinct_prefixes_separate_multiple_generators(monkeypatch):
     first = generate(rem)
     second = generate(metro)
 
-    assert first[0].passenger_id == "rem-000001"
-    assert second[0].passenger_id == "metro-000001"
+    assert first[0].passenger_id == "rem-000000000001"
+    assert second[0].passenger_id == "metro-000000000001"
 
 
 def test_zero_demand_consumes_neither_ids_nor_random_draws():
@@ -175,7 +192,7 @@ def test_a_zero_poisson_draw_returns_an_empty_batch_without_spending_ids(monkeyp
     assert counts.means == [12]
 
     counts.count = 1
-    assert generate(generator)[0].passenger_id == "passenger-000001"
+    assert generate(generator)[0].passenger_id == "passenger-000000000001"
 
 
 def test_an_expected_count_beyond_sampler_limits_is_rejected_without_rng_changes():

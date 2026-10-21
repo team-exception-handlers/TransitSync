@@ -170,6 +170,10 @@ Use one generator per run so passenger IDs remain unique across origins and
 batches. If multiple generators are needed, give each a distinct `id_prefix`.
 The caller chooses demand windows and must avoid counting the same demand twice.
 
+The numeric ID suffix uses at least 12 digits, for example
+`passenger-000000000001`, so IDs with the same prefix still sort in creation
+order when the count crosses one million.
+
 This generator returns batches without scheduling platform arrivals. Task #18
 will add train-triggered transfer pulses and walking times; task #100 will add
 boarding, alighting and missed connections.
