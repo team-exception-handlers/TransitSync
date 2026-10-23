@@ -17,6 +17,7 @@ from simulator.engine.events import (
     TrainDeparture,
 )
 from simulator.passengers.platform_queue import PlatformQueue
+from simulator.trains.disruption import DelayInjection
 from simulator.trains.suspension import LineSuspension, dispatch_ready_s
 from simulator.trains.train import Train
 
@@ -30,6 +31,7 @@ class TrainComponent:
         minimum_gap_s: float = 90.0,
         *,
         suspensions: Sequence[LineSuspension] = (),
+        delay_injections: Sequence[DelayInjection] = (),
         passenger_queue: PlatformQueue | None = None,
     ) -> None:
         if not math.isfinite(minimum_gap_s) or minimum_gap_s <= 0:
@@ -39,6 +41,17 @@ class TrainComponent:
         self.suspensions = tuple(suspensions)
         if any(not isinstance(item, LineSuspension) for item in self.suspensions):
             raise ValueError("Suspensions must be LineSuspension instances")
+        self.delay_injections = tuple(delay_injections)
+        if any(not isinstance(item, DelayInjection) for item in self.delay_injections):
+            raise ValueError("Delay injections must be DelayInjection instances")
+        disruption_ids = [item.disruption_id for item in self.delay_injections]
+        if len(disruption_ids) != len(set(disruption_ids)):
+            raise ValueError("Delay injection IDs must be unique")
+        self._scheduled_disruptions: dict[str, dict[str, float]] = {}
+        self._disruptions_by_arrival: dict[tuple[str, float], list[str]] = defaultdict(
+            list
+        )
+        self._applied_disruptions: set[str] = set()
         self.passenger_queue = passenger_queue
         self._reserved_arrival: dict[str, list[float]] = defaultdict(list)
         self._last_departure: dict[str, float] = {}
@@ -87,13 +100,33 @@ class TrainComponent:
         """Reserve the earliest safe slot, respecting earlier AND later bookings."""
         stop = train.current_stop
         reservations = self._reserved_arrival[stop.platform_id]
-        safe_s = max(natural_s, not_before_s)
-        for reserved_s in reservations:
-            if safe_s + self.minimum_gap_s <= reserved_s:
-                break
-            safe_s = max(safe_s, reserved_s + self.minimum_gap_s)
+        requested_s = natural_s
+        trigger_time_s = self._safe_arrival_s(natural_s, not_before_s, reservations)
+        matching_disruptions = [
+            disruption
+            for disruption in self.delay_injections
+            if disruption.disruption_id not in self._scheduled_disruptions
+            and disruption.matches(
+                train_id=train.id,
+                station_id=stop.station_id,
+                platform_id=stop.platform_id,
+                arrival_s=trigger_time_s,
+            )
+        ]
+        natural_s = trigger_time_s
+        for disruption in matching_disruptions:
+            natural_s += disruption.delay_s
+            train.generated_delay_s += disruption.delay_s
+        safe_s = self._safe_arrival_s(natural_s, not_before_s, reservations)
         insort(reservations, safe_s)
-        train.inherited_delay_s += safe_s - natural_s
+        train.inherited_delay_s += trigger_time_s - requested_s + safe_s - natural_s
+        for disruption in matching_disruptions:
+            disruption_id = disruption.disruption_id
+            self._scheduled_disruptions[disruption_id] = {
+                "trigger_time_s": trigger_time_s,
+                "arrival_time_s": safe_s,
+            }
+            self._disruptions_by_arrival[(train.id, safe_s)].append(disruption_id)
         scheduler.schedule(
             TrainArrival(
                 time_s=safe_s,
@@ -105,6 +138,38 @@ class TrainComponent:
             )
         )
         return safe_s
+
+    def _safe_arrival_s(
+        self, natural_s: float, not_before_s: float, reservations: list[float]
+    ) -> float:
+        """Find an arrival time that respects all current platform bookings."""
+        safe_s = max(natural_s, not_before_s)
+        for reserved_s in reservations:
+            if safe_s + self.minimum_gap_s <= reserved_s:
+                break
+            safe_s = max(safe_s, reserved_s + self.minimum_gap_s)
+        return safe_s
+
+    def manifest_entries(self) -> tuple[dict[str, object], ...]:
+        """Return configured delay disruptions and whether each was injected."""
+        entries = []
+        for disruption in self.delay_injections:
+            disruption_id = disruption.disruption_id
+            applied = self._scheduled_disruptions.get(disruption_id)
+            was_applied = disruption_id in self._applied_disruptions
+            entries.append(
+                {
+                    **disruption.to_manifest_record(),
+                    "applied": was_applied,
+                    "trigger_time_s": (
+                        applied["trigger_time_s"] if was_applied and applied else None
+                    ),
+                    "arrival_time_s": (
+                        applied["arrival_time_s"] if was_applied and applied else None
+                    ),
+                }
+            )
+        return tuple(entries)
 
     def handle(self, event: Event, scheduler: Scheduler) -> None:
         """Process train movement and optional platform waiting events."""
@@ -149,6 +214,9 @@ class TrainComponent:
         if train is None:
             return
 
+        self._applied_disruptions.update(
+            self._disruptions_by_arrival.pop((event.train_id, event.time_s), ())
+        )
         stop = train.current_stop
 
         dwell_s = stop.departure_s - stop.arrival_s

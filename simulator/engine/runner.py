@@ -21,9 +21,10 @@ Output, written to ``output_dir``:
 
 - ``events.jsonl``: processed events except skipped types, one JSON record per line
 - ``summary.json``: counts for the run
+- ``manifest.json``: scenario metadata and configured disruption status
 
-The two files always come from the same run. A folder that already holds
-either file is rejected before the run starts, and a run that fails removes
+The output files always come from the same run. A folder that already holds
+any output file is rejected before the run starts, and a run that fails removes
 everything it wrote, so a failed rerun never leaves old and new results mixed.
 """
 
@@ -32,14 +33,16 @@ import math
 from collections.abc import Callable, Sequence, Set
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol, runtime_checkable
 
 from simulator.engine.event_log import (
     EVENTS_FILE,
+    MANIFEST_FILE,
     SUMMARY_FILE,
     EventLogWriter,
     RunSummary,
     partial_path,
+    write_manifest,
     write_summary,
 )
 from simulator.engine.event_queue import Scheduler
@@ -74,6 +77,15 @@ class Component(Protocol):
         ...
 
 
+@runtime_checkable
+class ManifestContributor(Protocol):
+    """A component that reports disruption metadata for the run manifest."""
+
+    def manifest_entries(self) -> Sequence[dict[str, object]]:
+        """Return JSON-compatible entries describing configured disruptions."""
+        ...
+
+
 # The runner only passes the random streams on to the components, so their
 # type is left to the stream factory (Task 1.1.3, #9)
 StreamFactory = Callable[[int], object]
@@ -91,6 +103,7 @@ class RunResult:
     summary: RunSummary
     events_path: Path
     summary_path: Path
+    manifest_path: Path
 
 
 def _check_scenario(scenario: Scenario) -> None:
@@ -123,24 +136,24 @@ def _check_skipped_event_types(
     return frozenset(skip_event_types)
 
 
-def _check_output_dir(events_path: Path, summary_path: Path) -> None:
+def _check_output_dir(*output_paths: Path) -> None:
     """Reject a folder that already holds the output of another run."""
-    existing = [path.name for path in (events_path, summary_path) if path.exists()]
+    existing = [path.name for path in output_paths if path.exists()]
     if existing:
         raise RunError(
-            f"{events_path.parent} already contains run output "
+            f"{output_paths[0].parent} already contains run output "
             f"({', '.join(existing)}); use an empty or new folder"
         )
 
 
-def _discard_output(events_path: Path, summary_path: Path) -> None:
+def _discard_output(*output_paths: Path) -> None:
     """Remove every file a failed run wrote, finished or partial.
 
     Safe because ``_check_output_dir`` made sure none of them existed before
     the run. A file that cannot be removed is logged, not raised, so the
     error that failed the run is the one the caller sees.
     """
-    for path in (events_path, summary_path):
+    for path in output_paths:
         for leftover in (path, partial_path(path)):
             try:
                 leftover.unlink(missing_ok=True)
@@ -172,6 +185,33 @@ def _process_events(
     summary.events_pending = scheduler.pending
 
 
+def _manifest_record(
+    scenario: Scenario, components: Sequence[Component]
+) -> dict[str, Any]:
+    """Collect stable scenario metadata and reports from disruption components."""
+    name = getattr(scenario, "name", "custom")
+    description = getattr(scenario, "description", None)
+    if not isinstance(name, str) or not name.strip():
+        raise ValueError("scenario.name must be a non-empty string")
+    if description is not None and (
+        not isinstance(description, str) or not description.strip()
+    ):
+        raise ValueError("scenario.description must be a non-empty string")
+    disruptions = [
+        entry
+        for component in components
+        if isinstance(component, ManifestContributor)
+        for entry in component.manifest_entries()
+    ]
+    return {
+        "scenario_name": name,
+        "scenario_description": description,
+        "master_seed": scenario.master_seed,
+        "duration_s": float(scenario.duration_s),
+        "disruptions": disruptions,
+    }
+
+
 def run_scenario(
     scenario: Scenario,
     build_streams: StreamFactory,
@@ -186,15 +226,15 @@ def run_scenario(
         scenario: validated scenario configuration.
         build_streams: builds the random substreams from the master seed.
         build_components: builds the components from the scenario and streams.
-        output_dir: folder for the event log and summary. Created if missing.
-            Must not already contain an event log or summary.
+        output_dir: folder for the event log, summary and manifest. Created if
+            missing. Must not already contain output from another run.
         skip_event_types: event types omitted from the log (US-1.3, #21).
             Defaults to logging everything. Use ``PASSENGER_EVENT_TYPES``
             from ``event_log`` to disable detailed passenger recording.
             All events still reach components and contribute to the summary.
 
     Raises:
-        ValueError: the scenario duration, master seed or log filter is invalid.
+        ValueError: scenario metadata, duration, master seed or log filter is invalid.
         RunError: the output folder already holds run output, or the output
             could not be written. Nothing from this run is left behind.
     """
@@ -202,7 +242,9 @@ def run_scenario(
     skipped_types = _check_skipped_event_types(skip_event_types)
     events_path = output_dir / EVENTS_FILE
     summary_path = output_dir / SUMMARY_FILE
-    _check_output_dir(events_path, summary_path)
+    manifest_path = output_dir / MANIFEST_FILE
+    _check_output_dir(events_path, summary_path, manifest_path)
+    _manifest_record(scenario, ())
     streams = build_streams(scenario.master_seed)
     components = list(build_components(scenario, streams))
     scheduler = Scheduler()
@@ -227,14 +269,15 @@ def run_scenario(
             skipped_types,
         )
         write_summary(summary, summary_path)
+        write_manifest(_manifest_record(scenario, components), manifest_path)
     except OSError as error:
-        _discard_output(events_path, summary_path)
+        _discard_output(events_path, summary_path, manifest_path)
         log.error("could not write run output to %s: %s", output_dir, error)
         raise RunError(f"could not write run output to {output_dir}") from error
     except BaseException:
         # Any other failure (a component error, Ctrl+C) also removes the
         # partial output, then propagates unchanged
-        _discard_output(events_path, summary_path)
+        _discard_output(events_path, summary_path, manifest_path)
         raise
 
     log.info(
@@ -244,5 +287,8 @@ def run_scenario(
         summary.events_pending,
     )
     return RunResult(
-        summary=summary, events_path=events_path, summary_path=summary_path
+        summary=summary,
+        events_path=events_path,
+        summary_path=summary_path,
+        manifest_path=manifest_path,
     )

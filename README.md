@@ -63,7 +63,50 @@ The smoke test runs a small timetable at McGill (one REM train, two green line t
 pytest tests/simulator/engine/test_runner.py --basetemp=run-output
 ```
 
-Each test folder under `run-output` contains `events.jsonl` (one line per event, in processing order) and `summary.json` (event counts for the run).
+Each test folder under `run-output` contains `events.jsonl` (one line per event, in processing order), `summary.json` (event counts for the run), and `manifest.json` (scenario metadata and configured disruptions, including whether each delay was applied).
+
+### Disruptions
+
+`DelayInjection` adds a fixed delay to the first matching train arrival at its
+selected platform at or after `time_s`. A platform is required; optional
+station and train IDs further narrow the target. The delay is configured
+independently of its target, contributes to `disruption_delay_s`, and propagates
+to later train movements. If no arrival matches during the run, the manifest
+records the disruption as unapplied.
+
+```python
+from simulator.trains.disruption import DelayInjection
+from simulator.trains.train_component import TrainComponent
+
+delay = DelayInjection(
+    disruption_id="mcgill-rem-delay",
+    time_s=120,
+    delay_s=60,
+    station_id="mcgill",
+    platform_id="STA_ZCD_BT_QUAI_01_MCG",
+    train_id="rem-1",
+)
+component = TrainComponent(trains, delay_injections=(delay,))
+```
+
+Named examples are available from `simulator.disruptions`:
+
+```python
+from simulator.disruptions import get_disruption_preset
+from simulator.trains.train_component import TrainComponent
+
+preset = get_disruption_preset("mcgill_platform_delay")
+component = TrainComponent(trains, delay_injections=preset.delay_injections)
+```
+
+The available presets are `mcgill_platform_delay`, `green_line_suspension`,
+and `uneven_headways`. Each description states the behavior it is intended to
+exercise. They use the sample McGill/Green network IDs; adapt their target IDs
+when applying them to a different timetable. Set the enclosing scenario's
+`name` and `description` to the preset values to identify it in
+`manifest.json`. Pass preset suspensions to
+`TrainComponent`, or pass `spacing_irregularity_level` to
+`generate_from_headway` with the seeded disruptions random stream.
 
 ### Code layout
 
@@ -71,7 +114,7 @@ Each test folder under `run-output` contains `events.jsonl` (one line per event,
 |---|---|
 | `simulator/engine/events.py` | Event types, the versioned record schema and the tie order for events at the same time |
 | `simulator/engine/event_queue.py` | Event queue and simulation clock |
-| `simulator/engine/event_log.py` | Event log writer and run summary |
+| `simulator/engine/event_log.py` | Event log, summary and run manifest writers |
 | `simulator/engine/runner.py` | Runs one scenario and writes its output |
 | `simulator/passengers/corridor.py` | Capacity-limited transfer corridor queue |
 | `tests/` | pytest and Hypothesis tests, mirroring the source tree |

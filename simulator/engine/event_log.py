@@ -1,11 +1,9 @@
 # AI contribution: 50% or more AI-generated
-"""Event log writer and run summary.
+"""Event log, run summary and manifest writers.
 
-Part of US-1.1 (Deterministic event engine), Task 1.1.6 (#99). The event log
-is the full output of a run: the same scenario and master seed must produce a
-byte-identical log, so the encoding here avoids anything that can vary
-between runs or machines (key order, float formatting, line endings, wall
-clock time, file paths).
+Part of US-1.1 (Deterministic event engine), Task 1.1.6 (#99). A run's event
+log, summary and manifest avoid values that can vary between runs or machines
+(key order, float formatting, line endings, wall-clock time and file paths).
 """
 
 import json
@@ -18,8 +16,10 @@ from simulator.engine.events import EVENT_CLASSES, Event, EventType
 
 EVENTS_FILE = "events.jsonl"
 SUMMARY_FILE = "summary.json"
+MANIFEST_FILE = "manifest.json"
 # Summary fields evolve independently from the event-record schema.
 SUMMARY_SCHEMA_VERSION = 3
+MANIFEST_SCHEMA_VERSION = 1
 
 # Skip passenger records for sweep runs, deriving their types from the schema.
 PASSENGER_EVENT_TYPES: frozenset[EventType] = frozenset(
@@ -128,5 +128,13 @@ class RunSummary:
 def write_summary(summary: RunSummary, path: Path) -> None:
     """Write the run summary as indented JSON."""
     text = json.dumps(summary.to_dict(), indent=2, allow_nan=False) + "\n"
+    with path.open("w", encoding="utf-8", newline="\n") as file:
+        file.write(text)
+
+
+def write_manifest(manifest: dict[str, Any], path: Path) -> None:
+    """Write deterministic run configuration and applied-disruption metadata."""
+    record = {"schema_version": MANIFEST_SCHEMA_VERSION, **manifest}
+    text = json.dumps(record, indent=2, allow_nan=False) + "\n"
     with path.open("w", encoding="utf-8", newline="\n") as file:
         file.write(text)

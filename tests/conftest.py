@@ -34,6 +34,8 @@ class MinimalScenario:
 
     duration_s: float = 600.0
     master_seed: int = MASTER_SEED
+    name: str = "test-run"
+    description: str | None = None
 
 
 @dataclass(frozen=True)
