@@ -85,6 +85,21 @@ class Train:
             if gap_s <= 0 or gap_s < self.layover_slack:
                 raise ValueError("Return trip gap must be positive and cover slack")
             previous_trip = trip
+        if not all(
+            math.isfinite(value) and value >= 0
+            for value in (
+                self.generated_delay_s,
+                self.inherited_delay_s,
+            )
+        ):
+            raise ValueError("Delay components must be non-negative and finite")
+
+        if not math.isclose(
+            max(0.0, self.current_delay),
+            self.generated_delay_s + self.inherited_delay_s,
+            abs_tol=1e-9,
+        ):
+            raise ValueError("Initial delay breakdown does not match total delay")
 
     @property
     def available_capacity(self) -> int:
@@ -115,13 +130,38 @@ class Train:
         self.onboard_load -= count
 
     def update_delay(
-        self,
-        actual_s: float,
-        scheduled_s: float,
+        self, actual_s: float, scheduled_s: float, *, inherited_wait_s: float = 0.0
     ) -> None:
         """Update schedule deviation: positive means late"""
-        if not math.isfinite(actual_s) or not math.isfinite(scheduled_s):
-            raise ValueError("Times must be finite")
+
+        values = (actual_s, scheduled_s, inherited_wait_s)
+
+        if not all(math.isfinite(value) for value in values):
+            raise ValueError("Delay values must be finite")
+
+        if inherited_wait_s < 0:
+            raise ValueError("Inherited waiting time cannot be negative")
+
+        previous_delay = max(0.0, self.current_delay)
+        new_delay = max(0.0, actual_s - scheduled_s)
+
+        change = new_delay - previous_delay
+
+        if change > 0:
+            inherited = min(change, inherited_wait_s)
+
+            self.inherited_delay_s += inherited
+            self.generated_delay_s += change - inherited
+
+        elif change < 0:
+            recovered = -change
+
+            inherited_recovery = min(self.inherited_delay_s, recovered)
+
+            self.inherited_delay_s -= inherited_recovery
+            recovered -= inherited_recovery
+
+            self.generated_delay_s = max(0.0, self.generated_delay_s - recovered)
 
         self.current_delay = actual_s - scheduled_s
 

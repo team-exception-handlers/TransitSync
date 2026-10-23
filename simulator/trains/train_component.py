@@ -1,15 +1,14 @@
 # AI contribution: 50% or more AI-generated
-"""Connect generated trains to the deterministic event engine."""
+"""Connect trains, passenger queues and disruptions to the event engine."""
 
 import math
-from bisect import insort
 from collections import defaultdict, deque
 from collections.abc import Sequence
-from dataclasses import replace
 
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import (
     Boarding,
+    DepartureClearance,
     DepartureDue,
     Event,
     PassengerArrival,
@@ -19,11 +18,13 @@ from simulator.engine.events import (
 from simulator.passengers.platform_queue import PlatformQueue
 from simulator.trains.disruption import DelayInjection
 from simulator.trains.suspension import LineSuspension, dispatch_ready_s
-from simulator.trains.train import Train
+from simulator.trains.train import ScheduledStop, Train
+
+Visit = tuple[str, int, int]
 
 
 class TrainComponent:
-    """Owns train objects for the entire simulation run."""
+    """Own train movement, platform separation and optional passenger queues."""
 
     def __init__(
         self,
@@ -34,311 +35,365 @@ class TrainComponent:
         delay_injections: Sequence[DelayInjection] = (),
         passenger_queue: PlatformQueue | None = None,
     ) -> None:
-        if not math.isfinite(minimum_gap_s) or minimum_gap_s <= 0:
+        if (
+            isinstance(minimum_gap_s, bool)
+            or not isinstance(minimum_gap_s, int | float)
+            or not math.isfinite(minimum_gap_s)
+            or minimum_gap_s <= 0
+        ):
             raise ValueError("Minimum gap must be finite and positive")
-        self.minimum_gap_s = minimum_gap_s
+        self.minimum_gap_s = float(minimum_gap_s)
         self.trains: dict[str, Train] = {}
+        self._schedules: dict[str, tuple[tuple[ScheduledStop, ...], ...]] = {}
+        self._visits: dict[str, list[Visit]] = defaultdict(list)
         self.suspensions = tuple(suspensions)
         if any(not isinstance(item, LineSuspension) for item in self.suspensions):
             raise ValueError("Suspensions must be LineSuspension instances")
         self.delay_injections = tuple(delay_injections)
         if any(not isinstance(item, DelayInjection) for item in self.delay_injections):
             raise ValueError("Delay injections must be DelayInjection instances")
-        disruption_ids = [item.disruption_id for item in self.delay_injections]
-        if len(disruption_ids) != len(set(disruption_ids)):
+        ids = [item.disruption_id for item in self.delay_injections]
+        if len(ids) != len(set(ids)):
             raise ValueError("Delay injection IDs must be unique")
-        self._scheduled_disruptions: dict[str, dict[str, float]] = {}
-        self._disruptions_by_arrival: dict[tuple[str, float], list[str]] = defaultdict(
-            list
-        )
-        self._applied_disruptions: set[str] = set()
+        if passenger_queue is not None and not isinstance(
+            passenger_queue, PlatformQueue
+        ):
+            raise ValueError("passenger_queue must be a PlatformQueue")
         self.passenger_queue = passenger_queue
-        self._reserved_arrival: dict[str, list[float]] = defaultdict(list)
+        self._scheduled_disruptions: dict[str, dict[str, float]] = {}
+        self._applied_disruptions: set[str] = set()
+        self._disruptions_by_arrival: dict[Visit, list[str]] = defaultdict(list)
+        self._arrival_wait: dict[Visit, float] = {}
+        self._arrival_cursor: dict[str, int] = {}
+        self._departure_cursor: dict[str, int] = {}
+        self._ready_arrivals: dict[Visit, float] = {}
+        self._ready_departures: dict[Visit, float] = {}
+        self._arrival_queued: set[Visit] = set()
+        self._departure_queued: set[Visit] = set()
+        self._clearance_queued: set[Visit] = set()
+        self._skipped_departures: set[Visit] = set()
+        self._last_arrival: dict[str, float] = {}
         self._last_departure: dict[str, float] = {}
-        self._at_platform: dict[str, deque[str]] = defaultdict(deque)
-        self._departure_ready: dict[str, float] = {}
-        self._boarded: dict[str, int] = defaultdict(int)
+        self._at_platform: dict[str, deque[Visit]] = defaultdict(deque)
+        self._boarded: dict[Visit, int] = defaultdict(int)
 
         for train in trains:
             if train.id in self.trains:
                 raise ValueError(f"Duplicate train ID: {train.id}")
-
             self.trains[train.id] = train
+            schedules = (train.schedule, *train.return_trips)
+            self._schedules[train.id] = schedules
+            self._register_trip_visits(train.id, 0)
         if self.suspensions and any(not train.line_id.strip() for train in trains):
             raise ValueError("Trains need explicit line IDs when suspensions are used")
 
+        for platform, visits in self._visits.items():
+            visits.sort(key=self._visit_sort_key)
+            self._arrival_cursor[platform] = 0
+            self._departure_cursor[platform] = 0
+
+    def _stop(self, visit: Visit) -> ScheduledStop:
+        train_id, trip_index, stop_index = visit
+        return self._schedules[train_id][trip_index][stop_index]
+
+    def _visit_sort_key(self, visit: Visit) -> tuple[float, str, int, int]:
+        return (self._stop(visit).arrival_s, visit[0], visit[1], visit[2])
+
+    def _register_trip_visits(self, train_id: str, trip_index: int) -> None:
+        for stop_index, stop in enumerate(self._schedules[train_id][trip_index]):
+            self._visits[stop.platform_id].append((train_id, trip_index, stop_index))
+            self._arrival_cursor.setdefault(stop.platform_id, 0)
+            self._departure_cursor.setdefault(stop.platform_id, 0)
+
+    def _next_visit(self, platform: str, cursors: dict[str, int]) -> Visit | None:
+        index = cursors[platform]
+        visits = self._visits[platform]
+        return visits[index] if index < len(visits) else None
+
+    def _sort_pending_visits(self, platform: str, cursor: dict[str, int]) -> None:
+        visits = self._visits[platform]
+        index = cursor[platform]
+        visits[index:] = sorted(visits[index:], key=self._visit_sort_key)
+
     def start(self, scheduler: Scheduler) -> None:
-        """Schedule the first arrival of each train"""
-        ordered_trains = sorted(
-            self.trains.values(),
-            key=lambda train: (
-                train.schedule[0].arrival_s,
-                train.id,
-            ),
-        )
-
-        previous_initial: dict[str, float] = {}
-        for train in ordered_trains:
-            train.generated_delay_s = max(0.0, train.current_delay)
-            platform = train.current_stop.platform_id
-            previous_initial[platform] = self._schedule_arrival(
-                train,
-                train.current_stop.arrival_s + train.generated_delay_s,
-                scheduler,
-                not_before_s=previous_initial.get(platform, -self.minimum_gap_s)
-                + self.minimum_gap_s,
+        """Schedule the first arrival for each train."""
+        for train in self.trains.values():
+            first_stop = self._schedules[train.id][0][0]
+            self._ready_arrivals[(train.id, 0, 0)] = max(
+                0.0, first_stop.arrival_s + max(0.0, train.current_delay)
             )
+        for platform in sorted(self._visits):
+            self._release_arrival(platform, scheduler)
 
-    def _schedule_arrival(
-        self,
-        train: Train,
-        natural_s: float,
-        scheduler: Scheduler,
-        *,
-        not_before_s: float = 0.0,
-    ) -> float:
-        """Reserve the earliest safe slot, respecting earlier AND later bookings."""
-        stop = train.current_stop
-        reservations = self._reserved_arrival[stop.platform_id]
-        requested_s = natural_s
-        trigger_time_s = self._safe_arrival_s(natural_s, not_before_s, reservations)
-        matching_disruptions = [
-            disruption
-            for disruption in self.delay_injections
-            if disruption.disruption_id not in self._scheduled_disruptions
-            and disruption.matches(
+    def _release_arrival(self, platform: str, scheduler: Scheduler) -> None:
+        visit = self._next_visit(platform, self._arrival_cursor)
+        if (
+            visit is None
+            or visit not in self._ready_arrivals
+            or visit in self._arrival_queued
+        ):
+            return
+        train = self.trains[visit[0]]
+        stop = self._stop(visit)
+        requested_s = self._ready_arrivals[visit]
+        safe_s = max(
+            requested_s,
+            self._last_arrival.get(platform, -math.inf) + self.minimum_gap_s,
+        )
+        self._arrival_wait[visit] = safe_s - requested_s
+        injected_s = 0.0
+        for disruption in self.delay_injections:
+            if disruption.disruption_id in self._scheduled_disruptions:
+                continue
+            if disruption.matches(
                 train_id=train.id,
                 station_id=stop.station_id,
-                platform_id=stop.platform_id,
-                arrival_s=trigger_time_s,
-            )
-        ]
-        natural_s = trigger_time_s
-        for disruption in matching_disruptions:
-            natural_s += disruption.delay_s
-            train.generated_delay_s += disruption.delay_s
-        safe_s = self._safe_arrival_s(natural_s, not_before_s, reservations)
-        insort(reservations, safe_s)
-        train.inherited_delay_s += trigger_time_s - requested_s + safe_s - natural_s
-        for disruption in matching_disruptions:
-            disruption_id = disruption.disruption_id
-            self._scheduled_disruptions[disruption_id] = {
-                "trigger_time_s": trigger_time_s,
-                "arrival_time_s": safe_s,
-            }
-            self._disruptions_by_arrival[(train.id, safe_s)].append(disruption_id)
+                platform_id=platform,
+                arrival_s=safe_s,
+            ):
+                injected_s += disruption.delay_s
+                self._scheduled_disruptions[disruption.disruption_id] = {
+                    "trigger_time_s": safe_s,
+                    "arrival_time_s": safe_s + injected_s,
+                }
+                self._disruptions_by_arrival[visit].append(disruption.disruption_id)
+        safe_s += injected_s
         scheduler.schedule(
             TrainArrival(
                 time_s=safe_s,
                 train_id=train.id,
                 station_id=stop.station_id,
-                platform_id=stop.platform_id,
+                platform_id=platform,
                 scheduled_s=stop.arrival_s,
-                disruption_delay_s=train.generated_delay_s,
+                disruption_delay_s=train.generated_delay_s + injected_s,
             )
         )
-        return safe_s
-
-    def _safe_arrival_s(
-        self, natural_s: float, not_before_s: float, reservations: list[float]
-    ) -> float:
-        """Find an arrival time that respects all current platform bookings."""
-        safe_s = max(natural_s, not_before_s)
-        for reserved_s in reservations:
-            if safe_s + self.minimum_gap_s <= reserved_s:
-                break
-            safe_s = max(safe_s, reserved_s + self.minimum_gap_s)
-        return safe_s
+        self._arrival_queued.add(visit)
 
     def manifest_entries(self) -> tuple[dict[str, object], ...]:
-        """Return configured delay disruptions and whether each was injected."""
+        """Return delay configurations and whether each one actually occurred."""
         entries = []
         for disruption in self.delay_injections:
-            disruption_id = disruption.disruption_id
-            applied = self._scheduled_disruptions.get(disruption_id)
-            was_applied = disruption_id in self._applied_disruptions
+            configured = self._scheduled_disruptions.get(disruption.disruption_id)
+            applied = disruption.disruption_id in self._applied_disruptions
             entries.append(
                 {
                     **disruption.to_manifest_record(),
-                    "applied": was_applied,
+                    "applied": applied,
                     "trigger_time_s": (
-                        applied["trigger_time_s"] if was_applied and applied else None
+                        configured["trigger_time_s"] if applied and configured else None
                     ),
                     "arrival_time_s": (
-                        applied["arrival_time_s"] if was_applied and applied else None
+                        configured["arrival_time_s"] if applied and configured else None
                     ),
                 }
             )
         return tuple(entries)
 
     def handle(self, event: Event, scheduler: Scheduler) -> None:
-        """Process train movement and optional platform waiting events."""
+        """Process train movement, dispatch restrictions and passenger arrivals."""
         if isinstance(event, TrainArrival):
-            self._handle_arrival(event, scheduler)
-
+            self._on_arrival(event, scheduler)
         elif isinstance(event, DepartureDue):
-            self._handle_departure_due(event, scheduler)
-
+            self._on_due(event, scheduler)
+        elif isinstance(event, DepartureClearance):
+            self._on_clearance(event, scheduler)
         elif isinstance(event, TrainDeparture):
-            self._handle_departure(event, scheduler)
+            self._on_departure(event, scheduler)
         elif isinstance(event, PassengerArrival) and self.passenger_queue is not None:
             if self.passenger_queue.arrive(event):
                 self._board_waiting(event.platform_id, event.time_s, scheduler)
 
     def _board_waiting(
-        self, platform_id: str, time_s: float, scheduler: Scheduler
+        self, platform: str, time_s: float, scheduler: Scheduler
     ) -> None:
         if self.passenger_queue is None:
             return
-        for train_id in self._at_platform[platform_id]:
-            train = self.trains[train_id]
-            passengers = self.passenger_queue.board(platform_id, train)
-            self._boarded[train_id] += len(passengers)
-            for passenger_id in passengers:
+        for visit in self._at_platform[platform]:
+            train = self.trains[visit[0]]
+            passenger_ids = self.passenger_queue.board(platform, train)
+            self._boarded[visit] += len(passenger_ids)
+            for passenger_id in passenger_ids:
                 scheduler.schedule(
                     Boarding(
                         time_s=time_s,
                         passenger_id=passenger_id,
-                        train_id=train_id,
-                        platform_id=platform_id,
+                        train_id=train.id,
+                        platform_id=platform,
                     )
                 )
 
-    def _handle_arrival(
-        self,
-        event: TrainArrival,
-        scheduler: Scheduler,
-    ) -> None:
+    def _on_arrival(self, event: TrainArrival, scheduler: Scheduler) -> None:
         train = self.trains.get(event.train_id)
-
         if train is None:
             return
-
-        self._applied_disruptions.update(
-            self._disruptions_by_arrival.pop((event.train_id, event.time_s), ())
-        )
-        stop = train.current_stop
-
-        dwell_s = stop.departure_s - stop.arrival_s
-
-        due_time = max(
-            stop.departure_s,
-            event.time_s + dwell_s,
-        )
-
+        visit = (train.id, train.current_trip_index, train.current_stop_index)
+        platform = event.platform_id
+        if visit != self._next_visit(platform, self._arrival_cursor):
+            raise RuntimeError("Train arrival violates platform order")
+        self._applied_disruptions.update(self._disruptions_by_arrival.pop(visit, ()))
         train.update_delay(
             actual_s=event.time_s,
-            scheduled_s=stop.arrival_s,
+            scheduled_s=self._stop(visit).arrival_s,
+            inherited_wait_s=self._arrival_wait.pop(visit, 0.0),
         )
+        self._last_arrival[platform] = event.time_s
+        self._arrival_cursor[platform] += 1
+        self._arrival_queued.discard(visit)
+        self._release_arrival(platform, scheduler)
+        stop = self._stop(visit)
 
-        # The inbound trip ends at its terminal arrival. Its next departure
-        # belongs to the return trip, so do not emit a fictitious departure
-        # before the layover. Scheduling here also permits zero remaining
-        # turnaround without violating the engine's same-time tie order.
-        if train.current_stop_index == len(
-            train.schedule
+        if visit[2] == len(
+            self._schedules[train.id][visit[1]]
         ) - 1 and train.current_trip_index < len(train.return_trips):
+            self._skip_departure(visit, platform, scheduler)
             ready_s = train.begin_return_trip()
-            assert ready_s is not None
-            self._schedule_arrival(train, ready_s, scheduler)
+            if ready_s is None:
+                raise RuntimeError("Expected a configured return trip")
+            next_trip = train.current_trip_index
+            self._register_trip_visits(train.id, next_trip)
+            for next_platform in {
+                item.platform_id for item in self._schedules[train.id][next_trip]
+            }:
+                self._sort_pending_visits(next_platform, self._arrival_cursor)
+                self._sort_pending_visits(next_platform, self._departure_cursor)
+            next_visit = (train.id, next_trip, 0)
+            self._ready_arrivals[next_visit] = ready_s
+            self._release_arrival(self._stop(next_visit).platform_id, scheduler)
             return
 
-        self._at_platform[stop.platform_id].append(train.id)
-        self._departure_ready[train.id] = due_time
-        self._boarded[train.id] = 0
-        self._board_waiting(stop.platform_id, event.time_s, scheduler)
-
+        self._at_platform[platform].append(visit)
+        self._boarded[visit] = 0
+        self._board_waiting(platform, event.time_s, scheduler)
+        dwell_s = stop.departure_s - stop.arrival_s
+        due_s = max(stop.departure_s, event.time_s + dwell_s)
         scheduler.schedule(
             DepartureDue(
-                time_s=due_time,
+                time_s=due_s,
                 train_id=train.id,
                 station_id=stop.station_id,
-                platform_id=stop.platform_id,
+                platform_id=platform,
                 scheduled_s=stop.departure_s,
             )
         )
 
-    def _handle_departure_due(
-        self,
-        event: DepartureDue,
-        scheduler: Scheduler,
+    def _skip_departure(
+        self, visit: Visit, platform: str, scheduler: Scheduler
     ) -> None:
-        train = self.trains.get(event.train_id)
+        self._skipped_departures.add(visit)
+        self._advance_skipped_departures(platform)
+        self._release_departure(platform, scheduler)
 
+    def _advance_skipped_departures(self, platform: str) -> None:
+        while (
+            self._next_visit(platform, self._departure_cursor)
+            in self._skipped_departures
+        ):
+            skipped = self._next_visit(platform, self._departure_cursor)
+            if skipped is None:
+                return
+            self._skipped_departures.remove(skipped)
+            self._departure_cursor[platform] += 1
+
+    def _on_due(self, event: DepartureDue, scheduler: Scheduler) -> None:
+        train = self.trains.get(event.train_id)
         if train is None:
             return
+        visit = (train.id, train.current_trip_index, train.current_stop_index)
+        if visit in self._ready_departures:
+            raise RuntimeError("Duplicate DepartureDue event")
+        train.update_delay(actual_s=event.time_s, scheduled_s=event.scheduled_s)
+        self._ready_departures[visit] = event.time_s
+        self._release_departure(event.platform_id, scheduler)
 
-        platform = event.platform_id
-        safe_time = event.time_s
-
-        # Dispatch is the first departure of EACH trip; in-flight trips continue.
-        if train.current_stop_index == 0:
-            ready_s = dispatch_ready_s(train.line_id, safe_time, self.suspensions)
-            train.generated_delay_s += ready_s - safe_time
-            safe_time = ready_s
-
-        leader_id = self._at_platform[platform][0]
-        if leader_id != train.id:
-            safe_time = max(
-                safe_time, self._departure_ready[leader_id] + self.minimum_gap_s
-            )
-
-        if platform in self._last_departure:
-            safe_time = max(
-                safe_time,
-                self._last_departure[platform] + self.minimum_gap_s,
-            )
-
-        self._departure_ready[train.id] = safe_time
-
-        if safe_time > event.time_s:
-            scheduler.schedule(replace(event, time_s=safe_time))
+    def _release_departure(self, platform: str, scheduler: Scheduler) -> None:
+        self._advance_skipped_departures(platform)
+        visit = self._next_visit(platform, self._departure_cursor)
+        if (
+            visit is None
+            or visit not in self._ready_departures
+            or visit in self._departure_queued
+            or visit in self._clearance_queued
+        ):
             return
-
-        # Reserve now: another DepartureDue at this timestamp must see it.
-        self._last_departure[platform] = safe_time
+        ready_s = self._ready_departures[visit]
+        train = self.trains[visit[0]]
+        stop = self._stop(visit)
+        dispatch_s = ready_s
+        if visit[2] == 0:
+            dispatch_s = dispatch_ready_s(train.line_id, ready_s, self.suspensions)
+        safe_s = max(
+            dispatch_s,
+            scheduler.now,
+            self._last_departure.get(platform, -math.inf) + self.minimum_gap_s,
+        )
+        inherited_wait_s = max(0.0, safe_s - dispatch_s)
+        if safe_s > scheduler.now:
+            scheduler.schedule(
+                DepartureClearance(
+                    time_s=safe_s,
+                    train_id=train.id,
+                    station_id=stop.station_id,
+                    platform_id=platform,
+                )
+            )
+            self._clearance_queued.add(visit)
+            return
+        train.update_delay(
+            actual_s=safe_s,
+            scheduled_s=stop.departure_s,
+            inherited_wait_s=inherited_wait_s,
+        )
         scheduler.schedule(
             TrainDeparture(
-                time_s=event.time_s,
+                time_s=safe_s,
                 train_id=train.id,
-                station_id=event.station_id,
+                station_id=stop.station_id,
                 platform_id=platform,
-                scheduled_s=event.scheduled_s,
+                scheduled_s=stop.departure_s,
                 disruption_delay_s=train.generated_delay_s,
                 hold_s=0.0,
-                boarded_count=self._boarded[train.id],
+                boarded_count=self._boarded[visit],
                 alighted_count=0,
                 onboard_load=train.onboard_load,
+                generated_delay_s=train.generated_delay_s,
+                inherited_delay_s=train.inherited_delay_s,
             )
         )
+        self._departure_queued.add(visit)
 
-    def _handle_departure(
-        self,
-        event: TrainDeparture,
-        scheduler: Scheduler,
-    ) -> None:
+    def _on_clearance(self, event: DepartureClearance, scheduler: Scheduler) -> None:
         train = self.trains.get(event.train_id)
-
         if train is None:
             return
+        visit = (train.id, train.current_trip_index, train.current_stop_index)
+        self._clearance_queued.remove(visit)
+        self._release_departure(event.platform_id, scheduler)
 
-        self._last_departure[event.platform_id] = event.time_s
-        self._at_platform[event.platform_id].remove(train.id)
-        self._departure_ready.pop(train.id, None)
-
-        current_stop = train.current_stop
-
-        train.update_delay(
-            actual_s=event.time_s,
-            scheduled_s=current_stop.departure_s,
-        )
-        train.inherited_delay_s = max(
-            0.0, train.current_delay - train.generated_delay_s
-        )
-
-        if not train.advance_stop():
+    def _on_departure(self, event: TrainDeparture, scheduler: Scheduler) -> None:
+        train = self.trains.get(event.train_id)
+        if train is None:
             return
-        next_stop = train.current_stop
-        travel_s = next_stop.arrival_s - current_stop.departure_s
-        next_arrival_s = max(next_stop.arrival_s, event.time_s + travel_s)
-        self._schedule_arrival(train, next_arrival_s, scheduler)
+        visit = (train.id, train.current_trip_index, train.current_stop_index)
+        platform = event.platform_id
+        self._advance_skipped_departures(platform)
+        if visit != self._next_visit(platform, self._departure_cursor):
+            raise RuntimeError("Train departure violates platform order")
+        current_stop = self._stop(visit)
+        self._last_departure[platform] = event.time_s
+        self._departure_cursor[platform] += 1
+        self._departure_queued.discard(visit)
+        self._ready_departures.pop(visit, None)
+        self._at_platform[platform].remove(visit)
+
+        if train.advance_stop():
+            next_visit = (train.id, train.current_trip_index, train.current_stop_index)
+            next_stop = self._stop(next_visit)
+            travel_s = next_stop.arrival_s - current_stop.departure_s
+            if travel_s <= 0:
+                raise ValueError("Inter-station travel time must be positive")
+            self._ready_arrivals[next_visit] = max(
+                next_stop.arrival_s, event.time_s + travel_s
+            )
+            self._release_arrival(next_stop.platform_id, scheduler)
+        self._release_departure(platform, scheduler)

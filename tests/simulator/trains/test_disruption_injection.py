@@ -119,7 +119,10 @@ def test_named_delay_preset_runs_and_writes_a_reproducible_manifest(
     assert mcgill_arrival["disruption_delay_s"] == 60
     assert manifest["scenario_name"] == preset.name
     assert manifest["disruptions"][0]["applied"] is True
-    assert first.manifest_path.read_bytes() == second.manifest_path.read_bytes()
+    second_manifest = json.loads(second.manifest_path.read_text(encoding="utf-8"))
+    manifest.pop("timestamp")
+    second_manifest.pop("timestamp")
+    assert manifest == second_manifest
 
 
 def test_unprocessed_future_arrival_is_not_reported_as_an_applied_disruption(

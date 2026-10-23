@@ -106,6 +106,7 @@ def test_zero_mandatory_turnaround_respects_event_tie_order():
         10,
         (ScheduledStop("A", "A", 0, 0), ScheduledStop("B", "B-in", 100, 100)),
         current_delay=90,
+        generated_delay_s=90,
         layover_slack=60,
         return_trips=((ScheduledStop("B", "B-out", 160, 160),),),
     )

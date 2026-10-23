@@ -117,6 +117,9 @@ when applying them to a different timetable. Set the enclosing scenario's
 | `simulator/engine/event_log.py` | Event log, summary and run manifest writers |
 | `simulator/engine/runner.py` | Runs one scenario and writes its output |
 | `simulator/passengers/corridor.py` | Capacity-limited transfer corridor queue |
+| `simulator/passengers/passenger.py` | Passenger identity, station origin/destination and journey state |
+| `simulator/passengers/demand.py` | Time-varying demand profiles and expected passenger counts |
+| `simulator/passengers/generation.py` | Seeded passenger batches and configurable destination assignment |
 | `tests/` | pytest and Hypothesis tests, mirroring the source tree |
 
 The developer guide on the wiki ("Engine Core Developer Guide") explains how the US-1.1 tasks plug into the runner.
@@ -277,10 +280,64 @@ applies to each interval relative to its own nominal headway.
 
 Operational minimum gaps and suspensions can alter the realised headway
 distribution. Tests check the requested distribution separately from these
-safety constraints. All features use the existing event schema and runner;
-logs remain byte-reproducible. This branch has no run-manifest writer, so
-configuration provenance must be retained by the calling scenario until that
-separate component is integrated.
+safety constraints. The runner writes configured delay disruptions and their
+applied status to `manifest.json`; event logs remain byte-reproducible.
+
+### Passenger entity and generation
+
+Task #17 provides passenger data and demand-based batch generation. A passenger
+has a `passenger_id`, an origin station, a different destination station, and a
+`PassengerState`. New passengers start in `CREATED`; the other states are
+`WALKING`, `WAITING`, `ON_BOARD` and `COMPLETED`. Passenger snapshots are immutable;
+movement components can use `dataclasses.replace` to update their state.
+
+Leading and trailing whitespace is removed from origin and destination station
+IDs before they are compared and stored. A destination that becomes the origin,
+or duplicates another destination after trimming, is rejected before sampling.
+
+Demand is configured as ordered, non-overlapping time bands. Times are simulation
+seconds and rates are passengers per minute. Gaps and times outside the bands
+have zero demand. For example:
+
+```python
+from simulator.engine.random_streams import StreamManager
+from simulator.passengers import DemandPeriod, DemandProfile, PassengerGenerator
+
+demand = DemandProfile(
+    (
+        DemandPeriod(start_s=0, end_s=60, passengers_per_minute=12),
+        DemandPeriod(start_s=60, end_s=120, passengers_per_minute=30),
+    )
+)
+generator = PassengerGenerator(StreamManager(master_seed=42))
+passengers = generator.generate(
+    origin="mcgill",
+    demand_profile=demand,
+    start_s=30,
+    end_s=90,
+    transfer_fractions={"bonaventure": 0.25, "edouard-montpetit": 0.75},
+)
+```
+
+The expected count in this window is `12 * 30 / 60 + 30 * 30 / 60 = 21`.
+Modelling choice: the actual batch size is sampled from a Poisson distribution
+with that mean, using the `group_sizes` random stream. Destinations are sampled
+from the configured fractions using a separate `destinations` stream. Fractions
+describe all modelled destinations and must sum to 1; their mapping order does
+not affect the results. A seed and identical call sequence reproduce the complete
+passenger batches, including IDs and destinations.
+
+Use one generator per run so passenger IDs remain unique across origins and
+batches. If multiple generators are needed, give each a distinct `id_prefix`.
+The caller chooses demand windows and must avoid counting the same demand twice.
+
+The numeric ID suffix uses at least 12 digits, for example
+`passenger-000000000001`, so IDs with the same prefix still sort in creation
+order when the count crosses one million.
+
+This generator returns batches without scheduling platform arrivals. Task #18
+will add train-triggered transfer pulses and walking times; task #100 will add
+boarding, alighting and missed connections.
 
 ## Team
 

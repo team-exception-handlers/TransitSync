@@ -294,7 +294,7 @@ def test_rerun_into_a_folder_with_previous_output_is_rejected_and_keeps_it(
     # The earlier run's files are untouched and nothing new was added
     assert first.events_path.read_bytes() == events_before
     assert first.summary_path.read_bytes() == summary_before
-    assert _output_files(tmp_path) == [EVENTS_FILE, MANIFEST_FILE, SUMMARY_FILE]
+    assert _output_files(tmp_path) == sorted([EVENTS_FILE, MANIFEST_FILE, SUMMARY_FILE])
 
 
 @pytest.mark.parametrize("leftover", [EVENTS_FILE, MANIFEST_FILE, SUMMARY_FILE])
@@ -312,12 +312,9 @@ def test_existing_folder_with_unrelated_files_is_accepted(
 ):
     (tmp_path / "notes.txt").write_text("not run output")
     run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
-    assert _output_files(tmp_path) == [
-        EVENTS_FILE,
-        MANIFEST_FILE,
-        "notes.txt",
-        SUMMARY_FILE,
-    ]
+    assert _output_files(tmp_path) == sorted(
+        [EVENTS_FILE, MANIFEST_FILE, "notes.txt", SUMMARY_FILE]
+    )
 
 
 def test_failed_summary_write_leaves_no_output(

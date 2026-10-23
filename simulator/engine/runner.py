@@ -28,8 +28,10 @@ any output file is rejected before the run starts, and a run that fails removes
 everything it wrote, so a failed rerun never leaves old and new results mixed.
 """
 
+import datetime
 import logging
 import math
+import subprocess
 from collections.abc import Callable, Sequence, Set
 from dataclasses import dataclass
 from pathlib import Path
@@ -188,7 +190,7 @@ def _process_events(
 def _manifest_record(
     scenario: Scenario, components: Sequence[Component]
 ) -> dict[str, Any]:
-    """Collect stable scenario metadata and reports from disruption components."""
+    """Collect scenario, code, and disruption metadata for the run."""
     name = getattr(scenario, "name", "custom")
     description = getattr(scenario, "description", None)
     if not isinstance(name, str) or not name.strip():
@@ -203,13 +205,34 @@ def _manifest_record(
         if isinstance(component, ManifestContributor)
         for entry in component.manifest_entries()
     ]
-    return {
+    manifest: dict[str, Any] = {
         "scenario_name": name,
         "scenario_description": description,
         "master_seed": scenario.master_seed,
         "duration_s": float(scenario.duration_s),
+        "code_version": _get_code_version(),
+        "gtfs_version": getattr(scenario, "gtfs_version", "unknown"),
+        "timestamp": datetime.datetime.now(datetime.UTC).isoformat(),
         "disruptions": disruptions,
     }
+    parameters = getattr(scenario, "parameters", None)
+    if parameters is not None:
+        manifest["parameters"] = parameters
+    return manifest
+
+
+def _get_code_version() -> str:
+    """Return the current Git commit, or 'unknown' if unavailable."""
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return result.stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return "unknown"
 
 
 def run_scenario(

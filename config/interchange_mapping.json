@@ -1,0 +1,162 @@
+{
+  "rem_20260520": [
+    {
+      "platform_id": "rem_gare_centrale_bonaventure_0",
+      "interchange_id": "gare_centrale_bonaventure",
+      "line_id": "rem",
+      "direction_id": 0,
+      "direction_label": "Away from Brossard",
+      "stop_id": "STA_ZCD_BT_QUAI_01_GCT",
+      "stop_name": "Station Gare Centrale - Quai 1",
+      "route_ids": [
+        "S1",
+        "S2",
+        "S3"
+      ]
+    },
+    {
+      "platform_id": "rem_gare_centrale_bonaventure_1",
+      "interchange_id": "gare_centrale_bonaventure",
+      "line_id": "rem",
+      "direction_id": 1,
+      "direction_label": "Brossard",
+      "stop_id": "STA_ZCD_BT_QUAI_02_GCT",
+      "stop_name": "Station Gare Centrale - Quai 2",
+      "route_ids": [
+        "S1",
+        "S2",
+        "S3"
+      ]
+    },
+    {
+      "platform_id": "rem_mcgill_0",
+      "interchange_id": "mcgill",
+      "line_id": "rem",
+      "direction_id": 0,
+      "direction_label": "Away from Brossard",
+      "stop_id": "STA_ZCD_BT_QUAI_01_MCG",
+      "stop_name": "Station McGill - Quai 1",
+      "route_ids": [
+        "S1",
+        "S2",
+        "S3"
+      ]
+    },
+    {
+      "platform_id": "rem_mcgill_1",
+      "interchange_id": "mcgill",
+      "line_id": "rem",
+      "direction_id": 1,
+      "direction_label": "Brossard",
+      "stop_id": "STA_ZCD_BT_QUAI_02_MCG",
+      "stop_name": "Station McGill - Quai 2",
+      "route_ids": [
+        "S1",
+        "S2",
+        "S3"
+      ]
+    },
+    {
+      "platform_id": "rem_edouard_montpetit_0",
+      "interchange_id": "edouard_montpetit",
+      "line_id": "rem",
+      "direction_id": 0,
+      "direction_label": "Away from Brossard",
+      "stop_id": "STA_ZCD_BT_QUAI_01_EDM",
+      "stop_name": "Station Édouard-Montpetit - Quai 1",
+      "route_ids": [
+        "S1",
+        "S2",
+        "S3"
+      ]
+    },
+    {
+      "platform_id": "rem_edouard_montpetit_1",
+      "interchange_id": "edouard_montpetit",
+      "line_id": "rem",
+      "direction_id": 1,
+      "direction_label": "Brossard",
+      "stop_id": "STA_ZCD_BT_QUAI_02_EDM",
+      "stop_name": "Station Édouard-Montpetit - Quai 2",
+      "route_ids": [
+        "S1",
+        "S2",
+        "S3"
+      ]
+    }
+  ],
+  "stm_20260805110000_26S": [
+    {
+      "platform_id": "orange_gare_centrale_bonaventure_0",
+      "interchange_id": "gare_centrale_bonaventure",
+      "line_id": "orange",
+      "direction_id": 0,
+      "direction_label": "Montmorency",
+      "stop_id": "15",
+      "stop_name": "Station Bonaventure",
+      "route_ids": [
+        "2"
+      ]
+    },
+    {
+      "platform_id": "orange_gare_centrale_bonaventure_1",
+      "interchange_id": "gare_centrale_bonaventure",
+      "line_id": "orange",
+      "direction_id": 1,
+      "direction_label": "Côte-Vertu",
+      "stop_id": "15",
+      "stop_name": "Station Bonaventure",
+      "route_ids": [
+        "2"
+      ]
+    },
+    {
+      "platform_id": "green_mcgill_0",
+      "interchange_id": "mcgill",
+      "line_id": "green",
+      "direction_id": 0,
+      "direction_label": "Honoré-Beaugrand",
+      "stop_id": "32",
+      "stop_name": "Station McGill",
+      "route_ids": [
+        "1"
+      ]
+    },
+    {
+      "platform_id": "green_mcgill_1",
+      "interchange_id": "mcgill",
+      "line_id": "green",
+      "direction_id": 1,
+      "direction_label": "Angrignon",
+      "stop_id": "32",
+      "stop_name": "Station McGill",
+      "route_ids": [
+        "1"
+      ]
+    },
+    {
+      "platform_id": "blue_edouard_montpetit_0",
+      "interchange_id": "edouard_montpetit",
+      "line_id": "blue",
+      "direction_id": 0,
+      "direction_label": "Saint-Michel",
+      "stop_id": "57",
+      "stop_name": "Station Édouard-Montpetit",
+      "route_ids": [
+        "5"
+      ]
+    },
+    {
+      "platform_id": "blue_edouard_montpetit_1",
+      "interchange_id": "edouard_montpetit",
+      "line_id": "blue",
+      "direction_id": 1,
+      "direction_label": "Snowdon",
+      "stop_id": "57",
+      "stop_name": "Station Édouard-Montpetit",
+      "route_ids": [
+        "5"
+      ]
+    }
+  ]
+}
