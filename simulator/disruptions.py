@@ -57,7 +57,6 @@ _PRESETS = {
                 disruption_id="mcgill-rem-delay",
                 time_s=120,
                 delay_s=60,
-                train_id="rem-1",
                 station_id="mcgill",
                 platform_id="STA_ZCD_BT_QUAI_01_MCG",
             ),

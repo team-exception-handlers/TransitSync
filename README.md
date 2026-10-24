@@ -224,8 +224,10 @@ when suspensions are configured; generators set these automatically. A suspensio
 blocks the first departure of every trip on that line during `[start_s, end_s)`.
 In-flight trips continue. Dispatch at the end boundary is allowed; overlapping
 and adjacent intervals combine. Waiting trains resume in platform arrival order,
-with the existing safe gap. Blocked dispatch time becomes generated disruption
-delay and travels downstream, including through terminal recovery.
+with the existing safe gap. Each platform admits only one train at a time;
+following arrivals wait until the train occupying it departs. Blocked dispatch
+time becomes generated disruption delay and travels downstream, including
+through terminal recovery.
 
 An optional `PlatformQueue` queues existing `PassengerArrival` events FIFO on
 selected platforms. Attach it to the train component as the sole boarding owner

@@ -13,6 +13,7 @@ from simulator.engine.runner import run_scenario
 from simulator.trains.disruption import DelayInjection
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
+from simulator.trains.train_generator import generate_from_headway
 
 
 def _train(train_id: str, platform_b: str = "P-B") -> Train:
@@ -93,16 +94,19 @@ def test_named_delay_preset_runs_and_writes_a_reproducible_manifest(
     )
 
     def build_components(_scenario, _streams):
-        train = Train(
-            id="rem-1",
-            capacity=100,
-            schedule=(
+        trains = generate_from_headway(
+            start_s=0,
+            end_s=0,
+            headway_s=300,
+            route=(
                 ScheduledStop("origin", "P-origin", 0, 0),
                 ScheduledStop("mcgill", "STA_ZCD_BT_QUAI_01_MCG", 120, 120),
                 ScheduledStop("next", "P-next", 220, 220),
             ),
+            capacity=100,
+            line_id="rem",
         )
-        return [TrainComponent([train], delay_injections=preset.delay_injections)]
+        return [TrainComponent(trains, delay_injections=preset.delay_injections)]
 
     first = run_scenario(scenario, int, build_components, tmp_path / "first")
     second = run_scenario(scenario, int, build_components, tmp_path / "second")
@@ -116,6 +120,7 @@ def test_named_delay_preset_runs_and_writes_a_reproducible_manifest(
     )
 
     assert mcgill_arrival["time_s"] == 180
+    assert mcgill_arrival["train_id"] == "rem_0001"
     assert mcgill_arrival["disruption_delay_s"] == 60
     assert manifest["scenario_name"] == preset.name
     assert manifest["disruptions"][0]["applied"] is True

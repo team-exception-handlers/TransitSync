@@ -86,8 +86,37 @@ def test_dispatch_resumes_in_order_with_safe_gap():
         ("three", 220),
     ]
     assert [t.current_delay for t in trains] == [100, 90, 20]
-    assert trains[1].generated_delay_s == 80
-    assert trains[1].inherited_delay_s == 10
+    # The platform queue adds 80 s after the leader clears; the remaining
+    # 10 s comes from the minimum departure gap, so both are inherited.
+    assert trains[1].generated_delay_s == 0
+    assert trains[1].inherited_delay_s == 90
+
+
+def test_only_one_train_occupies_platform_during_a_suspension():
+    trains = [
+        service(name, arrival_s, departure_s=arrival_s + 30)
+        for name, arrival_s in (("one", 0), ("two", 120), ("three", 240))
+    ]
+    component = TrainComponent(
+        trains, 90, suspensions=[LineSuspension("green", 10, 600)]
+    )
+    scheduler = Scheduler()
+    component.start(scheduler)
+    on_platform = most_on_platform = 0
+
+    def process(event):
+        nonlocal on_platform, most_on_platform
+        if isinstance(event, TrainArrival):
+            on_platform += 1
+        elif isinstance(event, TrainDeparture):
+            on_platform -= 1
+        most_on_platform = max(most_on_platform, on_platform)
+        component.handle(event, scheduler)
+
+    scheduler.run_until(2000, process)
+
+    assert most_on_platform == 1
+    assert on_platform == 0
 
 
 def test_in_flight_and_other_line_services_continue():

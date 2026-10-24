@@ -74,6 +74,7 @@ class TrainComponent:
         self._skipped_departures: set[Visit] = set()
         self._last_arrival: dict[str, float] = {}
         self._last_departure: dict[str, float] = {}
+        self._occupied_platforms: dict[str, Visit] = {}
         self._at_platform: dict[str, deque[Visit]] = defaultdict(deque)
         self._boarded: dict[Visit, int] = defaultdict(int)
 
@@ -131,6 +132,7 @@ class TrainComponent:
             visit is None
             or visit not in self._ready_arrivals
             or visit in self._arrival_queued
+            or platform in self._occupied_platforms
         ):
             return
         train = self.trains[visit[0]]
@@ -140,6 +142,12 @@ class TrainComponent:
             requested_s,
             self._last_arrival.get(platform, -math.inf) + self.minimum_gap_s,
         )
+        if platform in self._last_departure:
+            # Arrivals sort before departures; use the next representable time
+            # so a newly vacant platform can accept a train after it departs.
+            safe_s = max(
+                safe_s, math.nextafter(self._last_departure[platform], math.inf)
+            )
         self._arrival_wait[visit] = safe_s - requested_s
         injected_s = 0.0
         for disruption in self.delay_injections:
@@ -231,6 +239,9 @@ class TrainComponent:
         platform = event.platform_id
         if visit != self._next_visit(platform, self._arrival_cursor):
             raise RuntimeError("Train arrival violates platform order")
+        if platform in self._occupied_platforms:
+            raise RuntimeError("Train arrival attempted to occupy a busy platform")
+        self._occupied_platforms[platform] = visit
         self._applied_disruptions.update(self._disruptions_by_arrival.pop(visit, ()))
         train.update_delay(
             actual_s=event.time_s,
@@ -240,12 +251,13 @@ class TrainComponent:
         self._last_arrival[platform] = event.time_s
         self._arrival_cursor[platform] += 1
         self._arrival_queued.discard(visit)
-        self._release_arrival(platform, scheduler)
         stop = self._stop(visit)
 
         if visit[2] == len(
             self._schedules[train.id][visit[1]]
         ) - 1 and train.current_trip_index < len(train.return_trips):
+            del self._occupied_platforms[platform]
+            self._release_arrival(platform, scheduler)
             self._skip_departure(visit, platform, scheduler)
             ready_s = train.begin_return_trip()
             if ready_s is None:
@@ -381,6 +393,8 @@ class TrainComponent:
             raise RuntimeError("Train departure violates platform order")
         current_stop = self._stop(visit)
         self._last_departure[platform] = event.time_s
+        if self._occupied_platforms.pop(platform, None) != visit:
+            raise RuntimeError("Train departure does not own its platform")
         self._departure_cursor[platform] += 1
         self._departure_queued.discard(visit)
         self._ready_departures.pop(visit, None)
@@ -396,4 +410,5 @@ class TrainComponent:
                 next_stop.arrival_s, event.time_s + travel_s
             )
             self._release_arrival(next_stop.platform_id, scheduler)
+        self._release_arrival(platform, scheduler)
         self._release_departure(platform, scheduler)

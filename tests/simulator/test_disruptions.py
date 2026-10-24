@@ -35,7 +35,7 @@ def test_named_delay_preset_has_a_complete_location_and_time_configuration():
     assert (delay.station_id, delay.platform_id, delay.train_id) == (
         "mcgill",
         "STA_ZCD_BT_QUAI_01_MCG",
-        "rem-1",
+        None,
     )
 
 
