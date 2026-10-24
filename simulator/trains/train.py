@@ -1,7 +1,7 @@
-# AI contribution: Below 50% AI-generated
+# AI contribution: 50% or more AI-generated
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,7 +26,7 @@ class ScheduledStop:
 
 @dataclass(slots=True)
 class Train:
-    """One train with persistent identity throughout its trip"""
+    """One vehicle with persistent identity across scheduled trips, in seconds."""
 
     id: str
     capacity: int
@@ -38,10 +38,15 @@ class Train:
     current_stop_index: int = 0
     generated_delay_s: float = 0.0
     inherited_delay_s: float = 0.0
+    line_id: str = ""
+    return_trips: tuple[tuple[ScheduledStop, ...], ...] = ()
+    current_trip_index: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if not self.id:
             raise ValueError("Train ID cannot be empty")
+        if not isinstance(self.line_id, str):
+            raise ValueError("Line ID must be a string")
 
         if self.capacity <= 0:
             raise ValueError("Train capacity must be positive")
@@ -62,6 +67,24 @@ class Train:
             if current.arrival_s < previous.departure_s:
                 raise ValueError("Train stops must be chronological")
 
+        self._check_return_trips()
+
+    def _check_return_trips(self) -> None:
+        """Validate complete trip schedules and configured turnaround budgets."""
+        previous_trip = self.schedule
+        for trip in self.return_trips:
+            if not trip:
+                raise ValueError("Return trips cannot be empty")
+            for previous, current in zip(trip, trip[1:], strict=False):
+                if current.arrival_s < previous.departure_s:
+                    raise ValueError("Train stops must be chronological")
+            terminal, origin = previous_trip[-1], trip[0]
+            if origin.station_id != terminal.station_id:
+                raise ValueError("Return trip must start at the previous terminus")
+            gap_s = origin.arrival_s - terminal.departure_s
+            if gap_s <= 0 or gap_s < self.layover_slack:
+                raise ValueError("Return trip gap must be positive and cover slack")
+            previous_trip = trip
         if not all(
             math.isfinite(value) and value >= 0
             for value in (
@@ -149,3 +172,23 @@ class Train:
 
         self.current_stop_index += 1
         return True
+
+    def begin_return_trip(self) -> float | None:
+        """US-1.2 #16, Mathematical Foundations §6; return ready time in seconds.
+
+        The gap between trips includes the recoverable ``layover_slack``.
+        Any remaining gap is mandatory turnaround time. Consume slack once
+        per trip boundary, retaining this vehicle and its capacity/load.
+        """
+        if self.current_trip_index >= len(self.return_trips):
+            return None
+        if self.current_stop_index != len(self.schedule) - 1:
+            raise ValueError("Return trip can only begin at the terminus")
+        self.schedule = self.return_trips[self.current_trip_index]
+        self.current_trip_index += 1
+        self.current_stop_index = 0
+        self.current_delay = max(0.0, self.current_delay - self.layover_slack)
+        # Recover inherited delay first; the two components still sum to total.
+        self.generated_delay_s = min(self.generated_delay_s, self.current_delay)
+        self.inherited_delay_s = self.current_delay - self.generated_delay_s
+        return self.current_stop.arrival_s + self.current_delay

@@ -6,6 +6,7 @@ from __future__ import annotations
 import difflib
 import json
 import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
@@ -249,6 +250,11 @@ def _parse_time(value: Any) -> time:
         raise ScenarioValidationError(
             "start_time: provide local time without an offset"
         )
+    if (
+        re.fullmatch(r"(?:[01]?\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,6})?)?", value)
+        is None
+    ):
+        raise ScenarioValidationError("start_time: expected a valid local time")
     return parsed
 
 

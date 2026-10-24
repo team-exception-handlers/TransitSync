@@ -19,9 +19,9 @@ from dataclasses import replace
 import pytest
 
 from simulator.engine import runner
-from simulator.engine.event_log import EVENTS_FILE, SUMMARY_FILE
+from simulator.engine.event_log import EVENTS_FILE, MANIFEST_FILE, SUMMARY_FILE
 from simulator.engine.events import Boarding, PassengerArrival
-from simulator.engine.runner import MANIFEST_FILE, RunError, run_scenario
+from simulator.engine.runner import RunError, run_scenario
 
 EXPECTED_TIMELINE = [
     ("train_arrival", "green-1", 100.0),
@@ -176,6 +176,9 @@ def test_run_with_no_components_writes_an_empty_log(
     result = run_scenario(minimal_scenario, build_streams, lambda _s, _r: [], tmp_path)
     assert result.events_path.read_bytes() == b""
     assert json.loads(result.summary_path.read_text())["events_processed"] == 0
+    manifest = json.loads(result.manifest_path.read_text())
+    assert manifest["scenario_name"] == minimal_scenario.name
+    assert manifest["disruptions"] == []
 
 
 @pytest.mark.parametrize(
@@ -186,6 +189,7 @@ def test_run_with_no_components_writes_an_empty_log(
         ("duration_s", "600", "duration_s"),
         ("master_seed", -5, "master_seed"),
         ("master_seed", 1.5, "master_seed"),
+        ("name", "", "scenario.name"),
     ],
 )
 def test_invalid_scenario_is_rejected_before_any_file_is_written(
@@ -322,6 +326,18 @@ def test_failed_summary_write_leaves_no_output(
         raise OSError("disk full")
 
     monkeypatch.setattr(runner, "write_summary", failing_write)
+    with pytest.raises(RunError, match="could not write run output"):
+        run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
+    assert _output_files(tmp_path) == []
+
+
+def test_failed_manifest_write_leaves_no_output(
+    tmp_path, minimal_scenario, build_streams, build_tiny_network, monkeypatch
+):
+    def failing_write(_manifest, _path):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(runner, "write_manifest", failing_write)
     with pytest.raises(RunError, match="could not write run output"):
         run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
     assert _output_files(tmp_path) == []
