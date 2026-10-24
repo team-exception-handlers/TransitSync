@@ -1,6 +1,7 @@
 # AI contribution: 50% or more AI-generated
 """Hand-calculated dwell examples and configuration boundaries."""
 
+import numpy as np
 import pytest
 
 from simulator.trains.dwell import DwellModel
@@ -15,6 +16,12 @@ def test_hand_calculated_dwell(boarded, alighted, expected_s):
     # Mixed example: 20 + 1.5 * 10 + 0.75 * 8 = 41 seconds.
     model = DwellModel(20.0, 1.5, 0.75)
     assert model.compute(boarded_count=boarded, alighted_count=alighted) == expected_s
+
+
+def test_numpy_counts_are_accepted():
+    counts = np.array([10, 8], dtype=np.int64)
+    model = DwellModel(20.0, 1.5, 0.75)
+    assert model.compute(boarded_count=counts[0], alighted_count=counts[1]) == 41.0
 
 
 def test_each_passenger_flow_increases_dwell():

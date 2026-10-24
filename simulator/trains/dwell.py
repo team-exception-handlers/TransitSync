@@ -3,6 +3,7 @@
 
 import math
 from dataclasses import dataclass
+from numbers import Integral
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,7 @@ class DwellModel:
             ("boarded_count", boarded_count),
             ("alighted_count", alighted_count),
         ):
-            if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+            if isinstance(count, bool) or not isinstance(count, Integral) or count < 0:
                 raise ValueError(f"{name} must be a non-negative integer")
 
         try:
