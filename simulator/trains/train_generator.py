@@ -4,6 +4,9 @@
 import math
 from collections.abc import Sequence
 
+import numpy as np
+
+from simulator.trains.spacing import perturb_dispatch_times
 from simulator.trains.train import ScheduledStop, Train
 
 
@@ -13,6 +16,9 @@ def generate_from_schedule(
     capacity: int,
     line_id: str,
     layover_slack_s: float = 0.0,
+    *,
+    irregularity_level: float = 0.0,
+    rng: np.random.Generator | None = None,
 ) -> list[Train]:
     """Generate trains from explicit departure times.
 
@@ -37,6 +43,9 @@ def generate_from_schedule(
     ):
         raise ValueError("Departure times must be strictly increasing")
 
+    departure_times_s = perturb_dispatch_times(
+        departure_times_s, irregularity_level, rng
+    )
     trains = []
 
     for index, start_time in enumerate(departure_times_s, start=1):
@@ -55,6 +64,7 @@ def generate_from_schedule(
             capacity=capacity,
             schedule=scheduled_stops,
             layover_slack=layover_slack_s,
+            line_id=line_id,
         )
 
         trains.append(train)
@@ -70,6 +80,9 @@ def generate_from_headway(
     capacity: int,
     line_id: str,
     layover_slack_s: float = 0.0,
+    *,
+    irregularity_level: float = 0.0,
+    rng: np.random.Generator | None = None,
 ) -> list[Train]:
     """Generate trains at uniform departure intervals."""
 
@@ -100,4 +113,6 @@ def generate_from_headway(
         capacity=capacity,
         line_id=line_id,
         layover_slack_s=layover_slack_s,
+        irregularity_level=irregularity_level,
+        rng=rng,
     )
