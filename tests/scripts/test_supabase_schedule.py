@@ -238,6 +238,24 @@ def test_repeated_daily_extraction_is_identical_and_source_settings_are_not_save
     assert "postgresql" not in encoded and "SUPABASE_DB_URL" not in encoded
 
 
+@pytest.mark.parametrize(
+    "row,message",
+    [
+        (None, "route_ids must be a list"),
+        ({"route_ids": "S1"}, "route_ids must be a list"),
+        ({"route_ids": ["S1"]}, "invalid platform fields"),
+        ({"route_ids": ["S1"], "unknown": 1}, "invalid platform fields"),
+    ],
+)
+def test_invalid_platform_row_names_the_feed(mapping_root, row, message):
+    import json
+
+    mapping = mapping_root / "mapping.json"
+    mapping.write_text(json.dumps({"rem": [row]}))
+    with pytest.raises(ValueError, match=f"mapping 'rem': {message}"):
+        reader.load_mapping(mapping)
+
+
 def test_duplicate_json_fields_do_not_silently_replace_mapping(mapping_root):
     path = mapping_root / "mapping.json"
     path.write_text('{"rem": [], "rem": []}')

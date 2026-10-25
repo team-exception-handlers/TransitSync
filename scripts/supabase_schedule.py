@@ -70,6 +70,16 @@ def _contained_mapping_path(path: Path) -> Path:
     return resolved
 
 
+def _mapping_platform(feed_id: str, row: object) -> Platform:
+    """Build one Platform from a mapping row, naming the feed on failure."""
+    if not isinstance(row, dict) or not isinstance(row.get("route_ids"), list):
+        raise ValueError(f"mapping {feed_id!r}: route_ids must be a list")
+    try:
+        return Platform(**(row | {"route_ids": tuple(row["route_ids"])}))
+    except (TypeError, KeyError, ValueError):
+        raise ValueError(f"mapping {feed_id!r}: invalid platform fields") from None
+
+
 def load_mapping(path: Path) -> dict[str, tuple[Platform, ...]]:
     """Load and validate feed-to-platform mappings."""
     path = _contained_mapping_path(path)
@@ -92,14 +102,7 @@ def load_mapping(path: Path) -> dict[str, tuple[Platform, ...]]:
             raise ValueError("mapping feed must have a non-empty platform list")
         platforms = []
         for row in rows:
-            if not isinstance(row, dict) or not isinstance(row.get("route_ids"), list):
-                raise ValueError(f"mapping {feed_id!r}: route_ids must be a list")
-            try:
-                platform = Platform(**(row | {"route_ids": tuple(row["route_ids"])}))
-            except (TypeError, KeyError, ValueError):
-                raise ValueError(
-                    f"mapping {feed_id!r}: invalid platform fields"
-                ) from None
+            platform = _mapping_platform(feed_id, row)
             if platform.platform_id in seen:
                 raise ValueError("mapping: platform_id must be unique across feeds")
             seen.add(platform.platform_id)
