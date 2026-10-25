@@ -224,6 +224,17 @@ def test_invalid_time_is_rejected_naming_the_field(bad_time):
         _arrival(time_s=bad_time)
 
 
+def test_field_without_a_kind_is_rejected():
+    @dataclasses.dataclass(frozen=True, slots=True, kw_only=True)
+    class Untyped(TrainArrival):
+        note: str = "no kind metadata"
+
+    base = SAMPLE_EVENTS[0]
+    values = {f.name: getattr(base, f.name) for f in dataclasses.fields(base)}
+    with pytest.raises(EventSchemaError, match=r"Untyped\.note has no field kind"):
+        Untyped(**values)
+
+
 def test_zero_time_is_accepted_as_the_clock_start():
     assert _arrival(time_s=0).time_s == 0.0
 
