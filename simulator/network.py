@@ -16,6 +16,8 @@ from simulator.timetable import Platform
 
 log = logging.getLogger(__name__)
 
+REM_LINE_ID = "rem"
+
 
 @dataclass(frozen=True, slots=True)
 class StationComplex:
@@ -28,7 +30,12 @@ class StationComplex:
 
 @dataclass(frozen=True, slots=True)
 class Line:
-    """Platforms grouped by saved line identity across all complexes."""
+    """Platforms grouped by saved line identity across all complexes.
+
+    platform_ids contains membership across both directions, sorted by platform ID.
+    A train's travel order comes from ScheduledTrip.visits in
+    simulator/timetable.py, where visits follow increasing stop_sequence values.
+    """
 
     line_id: str
     platform_ids: tuple[str, ...]
@@ -108,16 +115,19 @@ def _build_complex(
                 f"{platform.direction_id}"
             )
         platform_ids_by_direction[platform.direction_id] = platform.platform_id
-    if len(platform_ids_by_line) != 2 or "rem" not in platform_ids_by_line:
+    if len(platform_ids_by_line) != 2 or REM_LINE_ID not in platform_ids_by_line:
         raise ValueError(
-            f"complex {interchange_id}: expected one REM and one Métro line group"
+            f"complex {interchange_id}: expected one REM and one Métro line group "
+            f"with REM line ID {REM_LINE_ID!r}; found {sorted(platform_ids_by_line)}"
         )
     for line_id, platform_ids_by_direction in platform_ids_by_line.items():
         if set(platform_ids_by_direction) != {0, 1}:
             raise ValueError(
                 f"complex {interchange_id}, line {line_id}: expected directions 0 and 1"
             )
-    metro_line = next(line_id for line_id in platform_ids_by_line if line_id != "rem")
+    metro_line = next(
+        line_id for line_id in platform_ids_by_line if line_id != REM_LINE_ID
+    )
     station = StationComplex(
         interchange_id=interchange_id,
         platform_ids=tuple(p.platform_id for p in platforms),
@@ -126,7 +136,7 @@ def _build_complex(
     corridor = Corridor(
         corridor_id=interchange_id,
         interchange_id=interchange_id,
-        rem_platform_ids=tuple(sorted(platform_ids_by_line["rem"].values())),
+        rem_platform_ids=tuple(sorted(platform_ids_by_line[REM_LINE_ID].values())),
         metro_platform_ids=tuple(sorted(platform_ids_by_line[metro_line].values())),
     )
     return station, corridor

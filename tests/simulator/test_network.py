@@ -166,6 +166,21 @@ def test_missing_corridor_side_is_rejected(remaining_line):
         build_network(config_for(platforms))
 
 
+@pytest.mark.parametrize("misspelled_id", ["REM", "remm"])
+def test_misspelled_rem_line_id_reports_expected_and_found_ids(misspelled_id):
+    platforms = tuple(
+        replace(p, line_id=misspelled_id) if p.line_id == "rem" else p
+        for p in interchange()
+    )
+    with pytest.raises(ValueError) as exc_info:
+        build_network(config_for(platforms))
+
+    assert str(exc_info.value) == (
+        "complex a: expected one REM and one Métro line group "
+        f"with REM line ID 'rem'; found {sorted(['green', misspelled_id])}"
+    )
+
+
 def test_extra_line_group_cannot_be_silently_dropped():
     extra = tuple(p for p in interchange(metro_line="blue") if p.line_id == "blue")
     with pytest.raises(ValueError, match="a.*one REM.*one Métro"):
