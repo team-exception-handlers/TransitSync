@@ -3,6 +3,7 @@
 
 import json
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
@@ -10,6 +11,8 @@ from simulator.disruptions import get_disruption_preset
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import TrainArrival
 from simulator.engine.runner import run_scenario
+from simulator.network import build_network
+from simulator.network_config import load_network
 from simulator.trains.disruption import DelayInjection
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
@@ -100,7 +103,7 @@ def test_named_delay_preset_runs_and_writes_a_reproducible_manifest(
             headway_s=300,
             route=(
                 ScheduledStop("origin", "P-origin", 0, 0),
-                ScheduledStop("mcgill", "STA_ZCD_BT_QUAI_01_MCG", 120, 120),
+                ScheduledStop("mcgill", "rem_mcgill_0", 120, 120),
                 ScheduledStop("next", "P-next", 220, 220),
             ),
             capacity=100,
@@ -116,7 +119,7 @@ def test_named_delay_preset_runs_and_writes_a_reproducible_manifest(
         record
         for record in records
         if record["event_type"] == "train_arrival"
-        and record["platform_id"] == "STA_ZCD_BT_QUAI_01_MCG"
+        and record["platform_id"] == "rem_mcgill_0"
     )
 
     assert mcgill_arrival["time_s"] == 180
@@ -128,6 +131,55 @@ def test_named_delay_preset_runs_and_writes_a_reproducible_manifest(
     manifest.pop("timestamp")
     second_manifest.pop("timestamp")
     assert manifest == second_manifest
+
+
+def test_named_delay_preset_matches_saved_network_and_only_target_direction(
+    tmp_path, minimal_scenario
+):
+    config_path = (
+        Path(__file__).resolve().parents[3] / "config/reference_network/network.json"
+    )
+    network = build_network(load_network(config_path))
+    preset = get_disruption_preset("mcgill_platform_delay")
+    target = network.platforms[preset.delay_injections[0].platform_id]
+    assert (target.interchange_id, target.line_id, target.direction_id) == (
+        "mcgill",
+        "rem",
+        0,
+    )
+
+    def build_components(_scenario, _streams):
+        trains = []
+        for direction in (0, 1):
+            platform = network.platforms[f"rem_mcgill_{direction}"]
+            trains.append(
+                Train(
+                    id=f"rem-direction-{direction}",
+                    capacity=100,
+                    line_id=platform.line_id,
+                    schedule=(
+                        ScheduledStop(
+                            platform.interchange_id, platform.platform_id, 120, 120
+                        ),
+                    ),
+                )
+            )
+        return [TrainComponent(trains, delay_injections=preset.delay_injections)]
+
+    result = run_scenario(minimal_scenario, int, build_components, tmp_path)
+    records = [json.loads(line) for line in result.events_path.read_text().splitlines()]
+    arrivals = {
+        record["platform_id"]: record
+        for record in records
+        if record["event_type"] == "train_arrival"
+    }
+    assert arrivals["rem_mcgill_0"]["time_s"] == 180
+    assert arrivals["rem_mcgill_0"]["disruption_delay_s"] == 60
+    assert arrivals["rem_mcgill_1"]["time_s"] == 120
+    assert arrivals["rem_mcgill_1"]["disruption_delay_s"] == 0
+    manifest = json.loads(result.manifest_path.read_text())
+    assert manifest["disruptions"][0]["platform_id"] == "rem_mcgill_0"
+    assert manifest["disruptions"][0]["applied"] is True
 
 
 def test_unprocessed_future_arrival_is_not_reported_as_an_applied_disruption(
