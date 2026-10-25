@@ -115,6 +115,8 @@ when applying them to a different timetable. Set the enclosing scenario's
 | `simulator/engine/event_queue.py` | Event queue and simulation clock |
 | `simulator/engine/event_log.py` | Event log, summary and run manifest writers |
 | `simulator/engine/runner.py` | Runs one scenario and writes its output |
+| `simulator/network_config.py` | Reads and checks the saved network and train schedules |
+| `simulator/network.py` | Groups platforms by station and line, and finds transfer connections |
 | `simulator/passengers/corridor.py` | Capacity-limited transfer corridor queue |
 | `simulator/passengers/passenger.py` | Passenger identity, station origin/destination and journey state |
 | `simulator/passengers/demand.py` | Time-varying demand profiles and expected passenger counts |

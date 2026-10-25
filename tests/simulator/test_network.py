@@ -1,8 +1,10 @@
 # AI contribution: 50% or more AI-generated
 """Static topology membership, completeness and ownership checks for #97."""
 
+import json
 import logging
 from dataclasses import FrozenInstanceError, replace
+from pathlib import Path
 from types import MappingProxyType
 
 import pytest
@@ -10,8 +12,18 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from simulator.network import build_network
-from simulator.network_config import NetworkConfig
-from simulator.timetable import Platform
+from simulator.network_config import NetworkConfig, load_network
+from simulator.timetable import Platform, summarize_headways
+from simulator.trains.train import ScheduledStop
+
+REFERENCE_NETWORK = (
+    Path(__file__).resolve().parents[2] / "config/reference_network/network.json"
+)
+
+
+@pytest.fixture(scope="module")
+def saved_config() -> NetworkConfig:
+    return load_network(REFERENCE_NETWORK)
 
 
 def interchange(interchange_id="a", metro_line="green") -> tuple[Platform, ...]:
@@ -272,3 +284,116 @@ def test_transfer_queries_leave_topology_and_input_unchanged():
 
     assert repr(network) == before
     assert config == config_for(interchange() + interchange("b", "blue"))
+
+
+def test_saved_config_builds_the_full_network_with_reused_platforms(saved_config):
+    network = build_network(saved_config)
+
+    assert set(network.station_complexes) == {
+        "gare_centrale_bonaventure",
+        "mcgill",
+        "edouard_montpetit",
+    }
+    assert set(network.lines) == {"rem", "orange", "green", "blue"}
+    assert len(network.platforms) == 12
+    assert set(network.corridors) == set(network.station_complexes)
+    assert network.lines["rem"].platform_ids == (
+        "rem_edouard_montpetit_0",
+        "rem_edouard_montpetit_1",
+        "rem_gare_centrale_bonaventure_0",
+        "rem_gare_centrale_bonaventure_1",
+        "rem_mcgill_0",
+        "rem_mcgill_1",
+    )
+    for platform in saved_config.platforms:
+        assert network.platforms[platform.platform_id] is platform
+
+
+@pytest.mark.parametrize(
+    "complex_id,metro_line",
+    [
+        ("gare_centrale_bonaventure", "orange"),
+        ("mcgill", "green"),
+        ("edouard_montpetit", "blue"),
+    ],
+)
+def test_saved_complex_memberships_and_all_transfer_endpoints(
+    saved_config, complex_id, metro_line
+):
+    network = build_network(saved_config)
+    rem_ids = (f"rem_{complex_id}_0", f"rem_{complex_id}_1")
+    metro_ids = (f"{metro_line}_{complex_id}_0", f"{metro_line}_{complex_id}_1")
+    station = network.station_complexes[complex_id]
+    corridor = network.corridors[complex_id]
+
+    assert station.interchange_id == complex_id
+    assert station.platform_ids == tuple(sorted(rem_ids + metro_ids))
+    assert station.line_ids == tuple(sorted(("rem", metro_line)))
+    assert network.lines[metro_line].platform_ids == metro_ids
+    assert corridor.corridor_id == corridor.interchange_id == complex_id
+    assert corridor.rem_platform_ids == rem_ids
+    assert corridor.metro_platform_ids == metro_ids
+    for rem_id in rem_ids:
+        for metro_id in metro_ids:
+            assert network.corridor_for(rem_id, metro_id) is corridor
+            assert network.corridor_for(metro_id, rem_id) is corridor
+    assert network.corridor_for(*rem_ids) is None
+    assert network.corridor_for(*metro_ids) is None
+
+
+def test_saved_visit_ids_resolve_to_runtime_stop_identities(saved_config):
+    network = build_network(saved_config)
+    seen_platforms = set()
+    for trips in saved_config.schedules.values():
+        for trip in trips:
+            for visit in trip.visits:
+                platform = network.platforms[visit.platform_id]
+                # Synthetic relative times: schedule conversion belongs to assembly.
+                stop = ScheduledStop(
+                    station_id=platform.interchange_id,
+                    platform_id=visit.platform_id,
+                    arrival_s=0,
+                    departure_s=30,
+                )
+                station = network.station_complexes[stop.station_id]
+                assert stop.platform_id in station.platform_ids
+                assert stop.platform_id in network.lines[platform.line_id].platform_ids
+                assert platform.stop_id == visit.stop_id
+                seen_platforms.add(stop.platform_id)
+    assert seen_platforms == set(network.platforms)
+
+
+def test_saved_config_empty_service_preserves_full_topology(tmp_path, saved_config):
+    raw = json.loads(REFERENCE_NETWORK.read_text(encoding="utf-8"))
+    for day in raw["schedules"]:
+        day["trips"] = []
+        day["headways"] = summarize_headways(saved_config.platforms, ())
+    path = tmp_path / "empty-service.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    empty_service = load_network(path)
+
+    assert all(trips == () for trips in empty_service.schedules.values())
+    assert build_network(empty_service) == build_network(saved_config)
+
+
+def test_reader_valid_split_group_fails_topology_construction(tmp_path):
+    raw = json.loads(REFERENCE_NETWORK.read_text(encoding="utf-8"))
+    for day in raw["schedules"]:
+        for platform in day["platforms"]:
+            if platform["platform_id"] == "rem_mcgill_1":
+                # Sort after McGill so its missing direction is reported first.
+                platform["interchange_id"] = "zz_incomplete"
+    path = tmp_path / "split-group.json"
+    path.write_text(json.dumps(raw), encoding="utf-8")
+
+    config = load_network(path)
+
+    split_platform = next(
+        p for p in config.platforms if p.platform_id == "rem_mcgill_1"
+    )
+    assert split_platform.interchange_id == "zz_incomplete"
+    with pytest.raises(
+        ValueError, match="complex mcgill, line rem:.*directions 0 and 1"
+    ):
+        build_network(config)
