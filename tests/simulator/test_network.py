@@ -186,3 +186,89 @@ def test_construction_logs_one_completion_summary_and_no_success_on_failure(capl
     assert caplog.records[0].getMessage() == (
         "Built network: 1 station complexes, 2 lines, 4 platforms, 1 corridors"
     )
+
+
+@pytest.mark.parametrize("complex_id,metro_line", [("a", "green"), ("b", "blue")])
+@pytest.mark.parametrize("rem_direction", [0, 1])
+@pytest.mark.parametrize("metro_direction", [0, 1])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_transfer_pairs_share_one_corridor_in_both_directions(
+    complex_id, metro_line, rem_direction, metro_direction, reverse
+):
+    network = build_network(config_for(interchange() + interchange("b", "blue")))
+    endpoints = (
+        f"{complex_id}-rem-{rem_direction}",
+        f"{complex_id}-{metro_line}-{metro_direction}",
+    )
+    origin, destination = reversed(endpoints) if reverse else endpoints
+
+    assert network.corridor_for(origin, destination) is network.corridors[complex_id]
+
+
+@pytest.mark.parametrize(
+    "origin,destination",
+    [
+        ("a-rem-0", "a-rem-0"),
+        ("a-rem-0", "a-rem-1"),
+        ("a-green-0", "a-green-1"),
+        ("a-rem-0", "b-blue-0"),
+        ("b-blue-0", "a-rem-0"),
+        ("a-rem-0", "b-rem-0"),
+        ("a-green-0", "b-blue-0"),
+    ],
+)
+def test_known_platforms_without_a_transfer_link_return_none(origin, destination):
+    network = build_network(config_for(interchange() + interchange("b", "blue")))
+
+    assert network.corridor_for(origin, destination) is None
+
+
+@pytest.mark.parametrize(
+    "origin,destination,role,unknown_id",
+    [
+        ("missing-origin", "a-green-0", "origin", "missing-origin"),
+        ("a-rem-0", "missing-destination", "destination", "missing-destination"),
+        ("missing-origin", "missing-destination", "origin", "missing-origin"),
+        ("a-green-0", "", "destination", ""),
+    ],
+)
+def test_unknown_transfer_endpoint_raises_contextual_key_error(
+    origin, destination, role, unknown_id
+):
+    network = build_network(config_for(interchange()))
+
+    with pytest.raises(KeyError) as error:
+        network.corridor_for(origin, destination)
+    assert error.value.args[0].startswith(f"{role} platform ")
+    assert repr(unknown_id) in str(error.value)
+
+
+def test_transfer_lookup_uses_saved_membership_instead_of_parsing_platform_ids():
+    platforms = tuple(
+        replace(platform, platform_id=identity)
+        for platform, identity in zip(
+            interchange("custom-complex", "blue"),
+            ("green-looking", "17", "rem-looking", "platform with spaces"),
+            strict=True,
+        )
+    )
+    network = build_network(config_for(platforms))
+    corridor = network.corridors["custom-complex"]
+
+    assert network.corridor_for("green-looking", "rem-looking") is corridor
+    assert network.corridor_for("rem-looking", "17") is corridor
+    assert network.corridor_for("green-looking", "17") is None
+
+
+def test_transfer_queries_leave_topology_and_input_unchanged():
+    config = config_for(interchange() + interchange("b", "blue"))
+    network = build_network(config)
+    before = repr(network)
+    for origin in network.platforms:
+        for destination in network.platforms:
+            network.corridor_for(origin, destination)
+    with pytest.raises(KeyError):
+        network.corridor_for("unknown", "a-rem-0")
+
+    assert repr(network) == before
+    assert config == config_for(interchange() + interchange("b", "blue"))

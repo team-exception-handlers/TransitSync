@@ -57,6 +57,32 @@ class Network:
     lines: Mapping[str, Line]
     corridors: Mapping[str, Corridor]
 
+    def corridor_for(
+        self, origin_platform_id: str, destination_platform_id: str
+    ) -> Corridor | None:
+        """Return the shared corridor for a directed REM–Métro transfer.
+
+        Known endpoints without a link return None. Unknown IDs raise KeyError
+        naming the endpoint. Lookups take O(1) time and leave topology unchanged.
+        """
+        for endpoint, platform_id in (
+            ("origin", origin_platform_id),
+            ("destination", destination_platform_id),
+        ):
+            if platform_id not in self.platforms:
+                raise KeyError(
+                    f"{endpoint} platform {platform_id!r}: unknown platform ID"
+                )
+        origin = self.platforms[origin_platform_id]
+        destination = self.platforms[destination_platform_id]
+        if (
+            origin.interchange_id != destination.interchange_id
+            or origin.line_id == destination.line_id
+        ):
+            return None
+        # Construction guarantees one REM and one Métro line per complex.
+        return self.corridors[origin.interchange_id]
+
 
 def _index_platforms(config: NetworkConfig) -> dict[str, Platform]:
     if not config.platforms:
