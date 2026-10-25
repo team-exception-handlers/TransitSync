@@ -385,6 +385,27 @@ This generator returns batches without scheduling platform arrivals. Task #18
 will add train-triggered transfer pulses and walking times; task #100 will add
 boarding, alighting and missed connections.
 
+### Network model
+
+The network model groups saved platforms by station and line, with one shared
+transfer corridor connecting REM and Metro platforms at each interchange.
+
+```python
+from pathlib import Path
+
+from simulator.network import build_network
+from simulator.network_config import load_network
+
+network = build_network(load_network(Path("config/reference_network/network.json")))
+corridor = network.corridor_for("rem_mcgill_0", "green_mcgill_1")
+```
+
+`corridor_for` returns the same corridor for transfers in either direction,
+`None` for known platforms without a link, and raises `KeyError` for unknown IDs.
+
+The model is read-only. Train and passenger movement, queues and walking times
+are handled by runtime components.
+
 ## Team
 
 Built by The Exception Handlers, a Concordia University software engineering capstone team.
