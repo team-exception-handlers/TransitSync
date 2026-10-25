@@ -215,21 +215,26 @@ def read_daily_schedule(mappings, service_date: date) -> dict:
     return read_schedules(mappings, (service_date,))[0]
 
 
+def _check_feed_platforms(feed_id, platforms, seen: set[str]) -> None:
+    """Validate one feed's platforms, adding their IDs to the shared seen set."""
+    if require_text(feed_id, "feed_id") != feed_id:
+        raise ValueError("feed_id must not have surrounding whitespace")
+    if not isinstance(platforms, tuple) or not platforms:
+        raise ValueError("platforms must be a non-empty tuple")
+    for platform in platforms:
+        if not isinstance(platform, Platform):
+            raise ValueError("platforms must contain Platform values")
+        if platform.platform_id in seen:
+            raise ValueError("platform_id must be unique across mapped feeds")
+        seen.add(platform.platform_id)
+
+
 def _check_mappings(mappings) -> None:
     if not isinstance(mappings, dict) or not mappings:
         raise ValueError("mappings must contain at least one feed")
-    seen = set()
+    seen: set[str] = set()
     for feed_id, platforms in mappings.items():
-        if require_text(feed_id, "feed_id") != feed_id:
-            raise ValueError("feed_id must not have surrounding whitespace")
-        if not isinstance(platforms, tuple) or not platforms:
-            raise ValueError("platforms must be a non-empty tuple")
-        for platform in platforms:
-            if not isinstance(platform, Platform):
-                raise ValueError("platforms must contain Platform values")
-            if platform.platform_id in seen:
-                raise ValueError("platform_id must be unique across mapped feeds")
-            seen.add(platform.platform_id)
+        _check_feed_platforms(feed_id, platforms, seen)
 
 
 def main(argv: list[str] | None = None) -> int:

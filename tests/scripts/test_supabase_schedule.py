@@ -321,6 +321,25 @@ def test_reference_dates_are_extracted_in_one_snapshot_with_explicit_feed_mappin
     assert connection.read_only
 
 
+@pytest.mark.parametrize(
+    "mappings,message",
+    [
+        ({}, "at least one feed"),
+        ([("rem", (PLATFORM,))], "at least one feed"),
+        ({" rem": (PLATFORM,)}, "surrounding whitespace"),
+        ({"rem": [PLATFORM]}, "non-empty tuple"),
+        ({"rem": ()}, "non-empty tuple"),
+        ({"rem": ("rem-mcgill-1",)}, "Platform values"),
+        ({"rem": (PLATFORM,), "stm": (PLATFORM,)}, "unique across mapped feeds"),
+    ],
+)
+def test_invalid_mappings_fail_before_connect(monkeypatch, mappings, message):
+    _, connect, _ = connect_database(monkeypatch)
+    with pytest.raises(ValueError, match=message):
+        reader.read_schedules(mappings, (DAY,))
+    assert not connect.called
+
+
 def test_duplicate_or_invalid_requested_dates_fail_before_connect(monkeypatch):
     _, connect, _ = connect_database(monkeypatch)
     with pytest.raises(ValueError, match="dates"):
