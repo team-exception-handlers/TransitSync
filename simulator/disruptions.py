@@ -58,7 +58,7 @@ _PRESETS = {
                 time_s=120,
                 delay_s=60,
                 station_id="mcgill",
-                platform_id="STA_ZCD_BT_QUAI_01_MCG",
+                platform_id="rem_mcgill_0",
             ),
         ),
     ),
