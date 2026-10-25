@@ -16,7 +16,8 @@ from simulator.timetable import summarize_headways
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_OUTPUT = Path(__file__).resolve().parents[1] / "config/reference_network"
+OUTPUT_ROOT = Path(__file__).resolve().parents[1] / "config"
+DEFAULT_OUTPUT = OUTPUT_ROOT / "reference_network"
 MAP_EVIDENCE = [
     {
         "url": "https://www.stm.info/sites/default/files/media/Stminfo/images/planmetropolitain.pdf",
@@ -151,11 +152,21 @@ def render_report(config: dict) -> str:
     return "\n".join(lines)
 
 
+def _contained_output_dir(output_dir: Path) -> Path:
+    """Resolve the output path and reject anything outside OUTPUT_ROOT."""
+    root = OUTPUT_ROOT.resolve()
+    resolved = output_dir.resolve()
+    if not resolved.is_relative_to(root):
+        raise ValueError(f"--output-dir must be inside the {root.name}/ folder")
+    return resolved
+
+
 def write_config(config: dict, output_dir: Path) -> None:
     """Publish JSON and report together in a new directory.
 
     Skip identical output; reject existing output that differs.
     """
+    output_dir = _contained_output_dir(output_dir)
     validate_network(config)
     content = (
         json.dumps(
