@@ -27,6 +27,19 @@ def _index(rows: Iterable[Row], feed_id: str, field: str) -> dict[str, Row]:
     return result
 
 
+def _check_platform_stop(platform: Platform, stops: dict[str, Row]) -> None:
+    """Require the mapped stop to exist, match by name and be a passenger platform."""
+    stop = stops.get(platform.stop_id)
+    if stop is None or stop.get("stop_name") != platform.stop_name:
+        raise ValueError(
+            f"mapping {platform.platform_id}: stop_name/stop_id mismatch; check mapping"
+        )
+    if type(stop.get("location_type")) is not int or stop["location_type"] != 0:
+        raise ValueError(
+            f"mapping {platform.platform_id}: stop must be a passenger platform"
+        )
+
+
 def _platform_lookup(platforms, routes, stops) -> dict[tuple[str, int, str], Platform]:
     lookup = {}
     seen = set()
@@ -34,16 +47,7 @@ def _platform_lookup(platforms, routes, stops) -> dict[tuple[str, int, str], Pla
         if platform.platform_id in seen:
             raise ValueError("mapping: duplicate platform_id")
         seen.add(platform.platform_id)
-        stop = stops.get(platform.stop_id)
-        if stop is None or stop.get("stop_name") != platform.stop_name:
-            raise ValueError(
-                f"mapping {platform.platform_id}: stop_name/stop_id mismatch; "
-                "check mapping"
-            )
-        if type(stop.get("location_type")) is not int or stop["location_type"] != 0:
-            raise ValueError(
-                f"mapping {platform.platform_id}: stop must be a passenger platform"
-            )
+        _check_platform_stop(platform, stops)
         for route_id in platform.route_ids:
             route = routes.get(route_id)
             if (
