@@ -24,6 +24,13 @@ class ScheduledStop:
             raise ValueError("Invalid stop arrival/departure times")
 
 
+def _check_chronological(stops: tuple[ScheduledStop, ...]) -> None:
+    """Require each stop to arrive no earlier than the previous one departs."""
+    for previous, current in zip(stops, stops[1:], strict=False):
+        if current.arrival_s < previous.departure_s:
+            raise ValueError("Train stops must be chronological")
+
+
 @dataclass(slots=True)
 class Train:
     """One vehicle with persistent identity across scheduled trips, in seconds."""
@@ -63,11 +70,9 @@ class Train:
         if not math.isfinite(self.layover_slack) or self.layover_slack < 0:
             raise ValueError("Layover slack must be finite and non-negative")
 
-        for previous, current in zip(self.schedule, self.schedule[1:], strict=False):
-            if current.arrival_s < previous.departure_s:
-                raise ValueError("Train stops must be chronological")
-
+        _check_chronological(self.schedule)
         self._check_return_trips()
+        self._check_delay_breakdown()
 
     def _check_return_trips(self) -> None:
         """Validate complete trip schedules and configured turnaround budgets."""
@@ -75,9 +80,7 @@ class Train:
         for trip in self.return_trips:
             if not trip:
                 raise ValueError("Return trips cannot be empty")
-            for previous, current in zip(trip, trip[1:], strict=False):
-                if current.arrival_s < previous.departure_s:
-                    raise ValueError("Train stops must be chronological")
+            _check_chronological(trip)
             terminal, origin = previous_trip[-1], trip[0]
             if origin.station_id != terminal.station_id:
                 raise ValueError("Return trip must start at the previous terminus")
@@ -85,6 +88,9 @@ class Train:
             if gap_s <= 0 or gap_s < self.layover_slack:
                 raise ValueError("Return trip gap must be positive and cover slack")
             previous_trip = trip
+
+    def _check_delay_breakdown(self) -> None:
+        """Require delay components to be valid and add up to the total delay."""
         if not all(
             math.isfinite(value) and value >= 0
             for value in (
