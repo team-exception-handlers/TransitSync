@@ -295,7 +295,7 @@ def run_scenario(
         write_manifest(_manifest_record(scenario, components), manifest_path)
     except OSError as error:
         _discard_output(events_path, summary_path, manifest_path)
-        log.error("could not write run output to %s: %s", output_dir, error)
+        log.exception("could not write run output to %s: %s", output_dir, error)
         raise RunError(f"could not write run output to {output_dir}") from error
     except BaseException:
         # Any other failure (a component error, Ctrl+C) also removes the

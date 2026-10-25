@@ -15,6 +15,28 @@ from simulator.passengers.demand import DemandProfile
 from simulator.passengers.passenger import Passenger
 
 
+def _canonical_destination(destination: object, origin: str) -> str:
+    """Trim one destination and require it to differ from the origin."""
+    if not isinstance(destination, str) or not destination.strip():
+        raise ValueError("transfer_fractions destination must be a non-empty string")
+    destination = destination.strip()
+    if destination == origin:
+        raise ValueError("transfer_fractions destination must differ from origin")
+    return destination
+
+
+def _checked_fraction(fraction: object) -> float:
+    """Require one transfer fraction to be a real number in [0, 1]."""
+    # bool is a subclass of int, so it is excluded explicitly
+    if (
+        isinstance(fraction, bool)
+        or not isinstance(fraction, int | float)
+        or not 0 <= fraction <= 1
+    ):
+        raise ValueError("transfer_fractions values must be finite numbers in [0, 1]")
+    return float(fraction)
+
+
 def _destination_distribution(
     origin: str, transfer_fractions: Mapping[str, float]
 ) -> tuple[tuple[str, ...], tuple[float, ...]]:
@@ -27,27 +49,13 @@ def _destination_distribution(
     shares = []
     seen_destinations: set[str] = set()
     for destination, fraction in transfer_fractions.items():
-        if not isinstance(destination, str) or not destination.strip():
-            raise ValueError(
-                "transfer_fractions destination must be a non-empty string"
-            )
-        destination = destination.strip()
-        if destination == origin:
-            raise ValueError("transfer_fractions destination must differ from origin")
+        destination = _canonical_destination(destination, origin)
         if destination in seen_destinations:
             raise ValueError(
                 "transfer_fractions destinations must be unique after trimming"
             )
         seen_destinations.add(destination)
-        if (
-            isinstance(fraction, bool)
-            or not isinstance(fraction, int | float)
-            or not 0 <= fraction <= 1
-        ):
-            raise ValueError(
-                "transfer_fractions values must be finite numbers in [0, 1]"
-            )
-        shares.append((destination, float(fraction)))
+        shares.append((destination, _checked_fraction(fraction)))
     total = math.fsum(fraction for _, fraction in shares)
     if not math.isclose(total, 1.0, rel_tol=0.0, abs_tol=1e-12):
         raise ValueError("transfer_fractions must sum to 1")

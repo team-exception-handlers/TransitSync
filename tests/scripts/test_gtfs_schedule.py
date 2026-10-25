@@ -206,6 +206,20 @@ def test_mapping_mismatch_is_actionable(platform):
         extract(replace(platform, route_ids=("missing",)), [visit("MCG", 1, 100)])
 
 
+@pytest.mark.parametrize(
+    "stop,message",
+    [
+        (dict(stop_id="OTHER", location_type=0), "stop_name/stop_id mismatch"),
+        (dict(location_type=1), "stop must be a passenger platform"),
+        (dict(location_type="0"), "stop must be a passenger platform"),
+    ],
+)
+def test_mapped_stop_must_exist_and_be_a_passenger_platform(platform, stop, message):
+    row = dict(feed_id="rem", stop_id="MCG", stop_name="McGill quai 2") | stop
+    with pytest.raises(ValueError, match=f"mapping rem-mcgill-1: {message}"):
+        extract(platform, [visit(row["stop_id"], 1, 100)], stops=[row])
+
+
 def test_opposite_directions_with_one_source_stop_stay_separate(platform):
     opposite = replace(platform, direction_id=0, platform_id="rem-mcgill-0")
     trains = [

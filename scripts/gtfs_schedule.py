@@ -27,6 +27,19 @@ def _index(rows: Iterable[Row], feed_id: str, field: str) -> dict[str, Row]:
     return result
 
 
+def _check_platform_stop(platform: Platform, stops: dict[str, Row]) -> None:
+    """Require the mapped stop to exist, match by name and be a passenger platform."""
+    stop = stops.get(platform.stop_id)
+    if stop is None or stop.get("stop_name") != platform.stop_name:
+        raise ValueError(
+            f"mapping {platform.platform_id}: stop_name/stop_id mismatch; check mapping"
+        )
+    if type(stop.get("location_type")) is not int or stop["location_type"] != 0:
+        raise ValueError(
+            f"mapping {platform.platform_id}: stop must be a passenger platform"
+        )
+
+
 def _platform_lookup(platforms, routes, stops) -> dict[tuple[str, int, str], Platform]:
     lookup = {}
     seen = set()
@@ -34,16 +47,7 @@ def _platform_lookup(platforms, routes, stops) -> dict[tuple[str, int, str], Pla
         if platform.platform_id in seen:
             raise ValueError("mapping: duplicate platform_id")
         seen.add(platform.platform_id)
-        stop = stops.get(platform.stop_id)
-        if stop is None or stop.get("stop_name") != platform.stop_name:
-            raise ValueError(
-                f"mapping {platform.platform_id}: stop_name/stop_id mismatch; "
-                "check mapping"
-            )
-        if type(stop.get("location_type")) is not int or stop["location_type"] != 0:
-            raise ValueError(
-                f"mapping {platform.platform_id}: stop must be a passenger platform"
-            )
+        _check_platform_stop(platform, stops)
         for route_id in platform.route_ids:
             route = routes.get(route_id)
             if (
@@ -61,6 +65,23 @@ def _platform_lookup(platforms, routes, stops) -> dict[tuple[str, int, str], Pla
     return lookup
 
 
+def _check_stop_time(row: Row, stops: dict[str, Row]) -> None:
+    """Validate one stop_times row's stop, times and boarding permissions."""
+    stop_id = require_text(row.get("stop_id"), "stop_id")
+    if stop_id != row["stop_id"]:
+        raise ValueError("stop_id must not have surrounding whitespace")
+    if stop_id not in stops:
+        raise ValueError("stop_id: source trip refers to an unknown stop")
+    arrival = require_integer(row.get("arrival_s"), "arrival_s")
+    departure = require_integer(row.get("departure_s"), "departure_s")
+    if departure < arrival:
+        raise ValueError("departure_s must be >= arrival_s")
+    for field in ("pickup_type", "drop_off_type"):
+        value = row.get(field)
+        if type(value) is not int or value not in (0, 1):
+            raise ValueError(f"{field}: expected regular/prohibited permission")
+
+
 def _checked_stops(rows: list[Row], stops: dict[str, Row]) -> list[Row]:
     sequences = set()
     for row in rows:
@@ -68,19 +89,7 @@ def _checked_stops(rows: list[Row], stops: dict[str, Row]) -> list[Row]:
         if sequence in sequences:
             raise ValueError("duplicate stop_sequence within source trip")
         sequences.add(sequence)
-        stop_id = require_text(row.get("stop_id"), "stop_id")
-        if stop_id != row["stop_id"]:
-            raise ValueError("stop_id must not have surrounding whitespace")
-        if stop_id not in stops:
-            raise ValueError("stop_id: source trip refers to an unknown stop")
-        arrival = require_integer(row.get("arrival_s"), "arrival_s")
-        departure = require_integer(row.get("departure_s"), "departure_s")
-        if departure < arrival:
-            raise ValueError("departure_s must be >= arrival_s")
-        for field in ("pickup_type", "drop_off_type"):
-            value = row.get(field)
-            if type(value) is not int or value not in (0, 1):
-                raise ValueError(f"{field}: expected regular/prohibited permission")
+        _check_stop_time(row, stops)
     checked = sorted(rows, key=lambda row: row["stop_sequence"])
     for previous, current in zip(checked, checked[1:], strict=False):
         if current["arrival_s"] < previous["departure_s"]:

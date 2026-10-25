@@ -6,8 +6,36 @@ from pathlib import Path
 
 import pytest
 
+from scripts import extract_network
 from scripts.extract_network import build_config, write_config
 from tests.simulator.test_network_config import config as config
+
+
+@pytest.fixture(autouse=True)
+def output_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(extract_network, "OUTPUT_ROOT", tmp_path)
+
+
+@pytest.mark.parametrize("escape", [Path("..") / "escaped", Path("..", "..", "x")])
+def test_output_outside_root_is_rejected_before_writing(tmp_path, config, escape):
+    target = tmp_path / escape
+    with pytest.raises(ValueError, match="--output-dir must be inside"):
+        write_config(config, target)
+    assert not target.resolve().exists()
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_cli_rejects_output_outside_root(tmp_path, monkeypatch, caplog, config):
+    monkeypatch.setattr(
+        extract_network, "_load_local_connection_settings", lambda: None
+    )
+    monkeypatch.setattr(extract_network, "load_mapping", lambda path: {})
+    monkeypatch.setattr(extract_network, "read_schedules", lambda *args: [])
+    monkeypatch.setattr(extract_network, "build_config", lambda *args: config)
+    outside = tmp_path.parent / "outside"
+    assert extract_network.main(["--output-dir", str(outside)]) == 1
+    assert "--output-dir must be inside" in caplog.text
+    assert not outside.exists()
 
 
 def test_build_and_publish_then_load_without_database(tmp_path, config):

@@ -37,6 +37,18 @@ def _date(row: Row, field: str) -> date:
         ) from error
 
 
+def _service_window(row: Row) -> tuple[date, date, list[str]]:
+    """Validate a calendar row's date range and weekday flags."""
+    start, end = _date(row, "start_date"), _date(row, "end_date")
+    if end < start:
+        raise ValueError("end_date must be on or after start_date")
+    flags = [_text(row, weekday) for weekday in WEEKDAYS]
+    for weekday, flag in zip(WEEKDAYS, flags, strict=True):
+        if flag not in ("0", "1"):
+            raise ValueError(f"{weekday} must be 0 or 1")
+    return start, end, flags
+
+
 def _regular_services(rows: Iterable[Row], feed_id: str, day: date) -> set[str]:
     active: set[str] = set()
     seen: set[str] = set()
@@ -48,13 +60,7 @@ def _regular_services(rows: Iterable[Row], feed_id: str, day: date) -> set[str]:
             if service in seen:
                 raise ValueError(f"duplicate service_id {service!r}")
             seen.add(service)
-            start, end = _date(row, "start_date"), _date(row, "end_date")
-            if end < start:
-                raise ValueError("end_date must be on or after start_date")
-            flags = [_text(row, weekday) for weekday in WEEKDAYS]
-            for weekday, flag in zip(WEEKDAYS, flags, strict=True):
-                if flag not in ("0", "1"):
-                    raise ValueError(f"{weekday} must be 0 or 1")
+            start, end, flags = _service_window(row)
             if start <= day <= end and flags[day.weekday()] == "1":
                 active.add(service)
         except ValueError as error:

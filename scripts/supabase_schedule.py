@@ -23,9 +23,8 @@ from simulator.timetable import Platform, require_text
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAPPING = (
-    Path(__file__).resolve().parents[1] / "config/interchange_mapping.json"
-)
+MAPPING_ROOT = Path(__file__).resolve().parents[1] / "config"
+DEFAULT_MAPPING = MAPPING_ROOT / "interchange_mapping.json"
 FEED_QUERY = """
 SELECT feed_id, agency, feed_version, downloaded_on, feed_start_date, feed_end_date
 FROM gtfs.feeds WHERE feed_id = %s
@@ -62,8 +61,28 @@ def _unique_fields(pairs: list[tuple[str, object]]) -> dict:
     return result
 
 
+def _contained_mapping_path(path: Path) -> Path:
+    """Resolve the mapping path and reject anything outside MAPPING_ROOT."""
+    root = MAPPING_ROOT.resolve()
+    resolved = path.resolve()
+    if not resolved.is_relative_to(root):
+        raise ValueError(f"mapping must be inside the {root.name}/ folder")
+    return resolved
+
+
+def _mapping_platform(feed_id: str, row: object) -> Platform:
+    """Build one Platform from a mapping row, naming the feed on failure."""
+    if not isinstance(row, dict) or not isinstance(row.get("route_ids"), list):
+        raise ValueError(f"mapping {feed_id!r}: route_ids must be a list")
+    try:
+        return Platform(**(row | {"route_ids": tuple(row["route_ids"])}))
+    except (TypeError, KeyError, ValueError):
+        raise ValueError(f"mapping {feed_id!r}: invalid platform fields") from None
+
+
 def load_mapping(path: Path) -> dict[str, tuple[Platform, ...]]:
     """Load and validate feed-to-platform mappings."""
+    path = _contained_mapping_path(path)
     try:
         raw = json.loads(
             path.read_text(encoding="utf-8"), object_pairs_hook=_unique_fields
@@ -83,14 +102,7 @@ def load_mapping(path: Path) -> dict[str, tuple[Platform, ...]]:
             raise ValueError("mapping feed must have a non-empty platform list")
         platforms = []
         for row in rows:
-            if not isinstance(row, dict) or not isinstance(row.get("route_ids"), list):
-                raise ValueError(f"mapping {feed_id!r}: route_ids must be a list")
-            try:
-                platform = Platform(**(row | {"route_ids": tuple(row["route_ids"])}))
-            except (TypeError, KeyError, ValueError):
-                raise ValueError(
-                    f"mapping {feed_id!r}: invalid platform fields"
-                ) from None
+            platform = _mapping_platform(feed_id, row)
             if platform.platform_id in seen:
                 raise ValueError("mapping: platform_id must be unique across feeds")
             seen.add(platform.platform_id)
@@ -203,21 +215,26 @@ def read_daily_schedule(mappings, service_date: date) -> dict:
     return read_schedules(mappings, (service_date,))[0]
 
 
+def _check_feed_platforms(feed_id, platforms, seen: set[str]) -> None:
+    """Validate one feed's platforms, adding their IDs to the shared seen set."""
+    if require_text(feed_id, "feed_id") != feed_id:
+        raise ValueError("feed_id must not have surrounding whitespace")
+    if not isinstance(platforms, tuple) or not platforms:
+        raise ValueError("platforms must be a non-empty tuple")
+    for platform in platforms:
+        if not isinstance(platform, Platform):
+            raise ValueError("platforms must contain Platform values")
+        if platform.platform_id in seen:
+            raise ValueError("platform_id must be unique across mapped feeds")
+        seen.add(platform.platform_id)
+
+
 def _check_mappings(mappings) -> None:
     if not isinstance(mappings, dict) or not mappings:
         raise ValueError("mappings must contain at least one feed")
-    seen = set()
+    seen: set[str] = set()
     for feed_id, platforms in mappings.items():
-        if require_text(feed_id, "feed_id") != feed_id:
-            raise ValueError("feed_id must not have surrounding whitespace")
-        if not isinstance(platforms, tuple) or not platforms:
-            raise ValueError("platforms must be a non-empty tuple")
-        for platform in platforms:
-            if not isinstance(platform, Platform):
-                raise ValueError("platforms must contain Platform values")
-            if platform.platform_id in seen:
-                raise ValueError("platform_id must be unique across mapped feeds")
-            seen.add(platform.platform_id)
+        _check_feed_platforms(feed_id, platforms, seen)
 
 
 def main(argv: list[str] | None = None) -> int:

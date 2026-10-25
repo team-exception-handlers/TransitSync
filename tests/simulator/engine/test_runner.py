@@ -14,6 +14,7 @@ earlier in the documented tie order, and departure due comes before departure.
 """
 
 import json
+import logging
 from dataclasses import replace
 
 import pytest
@@ -329,6 +330,21 @@ def test_failed_summary_write_leaves_no_output(
     with pytest.raises(RunError, match="could not write run output"):
         run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
     assert _output_files(tmp_path) == []
+
+
+def test_write_failure_is_logged_with_its_traceback(
+    tmp_path, minimal_scenario, build_streams, build_tiny_network, monkeypatch, caplog
+):
+    def failing_write(_summary, _path):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(runner, "write_summary", failing_write)
+    with pytest.raises(RunError):
+        run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
+    [record] = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert "could not write run output" in record.getMessage()
+    assert record.exc_info is not None
+    assert record.exc_info[0] is OSError
 
 
 def test_failed_manifest_write_leaves_no_output(

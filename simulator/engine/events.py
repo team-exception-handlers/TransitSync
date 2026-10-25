@@ -56,6 +56,7 @@ during the hold is then counted. The scheduler enforces this through
 """
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, field, fields
 from enum import StrEnum
 from typing import Any, ClassVar
@@ -130,6 +131,39 @@ def _text_field() -> Any:
     return field(metadata={_KIND: _TEXT})
 
 
+def _check_text(label: str, value: Any) -> str:
+    if not isinstance(value, str) or not value.strip():
+        raise EventSchemaError(f"{label} must be a non-empty string")
+    return value
+
+
+def _check_seconds(label: str, value: Any) -> float:
+    # bool is a subclass of int, so it is excluded explicitly
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise EventSchemaError(f"{label} must be a number of seconds")
+    if not math.isfinite(value) or value < 0:
+        raise EventSchemaError(f"{label} must be finite and >= 0, got {value}")
+    # Store as float so 10 and 10.0 serialise identically
+    return float(value)
+
+
+def _check_count(label: str, value: Any) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise EventSchemaError(f"{label} must be a whole number")
+    if value < 0:
+        raise EventSchemaError(f"{label} must be >= 0, got {value}")
+    return value
+
+
+# Validator for each field kind; Event._check_field looks the kind up here
+_FIELD_CHECKS: dict[str, Callable[[str, Any], Any]] = {
+    _ID: _check_text,
+    _TEXT: _check_text,
+    _SECONDS: _check_seconds,
+    _COUNT: _check_count,
+}
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class Event:
     """Base for all events. Instances are immutable once created.
@@ -154,25 +188,10 @@ class Event:
     def _check_field(self, name: str, kind: str | None, value: Any) -> Any:
         """Validate one field and return its normalised value."""
         label = f"{type(self).__name__}.{name}"
-        if kind in (_ID, _TEXT):
-            if not isinstance(value, str) or not value.strip():
-                raise EventSchemaError(f"{label} must be a non-empty string")
-            return value
-        if kind == _SECONDS:
-            # bool is a subclass of int, so it is excluded explicitly
-            if isinstance(value, bool) or not isinstance(value, int | float):
-                raise EventSchemaError(f"{label} must be a number of seconds")
-            if not math.isfinite(value) or value < 0:
-                raise EventSchemaError(f"{label} must be finite and >= 0, got {value}")
-            # Store as float so 10 and 10.0 serialise identically
-            return float(value)
-        if kind == _COUNT:
-            if isinstance(value, bool) or not isinstance(value, int):
-                raise EventSchemaError(f"{label} must be a whole number")
-            if value < 0:
-                raise EventSchemaError(f"{label} must be >= 0, got {value}")
-            return value
-        raise EventSchemaError(f"{label} has no field kind")
+        check = _FIELD_CHECKS.get(kind)
+        if check is None:
+            raise EventSchemaError(f"{label} has no field kind")
+        return check(label, value)
 
     def _check_relations(self) -> None:
         """Checks that involve more than one field. Overridden where needed."""
