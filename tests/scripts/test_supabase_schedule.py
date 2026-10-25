@@ -24,6 +24,12 @@ PLATFORM = Platform(
 )
 
 
+@pytest.fixture
+def mapping_root(tmp_path, monkeypatch):
+    monkeypatch.setattr(reader, "MAPPING_ROOT", tmp_path)
+    return tmp_path
+
+
 def connect_database(monkeypatch, *, empty=False):
     connection = MagicMock()
     connection.__enter__.return_value = connection
@@ -168,6 +174,7 @@ def test_database_failure_does_not_expose_private_diagnostics(monkeypatch):
     assert "PRIVATE_CONNECTION_DETAIL" not in str(caught.value)
 
 
+@pytest.mark.usefixtures("mapping_root")
 def test_cli_produces_json_and_safe_errors(monkeypatch, capsys, tmp_path):
     import json
     from dataclasses import asdict
@@ -211,8 +218,8 @@ def test_committed_mapping_covers_all_three_interchanges_and_separates_direction
         '{"rem":[null]}',
     ],
 )
-def test_invalid_mapping_fails_without_database_access(tmp_path, content):
-    mapping = tmp_path / "mapping.json"
+def test_invalid_mapping_fails_without_database_access(mapping_root, content):
+    mapping = mapping_root / "mapping.json"
     mapping.write_text(content)
     with pytest.raises(ValueError, match="mapping"):
         reader.load_mapping(mapping)
@@ -231,11 +238,23 @@ def test_repeated_daily_extraction_is_identical_and_source_settings_are_not_save
     assert "postgresql" not in encoded and "SUPABASE_DB_URL" not in encoded
 
 
-def test_duplicate_json_fields_do_not_silently_replace_mapping(tmp_path):
-    path = tmp_path / "mapping.json"
+def test_duplicate_json_fields_do_not_silently_replace_mapping(mapping_root):
+    path = mapping_root / "mapping.json"
     path.write_text('{"rem": [], "rem": []}')
     with pytest.raises(ValueError, match="mapping"):
         reader.load_mapping(path)
+
+
+@pytest.mark.parametrize("relative", ["mapping.json", "config/../mapping.json"])
+def test_valid_mapping_outside_root_is_rejected(tmp_path, monkeypatch, relative):
+    import json
+    from dataclasses import asdict
+
+    monkeypatch.setattr(reader, "MAPPING_ROOT", tmp_path / "config")
+    (tmp_path / "config").mkdir()
+    (tmp_path / "mapping.json").write_text(json.dumps({"rem": [asdict(PLATFORM)]}))
+    with pytest.raises(ValueError, match="mapping must be inside the config/ folder"):
+        reader.load_mapping(tmp_path / relative)
 
 
 def test_both_feeds_share_one_snapshot_and_source_trip_ids_remain_feed_scoped(

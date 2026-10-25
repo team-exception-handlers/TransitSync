@@ -23,9 +23,8 @@ from simulator.timetable import Platform, require_text
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_MAPPING = (
-    Path(__file__).resolve().parents[1] / "config/interchange_mapping.json"
-)
+MAPPING_ROOT = Path(__file__).resolve().parents[1] / "config"
+DEFAULT_MAPPING = MAPPING_ROOT / "interchange_mapping.json"
 FEED_QUERY = """
 SELECT feed_id, agency, feed_version, downloaded_on, feed_start_date, feed_end_date
 FROM gtfs.feeds WHERE feed_id = %s
@@ -62,8 +61,18 @@ def _unique_fields(pairs: list[tuple[str, object]]) -> dict:
     return result
 
 
+def _contained_mapping_path(path: Path) -> Path:
+    """Resolve the mapping path and reject anything outside MAPPING_ROOT."""
+    root = MAPPING_ROOT.resolve()
+    resolved = path.resolve()
+    if not resolved.is_relative_to(root):
+        raise ValueError(f"mapping must be inside the {root.name}/ folder")
+    return resolved
+
+
 def load_mapping(path: Path) -> dict[str, tuple[Platform, ...]]:
     """Load and validate feed-to-platform mappings."""
+    path = _contained_mapping_path(path)
     try:
         raw = json.loads(
             path.read_text(encoding="utf-8"), object_pairs_hook=_unique_fields
