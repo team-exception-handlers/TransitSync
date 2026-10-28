@@ -121,6 +121,7 @@ when applying them to a different timetable. Set the enclosing scenario's
 | `simulator/passengers/passenger.py` | Passenger identity, station origin/destination and journey state |
 | `simulator/passengers/demand.py` | Time-varying demand profiles and expected passenger counts |
 | `simulator/passengers/generation.py` | Seeded passenger batches and configurable destination assignment |
+| `simulator/passengers/transfer_component.py` | Train-triggered transfer groups, walking times and corridor arrivals |
 | `tests/` | pytest and Hypothesis tests, mirroring the source tree |
 
 The developer guide on the wiki ("Engine Core Developer Guide") explains how the US-1.1 tasks plug into the runner.
@@ -382,8 +383,91 @@ The numeric ID suffix uses at least 12 digits, for example
 order when the count crosses one million.
 
 This generator returns batches without scheduling platform arrivals. Task #18
-will add train-triggered transfer pulses and walking times; task #100 will add
-boarding, alighting and missed connections.
+connects it to train arrivals, walking times and corridor queues as described below.
+Task #100 supplies destination alighting and the remaining boarding rules.
+
+### Pulsed transfer arrivals
+
+`TransferComponent` creates a complete passenger group when a feeder train
+actually arrives at a configured station and platform. Each passenger then walks
+for an independently sampled duration. Passengers enter the corridor queue in
+the order they reach it, including when groups from different trains overlap.
+Their `PassengerArrival` event marks reaching the connecting platform after
+walking and corridor queueing. With no feeder train, no passengers are generated.
+
+Build the component inside the runner's component factory, using the supplied
+seeded streams. This example uses illustrative demand, walking and capacity
+values; choose appropriate values for the scenario:
+
+```python
+from simulator.passengers import (
+    CorridorQueue,
+    DemandPeriod,
+    DemandProfile,
+    TransferComponent,
+    TransferRoute,
+)
+from simulator.passengers.platform_queue import PlatformQueue
+from simulator.trains.train import ScheduledStop, Train
+from simulator.trains.train_component import TrainComponent
+
+
+def build_components(scenario, streams):
+    trains = [
+        Train("feeder", 800, (ScheduledStop("mcgill", "rem_mcgill_0", 120, 150),)),
+        Train(
+            "connecting",
+            800,
+            (
+                ScheduledStop("mcgill", "green_mcgill_1", 240, 270),
+                ScheduledStop("next-station", "next-platform", 360, 390),
+            ),
+        ),
+    ]
+    transfers = TransferComponent(
+        [
+            TransferRoute(
+                station_id="mcgill",
+                feeder_platform_id="rem_mcgill_0",
+                connecting_platform_id="green_mcgill_1",
+                demand_profile=DemandProfile((DemandPeriod(0, 3600, 12),)),
+                transfer_fractions={"next-station": 1.0},
+                corridor=CorridorQueue(capacity_per_minute=60),
+                walking_mean_s=120,
+                walking_min_s=30,
+            )
+        ],
+        streams,
+    )
+    return [
+        TrainComponent(trains, passenger_queue=PlatformQueue(("green_mcgill_1",))),
+        transfers,
+    ]
+```
+
+Replace `next-station` with the actual destination station ID. The demand rate
+is passengers per minute; all event times and walking durations are seconds.
+Demand accumulates from `demand_start_s` (default 0) to the first actual feeder
+arrival, then between successive arrivals on that route. A train arriving at
+the demand start produces no passengers for the empty interval. This demand
+represents external feeder transfers and is not deducted from aggregate feeder
+train loads. Walking uses the existing seeded `WalkingTimeSampler` distribution.
+
+Use one route per station/feeder-platform pair. Routes sharing a physical corridor
+must share the same `CorridorQueue` instance. Construct fresh components and
+queues for each run. The existing `PlatformQueue` remains the sole boarding owner
+on its platforms; transfer snapshots observe its `Boarding` events. Detailed
+destination alighting, door throughput and missed connections remain task #100.
+
+Event schema version 4 adds `CorridorArrival` between alighting and platform
+arrival in the event tie order. The passenger log filter automatically includes
+this event. Logs written with older schema versions must be regenerated.
+
+Run the focused tests on macOS with:
+
+```sh
+.venv/bin/python -m pytest tests/simulator/passengers/test_transfer_component.py -v
+```
 
 ### Network model
 
