@@ -147,7 +147,10 @@ def test_successive_trains_consume_demand_once_across_rate_changes(monkeypatch):
         scheduler.schedule(feeder(time_s))
     reached = arrivals(advance(component, scheduler, 200))
 
-    # [0,30): 6; [30,90): 6+15; [90,120): 15. Total expected demand is 42.
+    # Each train collects demand since the previous arrival (or simulation start).
+    # First train: 0-30 s at 12 passengers/minute gives 6 expected passengers.
+    # Second: 30-60 s at 12/min gives 6, then 60-90 s at 30/min gives 15: total 21.
+    # Third: 90-120 s at 30/min gives 15. Total expected demand across trains: 42.
     assert means == [6, 21, 15]
     assert [e.time_s for e in reached] == [31, 91, 121]
     assert len({e.group_id for e in reached}) == 3
