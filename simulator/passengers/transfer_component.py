@@ -195,11 +195,8 @@ class TransferComponent:
             )
             self._walking_routes[passenger_id] = route
             walk_end_s = event.time_s + float(walk_s)
-            self._walks[passenger_id] = (
-                group_id,
-                route.connecting_platform_id,
-                walk_end_s,
-            )
+            platform_id = route.connecting_platform_id
+            self._walks[passenger_id] = (group_id, platform_id, walk_end_s)
             scheduler.schedule(
                 Alighting(
                     time_s=event.time_s,
