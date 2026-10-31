@@ -3,6 +3,7 @@
 
 import dataclasses
 import math
+from collections import deque
 
 import pytest
 
@@ -94,11 +95,11 @@ def test_snapshot_collections_cannot_grow():
 
 
 @pytest.mark.parametrize("field_name", ["trains", "platforms", "incoming_transfers"])
-def test_snapshot_rejects_mutable_collections(field_name):
+@pytest.mark.parametrize("mutable_type", [list, deque])
+def test_snapshot_rejects_mutable_collections(field_name, mutable_type):
     original = getattr(make_snapshot(), field_name)
-    mutable = list(original)
     with pytest.raises(ValueError, match=field_name):
-        make_snapshot(**{field_name: mutable})
+        make_snapshot(**{field_name: mutable_type(original)})
 
 
 def test_strategy_returns_requested_hold():
