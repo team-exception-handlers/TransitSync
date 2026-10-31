@@ -85,7 +85,8 @@ These come from the Mathematical Foundations wiki page. Do not break them.
 
 ## Skills
 
-- Project skills: `code-workflow`, `sim-logic`, `gtfs-data`, `python-tests`
+- Project skills: `code-workflow`, `sim-logic`, `gtfs-data`, `python-tests`, `sonar-clean-code`
+- Follow `sonar-clean-code` whenever writing or changing code, tests or CI config, so new code adds no SonarQube issues
 - The generic skills (`code-quality`, `testing-strategy`, `performance`, `security-audit`) assume a `src/` layout, `uv` and Python 3.10. In this repo, read `src/` as `simulator/`, `api/` and `scripts/`, install with pip and `requirements*.txt`, and target Python 3.12
 - If a skill conflicts with this file, this file wins
 
@@ -97,6 +98,22 @@ These come from the Mathematical Foundations wiki page. Do not break them.
 - Stay inside the task's scope. If something else needs changing, say so at the end instead of doing it
 - When a task is done, suggest a commit message in the present tense that references the issue, e.g. `Add event queue and clock (#42)`
 - Every feature or fix PR fills the AI declaration in `.github/pull_request_template.md`: the level for the code the PR changes and the list of AI-assisted files. Draft the matching row (and, for at least half of features, a development example) for `AI_USAGE.md`. File headers, the PR declaration and `AI_USAGE.md` must agree
+
+## Team rules for all new code
+
+These apply to code written or changed from Iteration 3 on. Do not edit existing files only to meet them; apply them when a file is created or changed for a task. Details and measuring commands are in the `code-workflow` skill.
+
+- **Design patterns:** every design pattern used (Strategy, Factory, Observer, Facade, lookup table, and so on) is logged on the "Design Patterns" wiki page in the same PR
+- **Library choices:** every new external library has a comparison against named alternatives on the "Library Comparisons" wiki page before it is added to a requirements or package file
+- **File size:** keep each file below 500 lines where possible. Split before the limit, and comment the reason when a file must stay larger
+- **Comments:** 20 to 30% of the lines in a source file are comments or docstrings, where applicable. Explain what each part of the file does and why; never restate the code line by line, and never leave commented-out code. This rule overrides any general advice to match the surrounding comment density
+- **PR size and reviewers:** count changed lines as added plus changed lines of source code only (tests, test fixtures, generated files, lock files and static assets such as images and data files do not count)
+
+| Changed lines | Minimum reviewers |
+|---|---|
+| 1 to 250 | 1 (2 if possible) |
+| 251 to 400 | 2 |
+| Over 400 | Split into smaller PRs, unless the extra lines are static files |
 
 ## Tests
 
