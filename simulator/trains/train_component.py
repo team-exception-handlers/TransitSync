@@ -5,6 +5,7 @@ import math
 from collections import defaultdict, deque
 from collections.abc import Sequence
 
+from simulator.control.interface import PlatformState, TrainState
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import (
     Boarding,
@@ -77,6 +78,7 @@ class TrainComponent:
         self._occupied_platforms: dict[str, Visit] = {}
         self._at_platform: dict[str, deque[Visit]] = defaultdict(deque)
         self._boarded: dict[Visit, int] = defaultdict(int)
+        self._finished: set[str] = set()
 
         for train in trains:
             if train.id in self.trains:
@@ -197,6 +199,53 @@ class TrainComponent:
                 }
             )
         return tuple(entries)
+
+    def train_states(self) -> tuple[TrainState, ...]:
+        """Copy each train's next stop, delay and load for an observation (#38)."""
+        return tuple(
+            self._train_state(train) for _, train in sorted(self.trains.items())
+        )
+
+    def _train_state(self, train: Train) -> TrainState:
+        visit: Visit | None = (
+            train.id,
+            train.current_trip_index,
+            train.current_stop_index,
+        )
+        if train.id in self._finished:
+            visit = None
+        elif visit in self._at_platform[self._stop(visit).platform_id]:
+            # A dwelling train's next stop is the following one in its trip
+            trip = self._schedules[train.id][visit[1]]
+            visit = (*visit[:2], visit[2] + 1) if visit[2] + 1 < len(trip) else None
+        stop = None if visit is None else self._stop(visit)
+        return TrainState(
+            train_id=train.id,
+            line_id=train.line_id,
+            next_platform_id=None if stop is None else stop.platform_id,
+            # The arrival the simulator already planned, else timetable + delay
+            predicted_arrival_s=None
+            if stop is None
+            else self._ready_arrivals.get(
+                visit, stop.arrival_s + max(0.0, train.current_delay)
+            ),
+            scheduled_departure_s=None if stop is None else stop.departure_s,
+            delay_s=train.current_delay,
+            onboard_load=train.onboard_load,
+            capacity=train.capacity,
+        )
+
+    def platform_states(self) -> tuple[PlatformState, ...]:
+        """Copy waiting counts and last departures per platform (#38)."""
+        queue = self.passenger_queue
+        return tuple(
+            PlatformState(
+                platform_id=platform,
+                waiting_count=queue.waiting_count(platform) if queue else 0,
+                last_departure_s=self._last_departure.get(platform),
+            )
+            for platform in sorted(self._visits)
+        )
 
     def handle(self, event: Event, scheduler: Scheduler) -> None:
         """Process train movement, dispatch restrictions and passenger arrivals."""
@@ -410,5 +459,7 @@ class TrainComponent:
                 next_stop.arrival_s, event.time_s + travel_s
             )
             self._release_arrival(next_stop.platform_id, scheduler)
+        else:
+            self._finished.add(train.id)
         self._release_arrival(platform, scheduler)
         self._release_departure(platform, scheduler)

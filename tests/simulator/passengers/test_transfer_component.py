@@ -456,3 +456,20 @@ def test_real_platform_queue_boards_pulse_and_retains_overflow(
         PassengerState.ON_BOARD,
         PassengerState.ON_BOARD,
     ]
+
+
+def test_incoming_transfers_group_walkers_until_they_reach_the_corridor(
+    monkeypatch,
+):
+    component, _ = fixed_component(monkeypatch)
+    scheduler = Scheduler()
+    scheduler.schedule(feeder(100))
+    advance(component, scheduler, 100)
+    # Walks of 20, 5 and 10 s from the 100 s arrival end at 105 to 120 s
+    walking = component.incoming_transfers()
+    assert [(g.platform_id, g.passenger_count) for g in walking] == [("green", 3)]
+    assert (walking[0].first_arrival_s, walking[0].last_arrival_s) == (105, 120)
+    advance(component, scheduler, 110)
+    assert component.incoming_transfers()[0].passenger_count == 1
+    advance(component, scheduler, 200)
+    assert component.incoming_transfers() == ()
