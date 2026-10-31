@@ -38,8 +38,7 @@ class HoldAction:
         # bool is a subclass of int, so it is excluded explicitly
         duration = self.duration_s
         if isinstance(duration, bool) or not isinstance(duration, int | float):
-            raise ValueError(
-                "HoldAction.duration_s must be a number of seconds")
+            raise ValueError("HoldAction.duration_s must be a number of seconds")
         if not math.isfinite(duration) or duration <= 0:
             raise ValueError(
                 f"HoldAction.duration_s must be finite and > 0, got {duration}"
@@ -104,8 +103,7 @@ class ObservationSnapshot:
         for item in fields(self):
             value = getattr(self, item.name)
             if isinstance(value, list | dict | set):
-                raise ValueError(
-                    f"ObservationSnapshot.{item.name} must be a tuple")
+                raise ValueError(f"ObservationSnapshot.{item.name} must be a tuple")
 
 
 class DecisionController(ABC):
