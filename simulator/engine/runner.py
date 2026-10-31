@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from simulator.control.settings import ControlSettings
 from simulator.engine.event_log import (
     EVENTS_FILE,
     MANIFEST_FILE,
@@ -218,6 +219,11 @@ def _manifest_record(
     parameters = getattr(scenario, "parameters", None)
     if parameters is not None:
         manifest["parameters"] = parameters
+    # Records which strategy produced the results (#45); test stand-in
+    # scenarios without control settings leave the key out
+    control = getattr(scenario, "control", None)
+    if isinstance(control, ControlSettings):
+        manifest["control"] = control.to_dict()
     return manifest
 
 

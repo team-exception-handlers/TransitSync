@@ -180,6 +180,8 @@ def test_run_with_no_components_writes_an_empty_log(
     manifest = json.loads(result.manifest_path.read_text())
     assert manifest["scenario_name"] == minimal_scenario.name
     assert manifest["disruptions"] == []
+    # Stand-in scenarios have no control settings, so no strategy is recorded
+    assert "control" not in manifest
 
 
 @pytest.mark.parametrize(
