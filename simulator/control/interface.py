@@ -73,13 +73,20 @@ class PlatformState:
 
 @dataclass(frozen=True, slots=True)
 class IncomingTransfer:
-    """A transfer group from one train arrival, still walking (pulsed arrivals)."""
+    """A transfer group from one train arrival, still walking (pulsed arrivals).
+
+    ``passenger_count`` is how many are still walking; ``group_size`` is the
+    whole group released at ``feeder_arrival_s``. The break-even rule (#41)
+    needs both the original size M and the time since the feeder arrived.
+    """
 
     group_id: str
     platform_id: str
     passenger_count: int
     first_arrival_s: float
     last_arrival_s: float
+    feeder_arrival_s: float
+    group_size: int
 
 
 @dataclass(frozen=True, slots=True)
