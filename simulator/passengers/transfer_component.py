@@ -8,6 +8,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from types import MappingProxyType
 
+from simulator.control.interface import IncomingTransfer
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import (
     Alighting,
@@ -117,11 +118,26 @@ class TransferComponent:
         self._id_prefix = id_prefix
         self._next_group = 1
         self._walking_routes: dict[str, TransferRoute] = {}
+        # passenger_id -> (group_id, connecting platform, walk end in seconds)
+        self._walks: dict[str, tuple[str, str, float]] = {}
         self.passengers: dict[str, Passenger] = {}
         self.passages: dict[str, CorridorPassage] = {}
 
     def start(self, scheduler: Scheduler) -> None:
         """Schedule nothing: without feeder trains there are no passenger pulses."""
+
+    def incoming_transfers(self) -> tuple[IncomingTransfer, ...]:
+        """Passengers still walking, grouped by transfer group (#38).
+
+        Times are when each walk ends at the corridor, before any queueing.
+        """
+        groups: dict[tuple[str, str], list[float]] = {}
+        for group_id, platform_id, end_s in self._walks.values():
+            groups.setdefault((group_id, platform_id), []).append(end_s)
+        return tuple(
+            IncomingTransfer(group_id, platform_id, len(ends), min(ends), max(ends))
+            for (group_id, platform_id), ends in sorted(groups.items())
+        )
 
     def handle(self, event: Event, scheduler: Scheduler) -> None:
         """Advance groups, walks and platform arrivals through the event queue."""
@@ -178,6 +194,9 @@ class TransferComponent:
                 passenger, state=PassengerState.WALKING
             )
             self._walking_routes[passenger_id] = route
+            walk_end_s = event.time_s + float(walk_s)
+            platform_id = route.connecting_platform_id
+            self._walks[passenger_id] = (group_id, platform_id, walk_end_s)
             scheduler.schedule(
                 Alighting(
                     time_s=event.time_s,
@@ -188,7 +207,7 @@ class TransferComponent:
             )
             scheduler.schedule(
                 CorridorArrival(
-                    time_s=event.time_s + float(walk_s),
+                    time_s=walk_end_s,
                     passenger_id=passenger_id,
                     group_id=group_id,
                     platform_id=route.connecting_platform_id,
@@ -199,6 +218,7 @@ class TransferComponent:
         self, event: CorridorArrival, scheduler: Scheduler
     ) -> None:
         route = self._walking_routes.pop(event.passenger_id, None)
+        self._walks.pop(event.passenger_id, None)
         if route is None:
             return
         passage = route.corridor.admit(event.passenger_id, event.time_s)

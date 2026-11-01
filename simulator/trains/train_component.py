@@ -5,12 +5,16 @@ import math
 from collections import defaultdict, deque
 from collections.abc import Sequence
 
+from simulator.control.decision import DecisionPipeline
+from simulator.control.interface import PlatformState, TrainState
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import (
     Boarding,
     DepartureClearance,
     DepartureDue,
     Event,
+    Hold,
+    HoldEnd,
     PassengerArrival,
     TrainArrival,
     TrainDeparture,
@@ -34,6 +38,7 @@ class TrainComponent:
         suspensions: Sequence[LineSuspension] = (),
         delay_injections: Sequence[DelayInjection] = (),
         passenger_queue: PlatformQueue | None = None,
+        decision: DecisionPipeline | None = None,
     ) -> None:
         if (
             isinstance(minimum_gap_s, bool)
@@ -77,6 +82,10 @@ class TrainComponent:
         self._occupied_platforms: dict[str, Visit] = {}
         self._at_platform: dict[str, deque[Visit]] = defaultdict(deque)
         self._boarded: dict[Visit, int] = defaultdict(int)
+        self._finished: set[str] = set()
+        # Asked at every DepartureDue; no control unless a strategy is given
+        self.decision = decision or DecisionPipeline()
+        self._hold_s: dict[Visit, float] = {}
 
         for train in trains:
             if train.id in self.trains:
@@ -198,12 +207,49 @@ class TrainComponent:
             )
         return tuple(entries)
 
+    def train_states(self) -> tuple[TrainState, ...]:
+        """Copy each train's next stop, delay and load for an observation (#38)."""
+        return tuple(
+            self._train_state(train) for _, train in sorted(self.trains.items())
+        )
+
+    def _train_state(self, train: Train) -> TrainState:
+        visit = (train.id, train.current_trip_index, train.current_stop_index)
+        if visit in self._at_platform[self._stop(visit).platform_id]:
+            # A dwelling train's next stop is the following one in its trip
+            visit = (*visit[:2], visit[2] + 1)
+        load = (train.current_delay, train.onboard_load, train.capacity)
+        trip = self._schedules[train.id][visit[1]]
+        if train.id in self._finished or visit[2] >= len(trip):
+            return TrainState(train.id, train.line_id, None, None, None, *load)
+        stop = trip[visit[2]]
+        # The arrival the simulator already planned, else timetable + delay
+        arrival_s = self._ready_arrivals.get(
+            visit, stop.arrival_s + max(0.0, train.current_delay)
+        )
+        next_stop = (stop.platform_id, arrival_s, stop.departure_s)
+        return TrainState(train.id, train.line_id, *next_stop, *load)
+
+    def platform_states(self) -> tuple[PlatformState, ...]:
+        """Copy waiting counts and last departures per platform (#38)."""
+        queue = self.passenger_queue
+        return tuple(
+            PlatformState(
+                platform_id=platform,
+                waiting_count=queue.waiting_count(platform) if queue else 0,
+                last_departure_s=self._last_departure.get(platform),
+            )
+            for platform in sorted(self._visits)
+        )
+
     def handle(self, event: Event, scheduler: Scheduler) -> None:
         """Process train movement, dispatch restrictions and passenger arrivals."""
         if isinstance(event, TrainArrival):
             self._on_arrival(event, scheduler)
         elif isinstance(event, DepartureDue):
             self._on_due(event, scheduler)
+        elif isinstance(event, HoldEnd):
+            self._on_hold_end(event, scheduler)
         elif isinstance(event, DepartureClearance):
             self._on_clearance(event, scheduler)
         elif isinstance(event, TrainDeparture):
@@ -312,9 +358,38 @@ class TrainComponent:
         if train is None:
             return
         visit = (train.id, train.current_trip_index, train.current_stop_index)
-        if visit in self._ready_departures:
+        if visit in self._ready_departures or visit in self._hold_s:
             raise RuntimeError("Duplicate DepartureDue event")
         train.update_delay(actual_s=event.time_s, scheduled_s=event.scheduled_s)
+        hold = self.decision.decide(event, self)
+        if hold is not None:
+            where = {
+                "train_id": train.id,
+                "station_id": event.station_id,
+                "platform_id": event.platform_id,
+            }
+            scheduler.schedule(
+                Hold(
+                    time_s=event.time_s,
+                    requested_s=hold.requested_s,
+                    applied_s=hold.applied_s,
+                    reason=hold.reason,
+                    **where,
+                )
+            )
+            if hold.applied_s > 0:
+                # The train leaves at HoldEnd, still subject to the minimum gap
+                self._hold_s[visit] = hold.applied_s
+                scheduler.schedule(
+                    HoldEnd(time_s=event.time_s + hold.applied_s, **where)
+                )
+                return
+        self._ready_departures[visit] = event.time_s
+        self._release_departure(event.platform_id, scheduler)
+
+    def _on_hold_end(self, event: HoldEnd, scheduler: Scheduler) -> None:
+        train = self.trains[event.train_id]
+        visit = (train.id, train.current_trip_index, train.current_stop_index)
         self._ready_departures[visit] = event.time_s
         self._release_departure(event.platform_id, scheduler)
 
@@ -364,7 +439,7 @@ class TrainComponent:
                 platform_id=platform,
                 scheduled_s=stop.departure_s,
                 disruption_delay_s=train.generated_delay_s,
-                hold_s=0.0,
+                hold_s=self._hold_s.pop(visit, 0.0),
                 boarded_count=self._boarded[visit],
                 alighted_count=0,
                 onboard_load=train.onboard_load,
@@ -410,5 +485,7 @@ class TrainComponent:
                 next_stop.arrival_s, event.time_s + travel_s
             )
             self._release_arrival(next_stop.platform_id, scheduler)
+        else:
+            self._finished.add(train.id)
         self._release_arrival(platform, scheduler)
         self._release_departure(platform, scheduler)
