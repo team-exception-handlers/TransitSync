@@ -20,7 +20,7 @@ class FixedTransfers:
     """Transfer source returning one walking group."""
 
     def incoming_transfers(self):
-        return (IncomingTransfer("group-1", "P2", 12, 140.0, 190.0),)
+        return (IncomingTransfer("group-1", "P2", 12, 140.0, 190.0, 100.0, 15),)
 
 
 def make_trains():
@@ -93,7 +93,7 @@ def test_snapshot_does_not_change_as_the_run_continues():
 
 def test_transfer_groups_come_from_every_source():
     first = snapshots_at_each_decision((FixedTransfers(), FixedTransfers()))[0]
-    expected = IncomingTransfer("group-1", "P2", 12, 140.0, 190.0)
+    expected = IncomingTransfer("group-1", "P2", 12, 140.0, 190.0, 100.0, 15)
     assert first.incoming_transfers == (expected, expected)
 
 

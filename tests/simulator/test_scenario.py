@@ -107,7 +107,11 @@ def test_defaults_and_saved_settings_round_trip(dataset):
         "dst_fold": None,
         "resolved_start_utc": "2026-10-05T11:00:00+00:00",
         "resolved_start_utc_offset": "-04:00",
-        "control": {"strategy": "no_control"},
+        "control": {
+            "strategy": "no_control",
+            "hold_search": {"step_s": 5.0, "max_hold_s": 60.0},
+            "weights": {"w_wait": 2.0, "w_onboard": 1.0},
+        },
     }
     assert (
         load_scenario_json(json.dumps(saved), {dataset.dataset_id: dataset}) == scenario
@@ -443,4 +447,6 @@ def test_manifest_records_strategy_of_the_run(
     scenario = replace(load(dataset, duration_s=600), control=ControlSettings("fake"))
     result = run_scenario(scenario, build_streams, build_tiny_network, tmp_path)
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    assert manifest["control"] == {"strategy": "fake"}
+    assert manifest["control"]["strategy"] == "fake"
+    # The search settings are saved too, so each hold can be recalculated (#43)
+    assert manifest["control"]["hold_search"] == {"step_s": 5.0, "max_hold_s": 60.0}

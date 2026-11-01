@@ -19,6 +19,7 @@ from dataclasses import replace
 
 import pytest
 
+from simulator.control.decision_audit import DECISIONS_FILE
 from simulator.engine import runner
 from simulator.engine.event_log import EVENTS_FILE, MANIFEST_FILE, SUMMARY_FILE
 from simulator.engine.events import Boarding, PassengerArrival
@@ -297,10 +298,14 @@ def test_rerun_into_a_folder_with_previous_output_is_rejected_and_keeps_it(
     # The earlier run's files are untouched and nothing new was added
     assert first.events_path.read_bytes() == events_before
     assert first.summary_path.read_bytes() == summary_before
-    assert _output_files(tmp_path) == sorted([EVENTS_FILE, MANIFEST_FILE, SUMMARY_FILE])
+    assert _output_files(tmp_path) == sorted(
+        [DECISIONS_FILE, EVENTS_FILE, MANIFEST_FILE, SUMMARY_FILE]
+    )
 
 
-@pytest.mark.parametrize("leftover", [EVENTS_FILE, MANIFEST_FILE, SUMMARY_FILE])
+@pytest.mark.parametrize(
+    "leftover", [EVENTS_FILE, MANIFEST_FILE, SUMMARY_FILE, DECISIONS_FILE]
+)
 def test_folder_with_either_output_file_is_rejected_naming_it(
     tmp_path, minimal_scenario, build_streams, build_tiny_network, leftover
 ):
@@ -316,7 +321,7 @@ def test_existing_folder_with_unrelated_files_is_accepted(
     (tmp_path / "notes.txt").write_text("not run output")
     run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
     assert _output_files(tmp_path) == sorted(
-        [EVENTS_FILE, MANIFEST_FILE, "notes.txt", SUMMARY_FILE]
+        [DECISIONS_FILE, EVENTS_FILE, MANIFEST_FILE, "notes.txt", SUMMARY_FILE]
     )
 
 
@@ -359,3 +364,25 @@ def test_failed_manifest_write_leaves_no_output(
     with pytest.raises(RunError, match="could not write run output"):
         run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
     assert _output_files(tmp_path) == []
+
+
+def test_failed_decision_log_write_leaves_no_output(
+    tmp_path, minimal_scenario, build_streams, build_tiny_network, monkeypatch
+):
+    # The decision log is written last; a failure part-way through it must
+    # still remove its partial file and the files already finished
+    def failing_write(_records, path):
+        runner.partial_path(path).write_text("half a record")
+        raise OSError("disk full")
+
+    monkeypatch.setattr(runner, "write_decision_log", failing_write)
+    with pytest.raises(RunError, match="could not write run output"):
+        run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
+    assert _output_files(tmp_path) == []
+
+
+def test_run_without_an_auditing_strategy_writes_an_empty_decision_log(
+    tmp_path, minimal_scenario, build_streams, build_tiny_network
+):
+    result = run_scenario(minimal_scenario, build_streams, build_tiny_network, tmp_path)
+    assert result.decisions_path.read_bytes() == b""
