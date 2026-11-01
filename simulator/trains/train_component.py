@@ -130,7 +130,7 @@ class TrainComponent:
         for train in self.trains.values():
             first_stop = self._schedules[train.id][0][0]
             self._ready_arrivals[(train.id, 0, 0)] = max(
-                0.0, first_stop.arrival_s + max(0.0, train.current_delay)
+                0.0, first_stop.arrival_s + train.current_delay
             )
         for platform in sorted(self._visits):
             self._release_arrival(platform, scheduler)
@@ -225,7 +225,7 @@ class TrainComponent:
         stop = trip[visit[2]]
         # The arrival the simulator already planned, else timetable + delay
         arrival_s = self._ready_arrivals.get(
-            visit, stop.arrival_s + max(0.0, train.current_delay)
+            visit, stop.arrival_s + train.current_delay
         )
         next_stop = (stop.platform_id, arrival_s, stop.departure_s)
         return TrainState(train.id, train.line_id, *next_stop, *load)
@@ -324,7 +324,8 @@ class TrainComponent:
         self._boarded[visit] = 0
         self._board_waiting(platform, event.time_s, scheduler)
         dwell_s = stop.departure_s - stop.arrival_s
-        due_s = max(stop.departure_s, event.time_s + dwell_s)
+        # Waiting for the timetable belongs to the selected strategy.
+        due_s = event.time_s + dwell_s
         scheduler.schedule(
             DepartureDue(
                 time_s=due_s,
@@ -481,9 +482,9 @@ class TrainComponent:
             travel_s = next_stop.arrival_s - current_stop.departure_s
             if travel_s <= 0:
                 raise ValueError("Inter-station travel time must be positive")
-            self._ready_arrivals[next_visit] = max(
-                next_stop.arrival_s, event.time_s + travel_s
-            )
+            # Actual departure determines natural arrival; platform separation
+            # is enforced by _release_arrival, independently of the timetable.
+            self._ready_arrivals[next_visit] = event.time_s + travel_s
             self._release_arrival(next_stop.platform_id, scheduler)
         else:
             self._finished.add(train.id)

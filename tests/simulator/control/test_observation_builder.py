@@ -23,7 +23,7 @@ class FixedTransfers:
         return (IncomingTransfer("group-1", "P2", 12, 140.0, 190.0),)
 
 
-def make_trains():
+def make_trains(initial_deviation_s=0):
     # A: P1 100-130, then P2 200-230. B: P1 400-430, starting 60 s late
     first = Train(
         id="A",
@@ -33,6 +33,8 @@ def make_trains():
             ScheduledStop("S2", "P2", 200, 230),
         ),
         line_id="rem",
+        current_delay=initial_deviation_s,
+        generated_delay_s=max(0.0, initial_deviation_s),
     )
     second = Train(
         id="B",
@@ -45,9 +47,9 @@ def make_trains():
     return [first, second]
 
 
-def snapshots_at_each_decision(transfer_sources=()):
+def snapshots_at_each_decision(transfer_sources=(), initial_deviation_s=0):
     """Run the trains and build a snapshot at every ``DepartureDue``."""
-    component = TrainComponent(make_trains())
+    component = TrainComponent(make_trains(initial_deviation_s))
     builder = ObservationBuilder(transfer_sources)
     scheduler = Scheduler()
     component.start(scheduler)
@@ -83,6 +85,14 @@ def test_later_decisions_see_departures_and_finished_trains():
     # By B's decision, A has left the network for good
     assert last.trains[0].predicted_arrival_s is None
     assert last.time_s == 490.0
+
+
+def test_early_decision_predicts_early_next_arrival():
+    """An early departure predicts 190 at P2, not a silent wait until 200."""
+    first = snapshots_at_each_decision(initial_deviation_s=-10)[0]
+    assert first.time_s == 120
+    assert first.trains[0].predicted_arrival_s == 190
+    assert first.trains[0].scheduled_departure_s == 230
 
 
 def test_snapshot_does_not_change_as_the_run_continues():
