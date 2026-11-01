@@ -11,7 +11,7 @@ Times are in seconds of simulation clock.
 
 import math
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from typing import ClassVar
 
 
@@ -86,7 +86,7 @@ class IncomingTransfer:
 class ObservationSnapshot:
     """Everything a strategy sees when ``train_id`` is ready to leave.
 
-    Raises ``ValueError`` if a collection is a list, dict or set.
+    Raises ``ValueError`` if a collection is not a tuple.
     """
 
     time_s: float
@@ -98,12 +98,11 @@ class ObservationSnapshot:
     incoming_transfers: tuple[IncomingTransfer, ...]
 
     def __post_init__(self) -> None:
-        # Frozen only stops reassignment; a shared list could still be changed
+        # Frozen only stops reassignment; a list or deque could still be changed
         # in place, so every collection must be an immutable tuple
-        for item in fields(self):
-            value = getattr(self, item.name)
-            if isinstance(value, list | dict | set):
-                raise ValueError(f"ObservationSnapshot.{item.name} must be a tuple")
+        for name in ("trains", "platforms", "incoming_transfers"):
+            if not isinstance(getattr(self, name), tuple):
+                raise ValueError(f"ObservationSnapshot.{name} must be a tuple")
 
 
 class DecisionController(ABC):
