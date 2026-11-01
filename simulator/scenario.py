@@ -14,6 +14,12 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from simulator.control.settings import (
+    ControlSettings,
+    ControlSettingsError,
+    parse_control_settings,
+)
+
 WORKLOAD_LIMIT_HOURS = 100
 DEFAULT_TIMEZONE = "America/Toronto"
 PRESET_SETTINGS: dict[str, dict[str, Any]] = {
@@ -38,6 +44,7 @@ SCENARIO_FIELDS = frozenset(
         "dst_fold",
         "resolved_start_utc",
         "resolved_start_utc_offset",
+        "control",
     }
 )
 
@@ -72,6 +79,8 @@ class Scenario:
     timezone: str
     dst_fold: int | None
     resolved_start: datetime
+    # Strategy selection (#45); defaults to no control so older files load
+    control: ControlSettings = ControlSettings()
 
     @property
     def start_utc(self) -> datetime:
@@ -92,6 +101,7 @@ class Scenario:
             "dst_fold": self.dst_fold,
             "resolved_start_utc": self.start_utc.isoformat(),
             "resolved_start_utc_offset": _offset_text(self.resolved_start),
+            "control": self.control.to_dict(),
         }
 
 
@@ -176,6 +186,10 @@ def _scenario_from_mapping(
     timezone = _parse_timezone(values.get("timezone", DEFAULT_TIMEZONE))
     dst_fold = _parse_fold(values.get("dst_fold"))
     try:
+        control = parse_control_settings(values.get("control"))
+    except ControlSettingsError as error:
+        raise ScenarioValidationError(str(error)) from error
+    try:
         resolved_start = _resolve_local_start(
             service_date, start_time, timezone, dst_fold
         )
@@ -197,6 +211,7 @@ def _scenario_from_mapping(
         timezone=timezone.key,
         dst_fold=dst_fold,
         resolved_start=resolved_start,
+        control=control,
     )
 
 

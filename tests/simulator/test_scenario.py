@@ -8,6 +8,7 @@ from datetime import date
 
 import pytest
 
+from simulator.control.settings import ControlSettings
 from simulator.engine.runner import run_scenario
 from simulator.scenario import (
     DatasetMetadata,
@@ -106,6 +107,7 @@ def test_defaults_and_saved_settings_round_trip(dataset):
         "dst_fold": None,
         "resolved_start_utc": "2026-10-05T11:00:00+00:00",
         "resolved_start_utc_offset": "-04:00",
+        "control": {"strategy": "no_control"},
     }
     assert (
         load_scenario_json(json.dumps(saved), {dataset.dataset_id: dataset}) == scenario
@@ -401,3 +403,44 @@ def test_loaded_scenario_runs_reproducibly_with_existing_runner(
     assert first.summary.events_processed > 0
     assert first.events_path.read_bytes() == second.events_path.read_bytes()
     assert first.summary_path.read_bytes() == second.summary_path.read_bytes()
+
+
+def test_scenario_selects_strategy_by_name(dataset):
+    scenario = load(dataset, control={"strategy": "no_control"})
+    assert scenario.control.strategy == "no_control"
+
+
+def test_missing_control_uses_no_control(dataset):
+    scenario = load(dataset)
+    assert scenario.control.strategy == "no_control"
+
+
+@pytest.mark.parametrize(
+    ("control", "message"),
+    [
+        ({"strategy": "headway"}, "control.strategy: unknown strategy 'headway'"),
+        ({"strategy": ""}, "control.strategy: unknown strategy ''"),
+        ({"strategy": 5}, "control.strategy: unknown strategy 5"),
+        ({"strategy": "no_control", "kappa": 1}, "control.kappa: unknown field"),
+        ("no_control", "control: must be an object"),
+    ],
+)
+def test_invalid_control_settings_name_the_field(dataset, control, message):
+    with pytest.raises(ScenarioValidationError, match=message):
+        load(dataset, control=control)
+
+
+def test_unknown_strategy_error_lists_choices(dataset):
+    with pytest.raises(ScenarioValidationError, match="choose no_control"):
+        load(dataset, control={"strategy": "schedule"})
+
+
+def test_manifest_records_strategy_of_the_run(
+    dataset, tmp_path, build_streams, build_tiny_network
+):
+    # A non-default name, so the test fails if the default is written instead.
+    # The runner only records the name, so the strategy need not be registered
+    scenario = replace(load(dataset, duration_s=600), control=ControlSettings("fake"))
+    result = run_scenario(scenario, build_streams, build_tiny_network, tmp_path)
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["control"] == {"strategy": "fake"}
