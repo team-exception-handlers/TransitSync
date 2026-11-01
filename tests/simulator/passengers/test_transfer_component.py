@@ -473,3 +473,17 @@ def test_incoming_transfers_group_walkers_until_they_reach_the_corridor(
     assert component.incoming_transfers()[0].passenger_count == 1
     advance(component, scheduler, 200)
     assert component.incoming_transfers() == ()
+
+
+def test_incoming_transfers_keep_group_size_and_feeder_time_as_walkers_leave(
+    monkeypatch,
+):
+    component, _ = fixed_component(monkeypatch)
+    scheduler = Scheduler()
+    scheduler.schedule(feeder(100))
+    # By 110 s two of the three walkers (5 and 10 s) have reached the corridor
+    advance(component, scheduler, 110)
+    group = component.incoming_transfers()[0]
+    assert group.passenger_count == 1
+    assert group.group_size == 3
+    assert group.feeder_arrival_s == 100
