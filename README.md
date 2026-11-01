@@ -490,6 +490,59 @@ corridor = network.corridor_for("rem_mcgill_0", "green_mcgill_1")
 The model is read-only. Train and passenger movement, queues and walking times
 are handled by runtime components.
 
+### Schedule-based holding
+
+Schedule-based holding (`schedule_based`) makes an early train wait until its
+scheduled departure. For example, a train ready to leave 10 seconds early waits
+those 10 seconds. A train that is on time or late receives no extra hold.
+
+With no control (`no_control`), a train can leave as soon as it completes its
+normal stop, even if early. Both options follow operating restrictions, which
+can delay departure further. Passengers can board while a train is held.
+Passenger numbers and transfers do not determine whether these policies hold.
+
+The Python example below runs the same train under each policy. Use an already
+loaded `scenario` lasting at least 230 seconds; both runs keep the same timetable
+and random seed:
+
+```python
+from dataclasses import replace
+from pathlib import Path
+
+from simulator.control.decision import DecisionPipeline
+from simulator.control.settings import parse_control_settings
+from simulator.control.strategies import STRATEGIES
+from simulator.engine.random_streams import StreamManager
+from simulator.engine.runner import run_scenario
+from simulator.trains.train import ScheduledStop, Train
+from simulator.trains.train_component import TrainComponent
+
+
+def build_components(settings, _streams):
+    """Create fresh trains and the selected controller for each run."""
+    train = Train(
+        id="early-train",
+        capacity=800,
+        schedule=(
+            ScheduledStop("S1", "P1", 100, 130),
+            ScheduledStop("S2", "P2", 200, 230),
+        ),
+        current_delay=-10,
+    )
+    strategy = STRATEGIES.build(settings.control.strategy)
+    return [TrainComponent([train], decision=DecisionPipeline(strategy))]
+
+
+for name in ("no_control", "schedule_based"):
+    selected = replace(scenario, control=parse_control_settings({"strategy": name}))
+    result = run_scenario(
+        selected, StreamManager, build_components, Path("runs") / name
+    )
+```
+
+In this example, no-control departs at 120 and 220 seconds. Schedule control
+adds a 10-second hold at the first stop, giving departures at 130 and 230.
+
 ## Team
 
 Built by The Exception Handlers, a Concordia University software engineering capstone team.
