@@ -52,7 +52,7 @@ def make_snapshot(time_s=120, scheduled_departure_s=130, onboard_load=0, transfe
     )
 
 
-# Check fractional holds without rounding to whole seconds.
+# A quarter-second is exact in binary, so no floating-point tolerance is needed.
 @pytest.mark.parametrize(
     ("time_s", "scheduled_departure_s", "expected"),
     [
@@ -60,6 +60,7 @@ def make_snapshot(time_s=120, scheduled_departure_s=130, onboard_load=0, transfe
         (130, 130, ()),
         (140, 130, ()),
         (129.75, 130, (HoldAction("A", 0.25, "schedule_based"),)),
+        # A different timetable catches a hard-coded departure target.
         (250, 270, (HoldAction("A", 20, "schedule_based"),)),
     ],
     ids=["early", "on_time", "late", "fractional_hold", "different_timetable"],
@@ -79,6 +80,8 @@ def test_schedule_policy_uses_current_departure_in_pipeline(final_stop):
     if not final_stop:
         schedule += (ScheduledStop("S2", "P2", 200, 230),)
     train = Train(id="A", capacity=800, schedule=schedule, current_delay=-10)
+    # Keep movement under no-control; evaluate the schedule policy separately
+    # to test its observation without applying a hold.
     component = TrainComponent([train])
     pipeline = DecisionPipeline(strategy=ScheduleBasedHoldingStrategy())
     scheduler = Scheduler()
@@ -86,11 +89,12 @@ def test_schedule_policy_uses_current_departure_in_pipeline(final_stop):
     component.start(scheduler)
 
     def process(event):
-        # Record the holding decision without applying it to train movement.
+        # Read the train's state before the component processes its departure.
         if isinstance(event, DepartureDue):
             decisions.append(pipeline.decide(event, component))
         component.handle(event, scheduler)
 
+    # Stop at the first decision so later stops cannot affect the assertion.
     scheduler.run_until(120, process)
     assert decisions == [HoldDecision(10, 10, "schedule_based")]
 

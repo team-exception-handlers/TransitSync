@@ -2,6 +2,8 @@
 """US-2.3, Task 2.3.3 (#47): Ask early-ready trains to wait until scheduled departure.
 
 Uses the Strategy pattern and ignores passenger demand.
+The wiki's Mathematical Foundations (Section 6) provides the departure timing and
+separation model.
 """
 
 from simulator.control.interface import (
