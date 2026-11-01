@@ -8,7 +8,6 @@ from datetime import date
 
 import pytest
 
-from simulator.control.settings import ControlSettings
 from simulator.engine.runner import run_scenario
 from simulator.scenario import (
     DatasetMetadata,
@@ -438,9 +437,8 @@ def test_unknown_strategy_error_lists_choices(dataset):
 def test_manifest_records_strategy_of_the_run(
     dataset, tmp_path, build_streams, build_tiny_network
 ):
-    # A non-default name, so the test fails if the default is written instead.
-    # The runner only records the name, so the strategy need not be registered
-    scenario = replace(load(dataset, duration_s=600), control=ControlSettings("fake"))
+    """Record a validated non-default selection rather than the runner's default."""
+    scenario = load(dataset, duration_s=600, control={"strategy": "schedule_based"})
     result = run_scenario(scenario, build_streams, build_tiny_network, tmp_path)
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    assert manifest["control"] == {"strategy": "fake"}
+    assert manifest["control"] == {"strategy": "schedule_based"}

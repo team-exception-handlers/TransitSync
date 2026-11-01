@@ -45,6 +45,7 @@ def make_snapshot(**overrides) -> ObservationSnapshot:
         "train_id": "rem_0001",
         "station_id": "mcgill",
         "platform_id": "rem_mcgill_0",
+        "scheduled_departure_s": 130.0,
         "trains": (TRAIN,),
         "platforms": (PLATFORM,),
         "incoming_transfers": (TRANSFER,),
