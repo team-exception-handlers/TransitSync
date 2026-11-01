@@ -38,8 +38,14 @@ class BreakEvenWeights:
     w_onboard: float = DEFAULT_W_ONBOARD
 
     def __post_init__(self) -> None:
-        finite_number("BreakEvenWeights.w_wait", self.w_wait, 0.0)
-        finite_number("BreakEvenWeights.w_onboard", self.w_onboard, 0.0)
+        # Stored as floats so a scenario's 2 and 2.0 save identically
+        for name in ("w_wait", "w_onboard"):
+            value = finite_number(f"BreakEvenWeights.{name}", getattr(self, name), 0.0)
+            object.__setattr__(self, name, value)
+
+    def to_dict(self) -> dict[str, float]:
+        """Return the weights as saved in a scenario, manifest and decision log."""
+        return {"w_wait": self.w_wait, "w_onboard": self.w_onboard}
 
 
 @dataclass(frozen=True, slots=True)
