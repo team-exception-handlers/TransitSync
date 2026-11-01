@@ -7,6 +7,7 @@ time order, including when walks from different groups overlap. Times are second
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from types import MappingProxyType
+from typing import NamedTuple
 
 from simulator.control.interface import IncomingTransfer
 from simulator.engine.event_queue import Scheduler
@@ -27,6 +28,16 @@ from simulator.passengers.generation import (
     _destination_distribution,
 )
 from simulator.passengers.passenger import Passenger, PassengerState
+
+
+class _Walk(NamedTuple):
+    """One passenger's walk, with the group facts a strategy needs (#41)."""
+
+    group_id: str
+    platform_id: str
+    end_s: float
+    feeder_arrival_s: float
+    group_size: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,8 +129,8 @@ class TransferComponent:
         self._id_prefix = id_prefix
         self._next_group = 1
         self._walking_routes: dict[str, TransferRoute] = {}
-        # passenger_id -> (group_id, connecting platform, walk end in seconds)
-        self._walks: dict[str, tuple[str, str, float]] = {}
+        # passenger_id -> walk still in progress
+        self._walks: dict[str, _Walk] = {}
         self.passengers: dict[str, Passenger] = {}
         self.passages: dict[str, CorridorPassage] = {}
 
@@ -130,13 +141,22 @@ class TransferComponent:
         """Passengers still walking, grouped by transfer group (#38).
 
         Times are when each walk ends at the corridor, before any queueing.
+        Every walk in a group shares its feeder arrival time and group size.
         """
-        groups: dict[tuple[str, str], list[float]] = {}
-        for group_id, platform_id, end_s in self._walks.values():
-            groups.setdefault((group_id, platform_id), []).append(end_s)
+        groups: dict[tuple[str, str], list[_Walk]] = {}
+        for walk in self._walks.values():
+            groups.setdefault((walk.group_id, walk.platform_id), []).append(walk)
         return tuple(
-            IncomingTransfer(group_id, platform_id, len(ends), min(ends), max(ends))
-            for (group_id, platform_id), ends in sorted(groups.items())
+            IncomingTransfer(
+                group_id,
+                platform_id,
+                len(walks),
+                min(walk.end_s for walk in walks),
+                max(walk.end_s for walk in walks),
+                walks[0].feeder_arrival_s,
+                walks[0].group_size,
+            )
+            for (group_id, platform_id), walks in sorted(groups.items())
         )
 
     def handle(self, event: Event, scheduler: Scheduler) -> None:
@@ -196,7 +216,9 @@ class TransferComponent:
             self._walking_routes[passenger_id] = route
             walk_end_s = event.time_s + float(walk_s)
             platform_id = route.connecting_platform_id
-            self._walks[passenger_id] = (group_id, platform_id, walk_end_s)
+            self._walks[passenger_id] = _Walk(
+                group_id, platform_id, walk_end_s, event.time_s, len(passengers)
+            )
             scheduler.schedule(
                 Alighting(
                     time_s=event.time_s,
