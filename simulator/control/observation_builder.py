@@ -51,6 +51,7 @@ class ObservationBuilder:
             train_id=decision.train_id,
             station_id=decision.station_id,
             platform_id=decision.platform_id,
+            scheduled_departure_s=decision.scheduled_s,
             trains=trains.train_states(),
             platforms=trains.platform_states(),
             incoming_transfers=transfers,

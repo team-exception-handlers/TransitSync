@@ -95,6 +95,21 @@ def test_early_decision_predicts_early_next_arrival():
     assert first.trains[0].scheduled_departure_s == 230
 
 
+def test_builder_exposes_current_departure_schedule():
+    """The deciding stop departs at 130; the following stop departs at 230."""
+    first = snapshots_at_each_decision(initial_deviation_s=-10)[0]
+    assert first.scheduled_departure_s == 130
+    assert first.trains[0].scheduled_departure_s == 230
+
+
+def test_builder_keeps_current_departure_schedule_at_final_stop():
+    """A final stop still has a timetable even though there is no next stop."""
+    _, last_stop, _ = snapshots_at_each_decision(initial_deviation_s=-10)
+    assert last_stop.time_s == 220
+    assert last_stop.scheduled_departure_s == 230
+    assert last_stop.trains[0].scheduled_departure_s is None
+
+
 def test_snapshot_does_not_change_as_the_run_continues():
     first = snapshots_at_each_decision()[0]
     # The run finished A's trip after this snapshot, yet it still shows P2 next
