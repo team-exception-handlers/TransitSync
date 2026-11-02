@@ -108,6 +108,15 @@ def test_defaults_and_saved_settings_round_trip(dataset):
         "resolved_start_utc": "2026-10-05T11:00:00+00:00",
         "resolved_start_utc_offset": "-04:00",
         "control": {"strategy": "no_control"},
+        "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+                "max_hold_exceeded": "CLAMP",
+                "headway_violation": "REFUSE",
+                "one_hop_violation": "REFUSE",
+            },
+        },
     }
     assert (
         load_scenario_json(json.dumps(saved), {dataset.dataset_id: dataset}) == scenario

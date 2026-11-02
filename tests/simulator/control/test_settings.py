@@ -1,6 +1,9 @@
 # AI contribution: 50% or more AI-generated
 """Tests for control settings parsing (US-2.3, Task 2.3.1, #45)."""
 
+from datetime import date, datetime, time
+from zoneinfo import ZoneInfo
+
 import pytest
 
 from simulator.control.interface import DecisionController, HoldAction
@@ -8,9 +11,13 @@ from simulator.control.registry import StrategyRegistry
 from simulator.control.settings import (
     ControlSettings,
     ControlSettingsError,
+    OperatingRulesConfig,
+    OperatingRulesError,
     parse_control_settings,
+    parse_operating_rules,
 )
 from simulator.control.strategies.no_control import NoControlStrategy
+from simulator.scenario import Scenario
 
 
 class FakeHoldStrategy(DecisionController):
@@ -49,3 +56,62 @@ def test_unknown_strategy_lists_registry_choices():
 def test_control_must_be_an_object(value):
     with pytest.raises(ControlSettingsError, match="control: must be an object"):
         parse_control_settings(value)
+
+
+def test_operating_rules_defaults():
+    config = OperatingRulesConfig()
+    assert config.max_hold_time == 300.0
+    assert config.min_safe_gap == 60.0
+    assert config.rule_action_map["max_hold_exceeded"] == "CLAMP"
+    assert config.rule_action_map["headway_violation"] == "REFUSE"
+
+
+def test_operating_rules_custom_overrides():
+    config = OperatingRulesConfig(max_hold_time=150.0, min_safe_gap=30.0)
+    assert config.max_hold_time == 150.0
+    assert config.min_safe_gap == 30.0
+
+
+def test_scenario_manifest_includes_rules():
+    config = OperatingRulesConfig(max_hold_time=120.0)
+    # Construct a minimal valid Scenario to verify to_dict serialization
+    scenario = Scenario(
+        dataset_id="test_dataset",
+        service_date=date(2026, 10, 19),
+        start_time=time(7, 0),
+        duration_s=3600,
+        repetitions=1,
+        master_seed=42,
+        interchanges=("mcgill",),
+        timezone="America/Toronto",
+        dst_fold=None,
+        resolved_start=datetime(2026, 10, 19, 7, 0, tzinfo=ZoneInfo("America/Toronto")),
+        operating_rules=config,
+    )
+    manifest = scenario.to_dict()
+
+    assert "operating_rules" in manifest
+    assert manifest["operating_rules"]["max_hold_time"] == 120.0
+    assert (
+        manifest["operating_rules"]["rule_action_map"]["max_hold_exceeded"] == "CLAMP"
+    )
+
+
+def test_operating_rules_partial_rule_action_map_merge():
+    # Providing one rule action should merge with the defaults.
+    config = parse_operating_rules({"rule_action_map": {"max_hold_exceeded": "REFUSE"}})
+    assert config.rule_action_map["max_hold_exceeded"] == "REFUSE"
+    assert (
+        config.rule_action_map["headway_violation"] == "REFUSE"
+    )  # Preserved from default
+    assert (
+        config.rule_action_map["one_hop_violation"] == "REFUSE"
+    )  # Preserved from default
+
+
+def test_operating_rules_unknown_rule_key_raises_error():
+    with pytest.raises(
+        OperatingRulesError,
+        match="operating_rules.rule_action_map.max_hold_exceded: unknown rule",
+    ):
+        parse_operating_rules({"rule_action_map": {"max_hold_exceded": "REFUSE"}})
