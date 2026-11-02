@@ -1,0 +1,294 @@
+/* AI contribution: 50% or more AI-generated */
+
+/*
+ * TransitSync Release 1 Application Shell
+ *
+ * Layout only.
+ *
+ * Station visualization, controls, passenger
+ * animation, and decision views are implemented
+ * by other developers.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+
+/* GLOBAL STYLES */
+
+:root {
+  font-family: "IBM Plex Sans", Arial, sans-serif;
+
+  color: #16191d;
+  background-color: #f3f4f1;
+
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+}
+
+/* APPLICATION SHELL */
+
+.app-shell {
+  min-height: 100vh;
+
+  display: flex;
+  flex-direction: column;
+
+  background-color: #f3f4f1;
+}
+
+/* HEADER */
+
+.topbar {
+  height: 73px;
+  min-height: 73px;
+
+  display: flex;
+  align-items: center;
+
+  padding: 0 24px;
+
+  background-color: #ffffff;
+
+  border-bottom: 1px solid #d8dbd5;
+}
+
+/* BRANDING */
+
+.brand {
+  display: flex;
+  align-items: center;
+
+  gap: 10px;
+}
+
+.brand-mark {
+  width: 28px;
+  height: 28px;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  border: 2px solid #16191d;
+  border-radius: 7px;
+
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-text strong {
+  color: #16191d;
+
+  font-size: 16px;
+  font-weight: 700;
+
+  line-height: 20px;
+}
+
+.brand-text small {
+  color: #5b6168;
+
+  font-size: 11px;
+  font-weight: 400;
+
+  line-height: 15px;
+}
+
+/* WORKSPACE */
+
+.workspace {
+  flex: 1;
+
+  display: grid;
+
+  grid-template-columns: 245px minmax(0, 1fr);
+
+  min-height: calc(100vh - 73px);
+}
+
+/* SIDEBAR */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+
+  padding: 20px 14px;
+
+  background-color: #f7f8f5;
+
+  border-right: 1px solid #d8dbd5;
+}
+
+.section-label {
+  padding: 0 12px 14px;
+
+  color: #5b6168;
+
+  font-size: 11px;
+  font-weight: 600;
+
+  letter-spacing: 0.9px;
+  text-transform: uppercase;
+}
+
+.nav-current {
+  height: 44px;
+
+  display: flex;
+  align-items: center;
+
+  padding: 0 12px;
+
+  background-color: #16191d;
+
+  border-radius: 8px;
+
+  color: #ffffff;
+
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* MAIN CONTENT LAYOUT */
+
+.content {
+  width: 100%;
+
+  max-width: 1700px;
+
+  min-height: calc(100vh - 73px);
+
+  margin: 0 auto;
+
+  padding: 20px 24px;
+
+  display: grid;
+
+  grid-template-columns:
+    minmax(0, 1fr)
+    320px;
+
+  grid-template-rows:
+    minmax(650px, 1fr)
+    96px;
+
+  gap: 16px;
+}
+
+/* CONTENT CONTAINERS */
+
+.panel {
+  min-width: 0;
+
+  background-color: #ffffff;
+
+  border: 1px solid #d8dbd5;
+  border-radius: 12px;
+}
+
+/* MAIN STATION REGION */
+
+.station-region {
+  min-height: 0;
+}
+
+/* RIGHT-HAND LAYOUT */
+
+.inspector {
+  min-height: 0;
+
+  display: grid;
+
+  grid-template-rows:
+    248px
+    164px
+    minmax(220px, 1fr);
+
+  gap: 16px;
+}
+
+/* BOTTOM REGION */
+
+.playback-region {
+  grid-column: 1 / -1;
+}
+
+/* RESPONSIVE LAYOUT */
+
+@media (max-width: 1250px) {
+  .content {
+    padding: 16px;
+
+    grid-template-columns:
+      minmax(0, 1fr)
+      280px;
+  }
+}
+
+@media (max-width: 930px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    display: none;
+  }
+
+  .content {
+    grid-template-columns: 1fr;
+
+    grid-template-rows:
+      560px
+      auto
+      96px;
+  }
+
+  .inspector {
+    grid-row: 2;
+
+    grid-template-columns:
+      repeat(3, minmax(0, 1fr));
+
+    grid-template-rows: 220px;
+  }
+
+  .playback-region {
+    grid-row: 3;
+  }
+}
+
+@media (max-width: 660px) {
+  .content {
+    grid-template-rows:
+      520px
+      auto
+      96px;
+  }
+
+  .inspector {
+    grid-template-columns: 1fr;
+
+    grid-template-rows:
+      180px
+      140px
+      180px;
+  }
+}
