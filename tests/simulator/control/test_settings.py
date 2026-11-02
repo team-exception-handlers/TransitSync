@@ -12,7 +12,9 @@ from simulator.control.settings import (
     ControlSettings,
     ControlSettingsError,
     OperatingRulesConfig,
+    OperatingRulesError,
     parse_control_settings,
+    parse_operating_rules,
 )
 from simulator.control.strategies.no_control import NoControlStrategy
 from simulator.scenario import Scenario
@@ -93,3 +95,23 @@ def test_scenario_manifest_includes_rules():
     assert (
         manifest["operating_rules"]["rule_action_map"]["max_hold_exceeded"] == "CLAMP"
     )
+
+
+def test_operating_rules_partial_rule_action_map_merge():
+    # Providing one rule action should merge with the defaults.
+    config = parse_operating_rules({"rule_action_map": {"max_hold_exceeded": "REFUSE"}})
+    assert config.rule_action_map["max_hold_exceeded"] == "REFUSE"
+    assert (
+        config.rule_action_map["headway_violation"] == "REFUSE"
+    )  # Preserved from default
+    assert (
+        config.rule_action_map["one_hop_violation"] == "REFUSE"
+    )  # Preserved from default
+
+
+def test_operating_rules_unknown_rule_key_raises_error():
+    with pytest.raises(
+        OperatingRulesError,
+        match="operating_rules.rule_action_map.max_hold_exceded: unknown rule",
+    ):
+        parse_operating_rules({"rule_action_map": {"max_hold_exceded": "REFUSE"}})

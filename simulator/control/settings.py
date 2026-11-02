@@ -127,12 +127,21 @@ def parse_operating_rules(value: object) -> OperatingRulesConfig:
             raise OperatingRulesError(
                 "operating_rules.rule_action_map: must be an object"
             )
+
+        defaults = OperatingRulesConfig().rule_action_map
+        unknown_rules = sorted(ram.keys() - defaults.keys())
+        if unknown_rules:
+            raise OperatingRulesError(
+                f"operating_rules.rule_action_map.{unknown_rules[0]}: unknown rule"
+            )
+
         for k, v in ram.items():
             if v not in ("CLAMP", "REFUSE"):
                 raise OperatingRulesError(
                     f"operating_rules.rule_action_map.{k}: "
                     "action must be CLAMP or REFUSE"
                 )
-        kwargs["rule_action_map"] = dict(ram)
+
+        kwargs["rule_action_map"] = {**defaults, **ram}
 
     return OperatingRulesConfig(**kwargs)
