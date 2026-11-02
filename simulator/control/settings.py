@@ -8,7 +8,7 @@ starts instead of at the first decision point.
 """
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from simulator.control.registry import StrategyRegistry
@@ -16,6 +16,7 @@ from simulator.control.strategies import STRATEGIES
 
 DEFAULT_STRATEGY = "no_control"
 CONTROL_FIELDS = frozenset({"strategy"})
+OPERATING_RULES_FIELDS = frozenset({"max_hold_time", "min_safe_gap", "rule_action_map"})
 
 
 class ControlSettingsError(ValueError):
@@ -60,3 +61,78 @@ def parse_control_settings(
             f"control.strategy: unknown strategy {strategy!r}; choose {choices}"
         )
     return ControlSettings(strategy=strategy)
+
+
+@dataclass(frozen=True, slots=True)
+class OperatingRulesConfig:
+    """Centralized configuration for transit operating rules and safety limits."""
+
+    max_hold_time: float = (
+        300.0  # Maximum allowable hold time at a station/signal (seconds)
+    )
+    min_safe_gap: float = (
+        60.0  # Minimum safe headway / temporal gap between units (seconds)
+    )
+    rule_action_map: Mapping[str, str] = field(
+        default_factory=lambda: {
+            "max_hold_exceeded": "CLAMP",
+            "headway_violation": "REFUSE",
+            "one_hop_violation": "REFUSE",
+        }
+    )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Return the operating rules as saved in a scenario file and manifest."""
+        return {
+            "max_hold_time": self.max_hold_time,
+            "min_safe_gap": self.min_safe_gap,
+            "rule_action_map": dict(self.rule_action_map),
+        }
+
+
+class OperatingRulesError(ValueError):
+    """An ``operating_rules`` value is invalid."""
+
+
+def parse_operating_rules(value: object) -> OperatingRulesConfig:
+    """Validate the ``operating_rules`` object of a scenario."""
+    if value is None:
+        return OperatingRulesConfig()
+    if not isinstance(value, Mapping):
+        raise OperatingRulesError("operating_rules: must be an object")
+    unknown = sorted(value.keys() - OPERATING_RULES_FIELDS)
+    if unknown:
+        raise OperatingRulesError(f"operating_rules.{unknown[0]}: unknown field")
+
+    kwargs = {}
+    if "max_hold_time" in value:
+        val = value["max_hold_time"]
+        if isinstance(val, bool) or not isinstance(val, int | float) or val <= 0:
+            raise OperatingRulesError(
+                "operating_rules.max_hold_time: expected positive number"
+            )
+        kwargs["max_hold_time"] = float(val)
+
+    if "min_safe_gap" in value:
+        val = value["min_safe_gap"]
+        if isinstance(val, bool) or not isinstance(val, int | float) or val < 0:
+            raise OperatingRulesError(
+                "operating_rules.min_safe_gap: expected non-negative number"
+            )
+        kwargs["min_safe_gap"] = float(val)
+
+    if "rule_action_map" in value:
+        ram = value["rule_action_map"]
+        if not isinstance(ram, Mapping):
+            raise OperatingRulesError(
+                "operating_rules.rule_action_map: must be an object"
+            )
+        for k, v in ram.items():
+            if v not in ("CLAMP", "REFUSE"):
+                raise OperatingRulesError(
+                    f"operating_rules.rule_action_map.{k}: "
+                    "action must be CLAMP or REFUSE"
+                )
+        kwargs["rule_action_map"] = dict(ram)
+
+    return OperatingRulesConfig(**kwargs)
