@@ -21,6 +21,8 @@ interface StationViewStore {
   setSpeed: (speed: number) => void;
   // Monotonic wall time, in milliseconds; null while paused.
   updatedAt_ms: number | null;
+  // Simulation position at that wall-time anchor, not an independent UI clock.
+  anchorTime_s: number;
   play: () => void;
   pause: () => void;
   rewind30: () => void;
@@ -65,7 +67,7 @@ function clampTime(
 function positionNow(state: StationViewStore, now_ms: number): number {
   if (!state.isPlaying || state.updatedAt_ms === null) return state.currentTime_s;
   const elapsed_s = Math.max(0, now_ms - state.updatedAt_ms) / 1000;
-  return clampTime(state.currentTime_s + elapsed_s * state.speed, state.data?.duration_s ?? 0);
+  return clampTime(state.anchorTime_s + elapsed_s * state.speed, state.data?.duration_s ?? 0);
 }
 
 export const usePlaybackStore = create<StationViewStore>(
@@ -78,6 +80,7 @@ export const usePlaybackStore = create<StationViewStore>(
     isPlaying: false,
     speed: 1,
     updatedAt_ms: null,
+    anchorTime_s: 0,
 
     // Validate the entire catalog before publishing it, so failure is atomic.
     setAvailableRuns: (runs) => {
@@ -96,6 +99,7 @@ export const usePlaybackStore = create<StationViewStore>(
         isPlaying: false,
         speed: 1,
         updatedAt_ms: null,
+        anchorTime_s: 0,
         selectedConnectionId:
           data.connections[0]?.id ?? null,
       });
@@ -107,7 +111,8 @@ export const usePlaybackStore = create<StationViewStore>(
         const duration = state.data?.duration_s ?? 0;
         const currentTime_s = clampTime(time_s, duration);
         const isPlaying = state.isPlaying && currentTime_s < duration;
-        return { currentTime_s, isPlaying, updatedAt_ms: isPlaying ? performance.now() : null };
+        return { currentTime_s, anchorTime_s: currentTime_s, isPlaying,
+          updatedAt_ms: isPlaying ? performance.now() : null };
       });
     },
 
@@ -115,7 +120,7 @@ export const usePlaybackStore = create<StationViewStore>(
     play: () => {
       const state = get();
       if (state.isPlaying || !state.data || state.currentTime_s >= state.data.duration_s) return;
-      set({ isPlaying: true, updatedAt_ms: performance.now() });
+      set({ isPlaying: true, anchorTime_s: state.currentTime_s, updatedAt_ms: performance.now() });
     },
 
     // Settle the fraction since the last frame before freezing the display.
@@ -131,7 +136,8 @@ export const usePlaybackStore = create<StationViewStore>(
       const state = get();
       if (!state.data) return;
       const now = performance.now();
-      set({ currentTime_s: Math.max(0, positionNow(state, now) - 30),
+      const currentTime_s = Math.max(0, positionNow(state, now) - 30);
+      set({ currentTime_s, anchorTime_s: currentTime_s,
         updatedAt_ms: state.isPlaying ? now : null });
     },
 
@@ -145,7 +151,7 @@ export const usePlaybackStore = create<StationViewStore>(
       const now = performance.now();
       const currentTime_s = positionNow(state, now);
       const isPlaying = state.isPlaying && currentTime_s < (state.data?.duration_s ?? 0);
-      set({ speed: speed as PlaybackSpeed, currentTime_s, isPlaying,
+      set({ speed: speed as PlaybackSpeed, currentTime_s, anchorTime_s: currentTime_s, isPlaying,
         updatedAt_ms: isPlaying ? now : null });
     },
 
@@ -156,7 +162,9 @@ export const usePlaybackStore = create<StationViewStore>(
       const now = performance.now();
       const currentTime_s = positionNow(state, now);
       const isPlaying = currentTime_s < state.data.duration_s;
-      set({ currentTime_s, isPlaying, updatedAt_ms: isPlaying ? now : null });
+      // Keep a fixed origin between user actions: frame frequency and dropped
+      // frames must not accumulate rounding drift or change the playback rate.
+      set({ currentTime_s, isPlaying, updatedAt_ms: isPlaying ? state.updatedAt_ms : null });
     },
 
     selectConnection: (connectionId) => {
@@ -182,6 +190,7 @@ export const usePlaybackStore = create<StationViewStore>(
         currentTime_s: 0,
         isPlaying: false,
         updatedAt_ms: null,
+        anchorTime_s: 0,
         selectedConnectionId: connectionId,
       });
     },

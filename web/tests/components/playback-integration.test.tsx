@@ -46,4 +46,24 @@ describe("playback integration", () => {
     expect(vi.getTimerCount()).toBe(0);
     expect(usePlaybackStore.getState().isPlaying).toBe(false);
   });
+  it("applies speed, pause and rewind while keeping displayed time aligned", () => {
+    render(<App />);
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "85" } });
+    fireEvent.click(screen.getByRole("button", { name: "10× speed" }));
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    act(() => vi.advanceTimersByTime(1008));
+    expect(usePlaybackStore.getState().currentTime_s).toBeCloseTo(95.08);
+    expect(screen.getAllByText("07:41:35")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "0.5× speed" }));
+    act(() => vi.advanceTimersByTime(1008));
+    expect(usePlaybackStore.getState().currentTime_s).toBeCloseTo(95.584);
+    fireEvent.click(screen.getByRole("button", { name: "Rewind 30 seconds" }));
+    expect(usePlaybackStore.getState().currentTime_s).toBeCloseTo(65.584);
+    expect(screen.getByRole("img").getAttribute("aria-label")).toContain("65.6");
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    fireEvent.click(screen.getByRole("button", { name: "2× speed" }));
+    act(() => vi.advanceTimersByTime(2000));
+    expect(usePlaybackStore.getState().currentTime_s).toBeCloseTo(65.584);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

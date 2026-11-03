@@ -182,4 +182,50 @@ describe("playback clock", () => {
     expect(state().isPlaying).toBe(true);
     expect(frames.size).toBe(1);
   });
+  it.each([0.5, 1, 2, 10])("keeps exact elapsed-time scaling across irregular frames at %s×", (speed) => {
+    state().seek(80);
+    state().setSpeed(speed);
+    state().play();
+    for (const timestamp of [0.1, 16.67, 58.2, 273.9, 1000.001]) frameAt(timestamp);
+    expect(state().currentTime_s).toBe(80 + 1.000001 * speed);
+    // Dense frame delivery and a single delayed frame give the same position.
+    const densePosition = state().currentTime_s;
+    state().pause();
+    state().seek(80);
+    state().play();
+    frameAt(2000.002);
+    expect(state().currentTime_s).toBe(densePosition);
+  });
+  it.each([0.5, 1, 2, 10])("preserves pause/resume/rewind and end boundaries at %s×", (speed) => {
+    state().seek(100);
+    state().setSpeed(speed);
+    state().play();
+    frameAt(1000);
+    state().pause();
+    const paused = 100 + speed;
+    expect(state().currentTime_s).toBe(paused);
+    frameAt(10000);
+    state().rewind30();
+    expect(state().currentTime_s).toBe(paused - 30);
+    state().play();
+    frameAt(11000);
+    expect(state().currentTime_s).toBe(paused - 30 + speed);
+    state().seek(359.99);
+    frameAt(12000);
+    expect(state().currentTime_s).toBe(360);
+    expect(state().isPlaying).toBe(false);
+    expect(frames.size).toBe(0);
+  });
+  it("handles multiple speed changes inside a single frame without lost time", () => {
+    state().play();
+    now = 100;
+    state().setSpeed(10);
+    now = 150;
+    state().setSpeed(0.5);
+    frameAt(350);
+    expect(state().currentTime_s).toBeCloseTo(0.7);
+    expect(frames.size).toBe(1);
+    state().setSpeed(0.5);
+    expect(frames.size).toBe(1);
+  });
 });
