@@ -6,7 +6,7 @@ import { StationCanvas } from "./components/station-canvas";
 import { ConnectionSelector } from "./components/connection-selector";
 import { connectionRuns } from "./data/connection-runs";
 import { stationViewData } from "./data/stationViewData";
-import { formatTime } from "./lib/time";
+import { SimulationClock } from "./components/simulation-clock";
 import { startPlaybackClock } from "./lib/playback-clock";
 import { PlaybackControls } from "./components/playback-controls";
 import { usePlaybackStore } from "./store/usePlaybackStore";
@@ -18,10 +18,6 @@ export default function App() {
     (state) => state.data
   );
 
-  const currentTime = usePlaybackStore(
-    (state) => state.currentTime_s
-  );
-
   useEffect(() => {
     const store = usePlaybackStore.getState();
 
@@ -30,11 +26,6 @@ export default function App() {
       store.loadData(stationViewData);
     }
   }, []);
-
-  const displayedTime = formatTime(
-    currentTime,
-    data?.start_clock_s ?? 0
-  );
 
   return (
     <div className="app-shell">
@@ -104,17 +95,7 @@ export default function App() {
           <aside className="inspector">
 
             {/* SIMULATION TIME */}
-            <section className="panel clock-panel">
-
-              <div className="clock-heading">
-                Simulation clock
-              </div>
-
-              <div className="clock-digits">
-                {displayedTime}
-              </div>
-
-            </section>
+            <SimulationClock />
 
             {/* EMPTY SECTION */}
             <div className="panel" />

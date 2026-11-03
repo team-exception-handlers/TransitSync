@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { stationViewData } from "../../src/data/stationViewData";
 import { startPlaybackClock } from "../../src/lib/playback-clock";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
+import { connectionRuns } from "../../src/data/connection-runs";
 
 describe("playback clock", () => {
   let now = 0;
@@ -106,5 +107,40 @@ describe("playback clock", () => {
     expect(state().currentTime_s).toBe(70.5);
     frameAt(1000);
     expect(state().currentTime_s).toBe(71);
+  });
+  it("shares one frame across multiple consumers and makes cleanup idempotent", () => {
+    const releaseSecond = startPlaybackClock();
+    state().play();
+    expect(frames.size).toBe(1);
+    releaseSecond();
+    releaseSecond();
+    frameAt(1000);
+    expect(state().currentTime_s).toBe(1);
+    expect(frames.size).toBe(1);
+  });
+  it("reanchors running seeks and stops on connection or run replacement", () => {
+    state().setAvailableRuns(connectionRuns);
+    state().play();
+    now = 500;
+    state().seek(85);
+    frameAt(1000);
+    expect(state().currentTime_s).toBe(85.5);
+    state().selectConnection(connectionRuns[0].connections[0].id);
+    expect(state().currentTime_s).toBe(0);
+    expect(state().isPlaying).toBe(false);
+    expect(frames.size).toBe(0);
+    state().play();
+    state().loadData(stationViewData);
+    expect(state().isPlaying).toBe(false);
+    expect(frames.size).toBe(0);
+  });
+  it("rejects bad input atomically while a valid run is playing", () => {
+    state().play();
+    expect(() => state().loadData({})).toThrow();
+    expect(() => state().selectConnection("unavailable")).toThrow("Unknown connection");
+    expect(state().isPlaying).toBe(true);
+    expect(frames.size).toBe(1);
+    frameAt(1000);
+    expect(state().currentTime_s).toBe(1);
   });
 });
