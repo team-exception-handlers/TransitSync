@@ -13,6 +13,12 @@ the scheduled departure when the departing train is late.
 
 M is the group size the controller observes. Once the error model (#39) is in
 place that is an estimate, so this module never sees the true group size.
+
+Limitation: F covers walking time only, not corridor queueing (section 5).
+A group leaves the observation once its last walker reaches the corridor, and
+F already counts walkers who reached the corridor as arrived, so passengers
+still queued there are not counted. N(h) therefore underestimates when the
+corridor is congested.
 """
 
 from collections.abc import Iterable

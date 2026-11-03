@@ -7,6 +7,7 @@ minimum 30 s, so F(t) = 1 - exp(-(t - 30) / 270) for t >= 30.
 
 import math
 
+import numpy as np
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
@@ -51,6 +52,7 @@ def snapshot(*transfers):
         train_id="green_0001",
         station_id="mcgill",
         platform_id="green_mcgill_0",
+        scheduled_departure_s=300.0,
         trains=(),
         platforms=(),
         incoming_transfers=transfers,
@@ -155,6 +157,20 @@ def test_fraction_is_the_count_divided_by_the_group_size():
 def test_expected_caught_rejects_bad_input(group_size, conn_window_s, hold_s, message):
     with pytest.raises(ValueError, match=message):
         expected_caught(group_size, conn_window_s, hold_s, WALK)
+
+
+@pytest.mark.parametrize(
+    "hold_s", [np.int64(30), np.float64(30.0), np.arange(0, 61, 30)[1]]
+)
+def test_numpy_hold_gives_the_same_result_as_a_plain_number(hold_s):
+    # The hold-length search (#43) builds its candidates with np.arange
+    expected = expected_caught(100, 60.0, 30, WALK)
+    assert expected_caught(100, 60.0, hold_s, WALK) == expected
+
+
+def test_numpy_bool_is_rejected():
+    with pytest.raises(ValueError, match="hold_s"):
+        expected_caught(100, 60.0, np.bool_(True), WALK)
 
 
 def test_estimate_measures_the_window_from_feeder_arrival_to_the_decision():

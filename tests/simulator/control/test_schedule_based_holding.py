@@ -102,7 +102,7 @@ def test_schedule_policy_uses_current_departure_in_pipeline(final_stop):
 @pytest.mark.parametrize("onboard_load", [0, 800])
 @pytest.mark.parametrize(
     "transfers",
-    [(), (IncomingTransfer("group-1", "P1", 200, 125, 160),)],
+    [(), (IncomingTransfer("group-1", "P1", 200, 125, 160, 100, 200),)],
 )
 def test_schedule_policy_ignores_transfer_and_load_changes(onboard_load, transfers):
     """An empty or full train requests the same hold, with or without transfers."""
