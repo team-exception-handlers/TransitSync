@@ -200,6 +200,16 @@ body {
   min-height: 0;
 }
 
+.station-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #f9faf7;
+  border-radius: 10px;
+}
+
+.station-message { padding: 20px; color: #5b6168; }
+
 /* RIGHT-HAND LAYOUT */
 
 .inspector {

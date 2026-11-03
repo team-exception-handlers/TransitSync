@@ -1,12 +1,13 @@
 // AI contribution: 50% or more AI-generated
 // @vitest-environment jsdom
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import App from "../../src/App";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
 
 describe("TransitSync application shell", () => {
     beforeEach(() => {
+        vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
         // reset the shared state before rendering the app
         usePlaybackStore.setState({
             data: null,
@@ -17,6 +18,7 @@ describe("TransitSync application shell", () => {
 
     afterEach(() => {
         cleanup();
+        vi.restoreAllMocks();
     });
 
     it("renders the TransitSync branding", () => {
@@ -51,14 +53,15 @@ describe("TransitSync application shell", () => {
         );
     });
 
-    it("renders an empty station-view region", () => {
+    it("renders the required Canvas station-view consumer", () => {
         render(<App />);
 
         const stationRegion = screen.getByRole("region", {
             name: "Station view",
         });
 
-        expect(stationRegion.childElementCount).toBe(0);
+        expect(stationRegion.querySelector("canvas")?.width).toBe(800);
+        expect(screen.getByRole("img").getAttribute("aria-label")).toContain("McGill");
     });
 
     it("renders the simulation clock", () => {

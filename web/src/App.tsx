@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import { PlaybackTimeline } from "./components/PlaybackTimeline";
+import { StationCanvas } from "./components/station-canvas";
 import { stationViewData } from "./data/stationViewData";
 import { formatTime } from "./lib/time";
 import { usePlaybackStore } from "./store/usePlaybackStore";
@@ -83,7 +84,9 @@ export default function App() {
           <section
             className="panel station-region"
             aria-label="Station view"
-          />
+          >
+            <StationCanvas />
+          </section>
 
           {/* RIGHT-HAND PANELS */}
           <aside className="inspector">
