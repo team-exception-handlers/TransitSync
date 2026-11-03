@@ -7,6 +7,9 @@ from simulator.control.interface import DecisionController, HoldAction
 from simulator.control.registry import StrategyRegistry, UnknownStrategyError
 from simulator.control.strategies import STRATEGIES
 from simulator.control.strategies.no_control import NoControlStrategy
+from simulator.control.strategies.schedule_based_holding import (
+    ScheduleBasedHoldingStrategy,
+)
 
 
 class FakeHoldStrategy(DecisionController):
@@ -52,6 +55,12 @@ def test_names_are_sorted():
 def test_built_in_registry_offers_no_control():
     assert "no_control" in STRATEGIES
     assert type(STRATEGIES.build("no_control")) is NoControlStrategy
+
+
+def test_built_in_registry_offers_schedule_based_holding():
+    """Check that selecting 'schedule_based' creates the correct strategy."""
+    assert "schedule_based" in STRATEGIES
+    assert type(STRATEGIES.build("schedule_based")) is ScheduleBasedHoldingStrategy
 
 
 @pytest.mark.parametrize("name", ["headway", "NO_CONTROL", "", None, 3])

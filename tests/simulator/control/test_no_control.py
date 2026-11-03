@@ -36,6 +36,7 @@ def snapshot(trains=(), transfers=()) -> ObservationSnapshot:
         train_id="rem_0001",
         station_id="gare_centrale",
         platform_id="rem_gare_centrale_0",
+        scheduled_departure_s=130.0,
         trains=trains,
         platforms=(PlatformState("rem_gare_centrale_0", 0, None),),
         incoming_transfers=transfers,

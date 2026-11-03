@@ -17,7 +17,10 @@ from zoneinfo import ZoneInfo
 from simulator.control.settings import (
     ControlSettings,
     ControlSettingsError,
+    OperatingRulesConfig,
+    OperatingRulesError,
     parse_control_settings,
+    parse_operating_rules,
 )
 
 WORKLOAD_LIMIT_HOURS = 100
@@ -45,6 +48,7 @@ SCENARIO_FIELDS = frozenset(
         "resolved_start_utc",
         "resolved_start_utc_offset",
         "control",
+        "operating_rules",
     }
 )
 
@@ -81,6 +85,7 @@ class Scenario:
     resolved_start: datetime
     # Strategy selection (#45); defaults to no control so older files load
     control: ControlSettings = ControlSettings()
+    operating_rules: OperatingRulesConfig = OperatingRulesConfig()
 
     @property
     def start_utc(self) -> datetime:
@@ -102,6 +107,7 @@ class Scenario:
             "resolved_start_utc": self.start_utc.isoformat(),
             "resolved_start_utc_offset": _offset_text(self.resolved_start),
             "control": self.control.to_dict(),
+            "operating_rules": self.operating_rules.to_dict(),
         }
 
 
@@ -190,6 +196,10 @@ def _scenario_from_mapping(
     except ControlSettingsError as error:
         raise ScenarioValidationError(str(error)) from error
     try:
+        operating_rules = parse_operating_rules(values.get("operating_rules"))
+    except OperatingRulesError as error:
+        raise ScenarioValidationError(str(error)) from error
+    try:
         resolved_start = _resolve_local_start(
             service_date, start_time, timezone, dst_fold
         )
@@ -212,6 +222,7 @@ def _scenario_from_mapping(
         dst_fold=dst_fold,
         resolved_start=resolved_start,
         control=control,
+        operating_rules=operating_rules,
     )
 
 

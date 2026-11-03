@@ -86,6 +86,8 @@ class IncomingTransfer:
 class ObservationSnapshot:
     """Everything a strategy sees when ``train_id`` is ready to leave.
 
+    ``scheduled_departure_s`` is this stop's timetable departure in seconds,
+    including at a final stop. ``TrainState`` describes each train's next stop.
     Raises ``ValueError`` if a collection is not a tuple.
     """
 
@@ -93,6 +95,7 @@ class ObservationSnapshot:
     train_id: str
     station_id: str
     platform_id: str
+    scheduled_departure_s: float
     trains: tuple[TrainState, ...]
     platforms: tuple[PlatformState, ...]
     incoming_transfers: tuple[IncomingTransfer, ...]
