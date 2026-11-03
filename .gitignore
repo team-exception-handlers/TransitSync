@@ -9,4 +9,17 @@ __pycache__/
 .hypothesis/
 
 # Local raw GTFS files
-data/
+/data/
+
+# React / Vite Frontend
+/web/node_modules/
+/web/dist/
+/web/dist-ssr/
+/web/coverage/
+*.tsbuildinfo
+/web/*.log
+/web/npm-debug.log*
+/web/yarn-debug.log*
+/web/yarn-error.log*
+/web/pnpm-debug.log*
+/web/.vite/

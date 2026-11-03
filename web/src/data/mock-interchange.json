@@ -1,0 +1,323 @@
+{
+  "schema_version": 1,
+  "interchange": {
+    "id": "mcgill",
+    "name": "McGill — REM ↔ Green Line"
+  },
+  "start_clock_s": 27600,
+  "duration_s": 360,
+  "map": {
+    "width": 800,
+    "height": 600
+  },
+  "stations": [
+    {
+      "id": "rem_mcgill",
+      "name": "McGill REM",
+      "line_id": "rem",
+      "position": {
+        "x": 230,
+        "y": 180
+      }
+    },
+    {
+      "id": "metro_mcgill",
+      "name": "McGill Métro",
+      "line_id": "green",
+      "position": {
+        "x": 565,
+        "y": 495
+      }
+    }
+  ],
+  "platform_layouts": {
+    "rem_mcgill_0": {
+      "station_id": "rem_mcgill",
+      "position": {
+        "x": 230,
+        "y": 135
+      }
+    },
+    "rem_mcgill_1": {
+      "station_id": "rem_mcgill",
+      "position": {
+        "x": 230,
+        "y": 225
+      }
+    },
+    "green_mcgill_0": {
+      "station_id": "metro_mcgill",
+      "position": {
+        "x": 565,
+        "y": 450
+      }
+    },
+    "green_mcgill_1": {
+      "station_id": "metro_mcgill",
+      "position": {
+        "x": 565,
+        "y": 535
+      }
+    }
+  },
+  "corridors": [
+    {
+      "id": "mcgill_rem_green_transfer",
+      "label": "Transfer corridor",
+      "from_platform_id": "rem_mcgill_0",
+      "to_platform_id": "green_mcgill_0",
+      "path": [
+        { "x": 365, "y": 135 },
+        { "x": 405, "y": 135 },
+        { "x": 405, "y": 310 },
+        { "x": 735, "y": 310 },
+        { "x": 735, "y": 450 },
+        { "x": 705, "y": 450 }
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "mcgill-rem-green",
+      "label": "McGill",
+      "from_platform_id": "rem_mcgill_0",
+      "to_platform_id": "green_mcgill_0",
+      "corridor_id": "mcgill_rem_green_transfer"
+    }
+  ],
+  "passenger_tracks": [
+    {
+      "passenger_id": "p-001",
+      "group_id": "transfer-pulse-001",
+      "connection_id": "mcgill-rem-green",
+      "samples": [
+        {
+          "time_s": 70,
+          "position": { "x": 365, "y": 135 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 95,
+          "position": { "x": 405, "y": 135 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 115,
+          "position": { "x": 405, "y": 310 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 125,
+          "position": { "x": 405, "y": 310 },
+          "phase": "queued"
+        },
+        {
+          "time_s": 140,
+          "position": { "x": 405, "y": 310 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 150,
+          "position": { "x": 735, "y": 310 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 160,
+          "position": { "x": 735, "y": 450 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 165,
+          "position": { "x": 655, "y": 450 },
+          "phase": "waiting"
+        },
+        {
+          "time_s": 170,
+          "position": { "x": 655, "y": 450 },
+          "phase": "boarded"
+        }
+      ]
+    },
+    {
+      "passenger_id": "p-002",
+      "group_id": "transfer-pulse-001",
+      "connection_id": "mcgill-rem-green",
+      "samples": [
+        {
+          "time_s": 78,
+          "position": { "x": 365, "y": 135 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 105,
+          "position": { "x": 405, "y": 135 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 124,
+          "position": { "x": 405, "y": 310 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 130,
+          "position": { "x": 405, "y": 310 },
+          "phase": "queued"
+        },
+        {
+          "time_s": 155,
+          "position": { "x": 405, "y": 310 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 190,
+          "position": { "x": 735, "y": 310 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 200,
+          "position": { "x": 735, "y": 450 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 210,
+          "position": { "x": 655, "y": 450 },
+          "phase": "waiting"
+        },
+        {
+          "time_s": 235,
+          "position": { "x": 655, "y": 450 },
+          "phase": "boarded"
+        }
+      ]
+    },
+    {
+      "passenger_id": "p-003",
+      "group_id": "transfer-pulse-001",
+      "connection_id": "mcgill-rem-green",
+      "samples": [
+        {
+          "time_s": 85,
+          "position": { "x": 365, "y": 135 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 110,
+          "position": { "x": 405, "y": 135 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 128,
+          "position": { "x": 405, "y": 310 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 135,
+          "position": { "x": 405, "y": 310 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 153,
+          "position": { "x": 735, "y": 310 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 164,
+          "position": { "x": 735, "y": 450 },
+          "phase": "walking"
+        },
+        {
+          "time_s": 168,
+          "position": { "x": 655, "y": 450 },
+          "phase": "waiting"
+        },
+        {
+          "time_s": 170,
+          "position": { "x": 655, "y": 450 },
+          "phase": "boarded"
+        }
+      ]
+    }
+  ],
+  "train_events": [
+    {
+      "event_type": "train_arrival",
+      "train_id": "rem-001",
+      "station_id": "STA_ZCD_BT_QUAI_01_MCG",
+      "platform_id": "rem_mcgill_0",
+      "time_s": 65,
+      "scheduled_s": 60
+    },
+    {
+      "event_type": "train_departure",
+      "train_id": "rem-001",
+      "station_id": "STA_ZCD_BT_QUAI_01_MCG",
+      "platform_id": "rem_mcgill_0",
+      "time_s": 100,
+      "scheduled_s": 95
+    },
+    {
+      "event_type": "train_arrival",
+      "train_id": "metro-001",
+      "station_id": "32",
+      "platform_id": "green_mcgill_0",
+      "time_s": 145,
+      "scheduled_s": 145
+    },
+    {
+      "event_type": "train_departure",
+      "train_id": "metro-001",
+      "station_id": "32",
+      "platform_id": "green_mcgill_0",
+      "time_s": 175,
+      "scheduled_s": 170
+    },
+    {
+      "event_type": "train_arrival",
+      "train_id": "rem-002",
+      "station_id": "STA_ZCD_BT_QUAI_02_MCG",
+      "platform_id": "rem_mcgill_1",
+      "time_s": 195,
+      "scheduled_s": 195
+    },
+    {
+      "event_type": "train_departure",
+      "train_id": "rem-002",
+      "station_id": "STA_ZCD_BT_QUAI_02_MCG",
+      "platform_id": "rem_mcgill_1",
+      "time_s": 230,
+      "scheduled_s": 225
+    },
+    {
+      "event_type": "train_arrival",
+      "train_id": "metro-002",
+      "station_id": "32",
+      "platform_id": "green_mcgill_0",
+      "time_s": 220,
+      "scheduled_s": 220
+    },
+    {
+      "event_type": "train_departure",
+      "train_id": "metro-002",
+      "station_id": "32",
+      "platform_id": "green_mcgill_0",
+      "time_s": 250,
+      "scheduled_s": 245
+    },
+    {
+      "event_type": "train_arrival",
+      "train_id": "metro-003",
+      "station_id": "32",
+      "platform_id": "green_mcgill_1",
+      "time_s": 285,
+      "scheduled_s": 285
+    },
+    {
+      "event_type": "train_departure",
+      "train_id": "metro-003",
+      "station_id": "32",
+      "platform_id": "green_mcgill_1",
+      "time_s": 315,
+      "scheduled_s": 310
+    }
+  ]
+}
