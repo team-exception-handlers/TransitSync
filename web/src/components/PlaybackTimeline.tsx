@@ -1,3 +1,4 @@
+// AI contribution: 50% or more AI-generated
 import { formatTime } from "../lib/time";
 import { usePlaybackStore } from "../store/usePlaybackStore";
 

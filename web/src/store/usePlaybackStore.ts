@@ -1,3 +1,4 @@
+// AI contribution: Below 50% AI-generated
 import { create } from "zustand";
 
 import { getNetworkSnapshot } from "../lib/getNetworkSnapshot";
