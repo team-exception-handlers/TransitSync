@@ -8,6 +8,7 @@ error names the field.
 """
 
 import math
+import numbers
 
 
 def finite_number(label: str, value: object, minimum: float | None = None) -> float:
@@ -15,15 +16,17 @@ def finite_number(label: str, value: object, minimum: float | None = None) -> fl
 
     Args:
         label: field name used in the error message.
-        value: the value to check; ``int`` and ``float`` are accepted.
+        value: the value to check. Any real number is accepted, including
+            numpy scalars such as the candidate holds from ``np.arange``.
         minimum: smallest allowed value, inclusive, or ``None`` for no bound.
 
     Raises:
         ValueError: ``value`` is not a number, is NaN or infinite, or is below
             ``minimum``.
     """
-    # bool is a subclass of int, so it is excluded explicitly
-    if isinstance(value, bool) or not isinstance(value, int | float):
+    # bool is registered as numbers.Real, so it is excluded explicitly;
+    # np.bool_ is not registered, so it already fails the second check
+    if isinstance(value, bool) or not isinstance(value, numbers.Real):
         raise ValueError(f"{label} must be a number")
     if not math.isfinite(value):
         raise ValueError(f"{label} must be finite, got {value}")

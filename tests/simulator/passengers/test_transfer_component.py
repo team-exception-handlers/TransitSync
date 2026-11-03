@@ -10,6 +10,12 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from simulator.control.expected_arrivals import (
+    total_expected_caught,
+    transfers_to_platform,
+)
+from simulator.control.interface import ObservationSnapshot
+from simulator.control.walking_cdf import ShiftedExponentialCdf
 from simulator.engine.event_log import PASSENGER_EVENT_TYPES
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import (
@@ -34,6 +40,8 @@ from simulator.passengers import (
 from simulator.passengers.platform_queue import PlatformQueue
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
+
+WALK = ShiftedExponentialCdf(mean_s=300.0, min_s=30.0)
 
 
 def route(**overrides):
@@ -487,3 +495,33 @@ def test_incoming_transfers_keep_group_size_and_feeder_time_as_walkers_leave(
     assert group.passenger_count == 1
     assert group.group_size == 3
     assert group.feeder_arrival_s == 100
+
+
+def test_passengers_queued_in_the_corridor_are_not_yet_counted(monkeypatch):
+    # Known gap (PR #154 review): expected arrivals ignore corridor queueing.
+    # Fix by adding queue delay to the estimate, then update this test.
+    component, _ = fixed_component(
+        monkeypatch, walks=(20, 20, 20), routes=[route(corridor=CorridorQueue(1))]
+    )
+    scheduler = Scheduler()
+    scheduler.schedule(feeder(100))
+    # All three reach the corridor at 120; one passage a minute lets them onto
+    # the platform at 120, 180 and 240
+    reached = arrivals(advance(component, scheduler, 150))
+    assert [e.time_s for e in reached] == [120]
+    assert sorted(p.passage_s for p in component.passages.values()) == [120, 180, 240]
+
+    observation = ObservationSnapshot(
+        time_s=150.0,
+        train_id="green-1",
+        station_id="mcgill",
+        platform_id="green",
+        scheduled_departure_s=150.0,
+        trains=(),
+        platforms=(),
+        incoming_transfers=component.incoming_transfers(),
+    )
+    # Two passengers are still queued, yet a 60 s hold is expected to catch none
+    estimates = transfers_to_platform(observation)
+    assert estimates == ()
+    assert total_expected_caught(estimates, 60.0, WALK) == 0
