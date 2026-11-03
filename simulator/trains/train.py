@@ -1,5 +1,6 @@
 # AI contribution: 50% or more AI-generated
 
+import copy
 import math
 from dataclasses import dataclass, field
 
@@ -48,6 +49,7 @@ class Train:
     line_id: str = ""
     return_trips: tuple[tuple[ScheduledStop, ...], ...] = ()
     current_trip_index: int = field(default=0, init=False)
+    _hold_delay_s: float = field(default=0.0, init=False, repr=False)
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -115,6 +117,22 @@ class Train:
     def current_stop(self) -> ScheduledStop:
         return self.schedule[self.current_stop_index]
 
+    @property
+    def disruption_delay_s(self) -> float:
+        """Return this train's disruption delay in seconds, excluding holds."""
+        return max(0.0, self.generated_delay_s - self._hold_delay_s)
+
+    def disruption_delay_at(
+        self, actual_s: float, scheduled_s: float, *, inherited_wait_s: float = 0.0
+    ) -> float:
+        """Calculate arrival disruption delay without changing the train.
+
+        Times are in seconds. Raises ``ValueError`` for invalid times.
+        """
+        projected = copy.copy(self)
+        projected.update_delay(actual_s, scheduled_s, inherited_wait_s=inherited_wait_s)
+        return projected.disruption_delay_s
+
     def board(self, count: int) -> None:
         """Add passengers without exceeding capacity."""
         if isinstance(count, bool) or not isinstance(count, int):
@@ -136,17 +154,33 @@ class Train:
         self.onboard_load -= count
 
     def update_delay(
-        self, actual_s: float, scheduled_s: float, *, inherited_wait_s: float = 0.0
+        self,
+        actual_s: float,
+        scheduled_s: float,
+        *,
+        inherited_wait_s: float = 0.0,
+        hold_delay_s: float = 0.0,
     ) -> None:
-        """Update schedule deviation: positive means late"""
+        """Update schedule delay and its causes, in seconds.
 
-        values = (actual_s, scheduled_s, inherited_wait_s)
+        Positive delay means late; negative means early.
+        Only added lateness counts toward holding or inherited waiting.
+        Recovery clears inherited delay first, then reduces hold and
+        disruption delay by the same fraction.
+        Raises ``ValueError`` for nonfinite times or negative cause durations.
+        """
+
+        if isinstance(hold_delay_s, bool) or not isinstance(hold_delay_s, int | float):
+            raise ValueError("Hold delay must be a number of seconds")
+        values = (actual_s, scheduled_s, inherited_wait_s, hold_delay_s)
 
         if not all(math.isfinite(value) for value in values):
             raise ValueError("Delay values must be finite")
 
         if inherited_wait_s < 0:
             raise ValueError("Inherited waiting time cannot be negative")
+        if hold_delay_s < 0:
+            raise ValueError("Hold delay cannot be negative")
 
         previous_delay = max(0.0, self.current_delay)
         new_delay = max(0.0, actual_s - scheduled_s)
@@ -158,18 +192,22 @@ class Train:
 
             self.inherited_delay_s += inherited
             self.generated_delay_s += change - inherited
+            # Holding cannot replace existing disruption or inherited delay.
+            self._hold_delay_s += min(hold_delay_s, change - inherited)
 
         elif change < 0:
-            recovered = -change
-
-            inherited_recovery = min(self.inherited_delay_s, recovered)
-
-            self.inherited_delay_s -= inherited_recovery
-            recovered -= inherited_recovery
-
-            self.generated_delay_s = max(0.0, self.generated_delay_s - recovered)
+            self._recover_delay(new_delay)
 
         self.current_delay = actual_s - scheduled_s
+
+    def _recover_delay(self, remaining_s: float) -> None:
+        """Reduce inherited delay first, then hold and disruption delay together."""
+        generated = min(self.generated_delay_s, remaining_s)
+        if self.generated_delay_s > 0:
+            # Reduce hold and disruption delay by the same fraction.
+            self._hold_delay_s *= generated / self.generated_delay_s
+        self.generated_delay_s = generated
+        self.inherited_delay_s = remaining_s - generated
 
     def advance_stop(self) -> bool:
         """Move to the next planned stop, if one exists"""
@@ -194,7 +232,5 @@ class Train:
         self.current_trip_index += 1
         self.current_stop_index = 0
         self.current_delay = max(0.0, self.current_delay - self.layover_slack)
-        # Recover inherited delay first; the two components still sum to total.
-        self.generated_delay_s = min(self.generated_delay_s, self.current_delay)
-        self.inherited_delay_s = self.current_delay - self.generated_delay_s
+        self._recover_delay(self.current_delay)
         return self.current_stop.arrival_s + self.current_delay

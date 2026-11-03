@@ -1,5 +1,9 @@
 # AI contribution: 50% or more AI-generated
-"""Connect trains, passenger queues and disruptions to the event engine."""
+"""Connect trains, passenger queues and disruptions to the event engine.
+
+Exceeds 500 lines to coordinate movement, turnarounds, platform clearance,
+holds, disruptions and boarding through shared event state.
+"""
 
 import math
 from collections import defaultdict, deque
@@ -87,6 +91,7 @@ class TrainComponent:
         # Asked at every DepartureDue; no control unless a strategy is given
         self.decision = decision or DecisionPipeline()
         self._hold_s: dict[Visit, float] = {}
+        self._unheld_ready_s: dict[Visit, float] = {}
 
         for train in trains:
             if train.id in self.trains:
@@ -183,7 +188,9 @@ class TrainComponent:
                 station_id=stop.station_id,
                 platform_id=platform,
                 scheduled_s=stop.arrival_s,
-                disruption_delay_s=train.generated_delay_s + injected_s,
+                disruption_delay_s=train.disruption_delay_at(
+                    safe_s, stop.arrival_s, inherited_wait_s=self._arrival_wait[visit]
+                ),
             )
         )
         self._arrival_queued.add(visit)
@@ -386,6 +393,7 @@ class TrainComponent:
             if hold.applied_s > 0:
                 # The train leaves at HoldEnd, still subject to the minimum gap
                 self._hold_s[visit] = hold.applied_s
+                self._unheld_ready_s[visit] = event.time_s
                 scheduler.schedule(
                     HoldEnd(time_s=event.time_s + hold.applied_s, **where)
                 )
@@ -420,7 +428,6 @@ class TrainComponent:
             scheduler.now,
             self._last_departure.get(platform, -math.inf) + self.minimum_gap_s,
         )
-        inherited_wait_s = max(0.0, safe_s - dispatch_s)
         if safe_s > scheduler.now:
             scheduler.schedule(
                 DepartureClearance(
@@ -432,19 +439,41 @@ class TrainComponent:
             )
             self._clearance_queued.add(visit)
             return
+        self._record_departure(visit, safe_s, scheduler)
+
+    def _record_departure(
+        self, visit: Visit, actual_s: float, scheduler: Scheduler
+    ) -> None:
+        train = self.trains[visit[0]]
+        stop = self._stop(visit)
+        # Keep the original time to avoid rounding errors at suspension boundaries.
+        ready_s = self._unheld_ready_s.pop(visit, self._ready_departures[visit])
+        # Check when dispatch would be allowed without the hold.
+        dispatch_s = ready_s
+        if visit[2] == 0:
+            dispatch_s = dispatch_ready_s(train.line_id, ready_s, self.suspensions)
+        clearance_s = max(
+            dispatch_s,
+            self._last_departure.get(stop.platform_id, -math.inf) + self.minimum_gap_s,
+        )
+        # Early waiting contributes no lateness.
+        dispatch_delay = max(0.0, dispatch_s - stop.departure_s)
+        clearance_delay = max(0.0, clearance_s - stop.departure_s)
+        # Split delay between train separation and extra holding.
         train.update_delay(
-            actual_s=safe_s,
+            actual_s=actual_s,
             scheduled_s=stop.departure_s,
-            inherited_wait_s=inherited_wait_s,
+            inherited_wait_s=clearance_delay - dispatch_delay,
+            hold_delay_s=max(0.0, actual_s - stop.departure_s) - clearance_delay,
         )
         scheduler.schedule(
             TrainDeparture(
-                time_s=safe_s,
+                time_s=actual_s,
                 train_id=train.id,
                 station_id=stop.station_id,
-                platform_id=platform,
+                platform_id=stop.platform_id,
                 scheduled_s=stop.departure_s,
-                disruption_delay_s=train.generated_delay_s,
+                disruption_delay_s=train.disruption_delay_s,
                 hold_s=self._hold_s.pop(visit, 0.0),
                 boarded_count=self._boarded[visit],
                 alighted_count=0,
