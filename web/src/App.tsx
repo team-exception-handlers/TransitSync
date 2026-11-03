@@ -9,6 +9,7 @@ import { stationViewData } from "./data/stationViewData";
 import { SimulationClock } from "./components/simulation-clock";
 import { startPlaybackClock } from "./lib/playback-clock";
 import { PlaybackControls } from "./components/playback-controls";
+import { SpeedSelector } from "./components/speed-selector";
 import { usePlaybackStore } from "./store/usePlaybackStore";
 
 
@@ -109,6 +110,7 @@ export default function App() {
           <section className="panel playback-region">
             <PlaybackControls />
             <PlaybackTimeline />
+            <SpeedSelector />
 
           </section>
 

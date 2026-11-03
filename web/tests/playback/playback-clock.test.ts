@@ -143,4 +143,43 @@ describe("playback clock", () => {
     frameAt(1000);
     expect(state().currentTime_s).toBe(1);
   });
+  it.each([0.5, 1, 2, 10])("scales elapsed wall time by %s without changing recorded results", (speed) => {
+    const original = structuredClone(stationViewData);
+    state().setSpeed(speed);
+    state().play();
+    frameAt(85000 / speed);
+    expect(state().currentTime_s).toBeCloseTo(85);
+    expect(state().snapshot()).toEqual(state().getSnapshotAt(85));
+    expect(stationViewData).toEqual(original);
+  });
+  it("changes speed mid-frame at the old rate without interrupting playback", () => {
+    state().play();
+    now = 500;
+    state().setSpeed(10);
+    expect(state().currentTime_s).toBe(0.5);
+    expect(state().isPlaying).toBe(true);
+    expect(frames.size).toBe(1);
+    frameAt(1000);
+    expect(state().currentTime_s).toBe(5.5);
+  });
+  it("remembers a speed chosen while paused and preserves it across connections", () => {
+    state().seek(80);
+    state().setSpeed(2);
+    frameAt(5000);
+    expect(state().currentTime_s).toBe(80);
+    state().play();
+    frameAt(6000);
+    expect(state().currentTime_s).toBe(82);
+    state().setAvailableRuns(connectionRuns);
+    state().selectConnection(connectionRuns[0].connections[0].id);
+    expect(state().speed).toBe(2);
+    expect(state().currentTime_s).toBe(0);
+  });
+  it.each([0, -1, 3, NaN, Infinity])("rejects unsupported speed %s atomically", (speed) => {
+    state().play();
+    expect(() => state().setSpeed(speed)).toThrow("Unsupported playback speed");
+    expect(state().speed).toBe(1);
+    expect(state().isPlaying).toBe(true);
+    expect(frames.size).toBe(1);
+  });
 });

@@ -6,6 +6,7 @@ import { getNetworkSnapshot } from "../lib/getNetworkSnapshot";
 import { parseStationViewData } from "../lib/validateStationView";
 
 import type { NetworkSnapshot, StationViewData } from "../types/stationView";
+import { PLAYBACK_SPEEDS, type PlaybackSpeed } from "../types/playback-speed";
 
 interface StationViewStore {
   data: StationViewData | null;
@@ -16,6 +17,8 @@ interface StationViewStore {
   currentTime_s: number;
   selectedConnectionId: string | null;
   isPlaying: boolean;
+  speed: PlaybackSpeed;
+  setSpeed: (speed: number) => void;
   // Monotonic wall time, in milliseconds; null while paused.
   updatedAt_ms: number | null;
   play: () => void;
@@ -62,7 +65,7 @@ function clampTime(
 function positionNow(state: StationViewStore, now_ms: number): number {
   if (!state.isPlaying || state.updatedAt_ms === null) return state.currentTime_s;
   const elapsed_s = Math.max(0, now_ms - state.updatedAt_ms) / 1000;
-  return clampTime(state.currentTime_s + elapsed_s, state.data?.duration_s ?? 0);
+  return clampTime(state.currentTime_s + elapsed_s * state.speed, state.data?.duration_s ?? 0);
 }
 
 export const usePlaybackStore = create<StationViewStore>(
@@ -73,6 +76,7 @@ export const usePlaybackStore = create<StationViewStore>(
     currentTime_s: 0,
     selectedConnectionId: null,
     isPlaying: false,
+    speed: 1,
     updatedAt_ms: null,
 
     // Validate the entire catalog before publishing it, so failure is atomic.
@@ -90,6 +94,7 @@ export const usePlaybackStore = create<StationViewStore>(
         data,
         currentTime_s: 0,
         isPlaying: false,
+        speed: 1,
         updatedAt_ms: null,
         selectedConnectionId:
           data.connections[0]?.id ?? null,
@@ -128,6 +133,20 @@ export const usePlaybackStore = create<StationViewStore>(
       const now = performance.now();
       set({ currentTime_s: Math.max(0, positionNow(state, now) - 30),
         updatedAt_ms: state.isPlaying ? now : null });
+    },
+
+    // Settle at the OLD rate before selecting the NEW rate, even between frames.
+    setSpeed: (speed) => {
+      if (!PLAYBACK_SPEEDS.some((allowed) => allowed === speed)) {
+        throw new Error(`Unsupported playback speed: ${speed}`);
+      }
+      const state = get();
+      if (state.speed === speed) return;
+      const now = performance.now();
+      const currentTime_s = positionNow(state, now);
+      const isPlaying = state.isPlaying && currentTime_s < (state.data?.duration_s ?? 0);
+      set({ speed: speed as PlaybackSpeed, currentTime_s, isPlaying,
+        updatedAt_ms: isPlaying ? now : null });
     },
 
     // A frame only moves the presentation clock; recorded results stay immutable.

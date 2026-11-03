@@ -314,6 +314,27 @@ button:disabled { cursor: default; opacity: 0.45; }
 .playback-button.primary { background: #16191d; border-color: #16191d; color: white; }
 .playback-button.rewind { min-width: 83px; }
 .playback-button:hover:not(:disabled) { filter: brightness(0.9); }
+.speed-selector { display: flex; align-items: center; gap: 10px; }
+.speed-selector .segmented-control { width: 208px; flex-shrink: 0; }
+.speed-selector button { flex: 1; padding: 0 12px; }
+.playback-timeline { min-width: 0; }
+
+@media (max-width: 1400px) {
+  .playback-region { flex-wrap: wrap; height: auto; }
+  .content { grid-template-rows: minmax(650px, 1fr) auto; }
+  .speed-selector { margin-left: auto; }
+  .timeline-clock { min-width: 180px; }
+  .playback-timeline { flex: 1; }
+}
+@media (max-width: 660px) {
+  .topbar { padding: 12px 16px; gap: 8px; }
+  .connection-selector { width: 100%; }
+  .connection-selector button { width: 100%; justify-content: flex-start; }
+  .playback-region { padding: 12px; }
+  .playback-timeline { flex-basis: 100%; flex-wrap: wrap; gap: 12px; }
+  .timeline-container { flex-basis: 100%; }
+  .content { grid-template-rows: auto auto auto; }
+}
 
 .playback-timeline {
   width: 100%;
