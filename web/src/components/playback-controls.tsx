@@ -1,0 +1,23 @@
+// AI contribution: 50% or more AI-generated
+/** Figma Play/Pause toggle reads and changes the real shared playback state. */
+import { usePlaybackStore } from "../store/usePlaybackStore";
+
+/** Keep native button behavior and accessible labels for icon-only actions. */
+export function PlaybackControls() {
+  const data = usePlaybackStore((state) => state.data);
+  const time = usePlaybackStore((state) => state.currentTime_s);
+  const playing = usePlaybackStore((state) => state.isPlaying);
+  const play = usePlaybackStore((state) => state.play);
+  const pause = usePlaybackStore((state) => state.pause);
+  const label = playing ? "Pause" : "Play";
+
+  return (
+    <div className="playback-controls" role="group" aria-label="Playback controls">
+      <button type="button" className="playback-button primary" aria-label={label}
+        title={label} disabled={!data || (!playing && time >= data.duration_s)}
+        onClick={playing ? pause : play}>
+        <img src={`/playback/${playing ? "pause" : "play"}.svg`} alt="" width="18" height="18" />
+      </button>
+    </div>
+  );
+}

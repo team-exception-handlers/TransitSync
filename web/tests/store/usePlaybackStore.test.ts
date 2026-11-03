@@ -131,13 +131,10 @@ describe("usePlaybackStore", () => {
         }).toThrow("Unknown connection");
     });
 
-    it("does not implement playback controls assigned to Person 8", () => {
+    it("loads a run paused at its initial position", () => {
         const state = usePlaybackStore.getState();
 
-        expect(state).not.toHaveProperty("play");
-        expect(state).not.toHaveProperty("pause");
-        expect(state).not.toHaveProperty("rewind30");
-        expect(state).not.toHaveProperty("setSpeed");
-        expect(state).not.toHaveProperty("advance");
+        expect(state.isPlaying).toBe(false);
+        expect(state.updatedAt_ms).toBeNull();
     });
 });

@@ -7,10 +7,13 @@ import { ConnectionSelector } from "./components/connection-selector";
 import { connectionRuns } from "./data/connection-runs";
 import { stationViewData } from "./data/stationViewData";
 import { formatTime } from "./lib/time";
+import { startPlaybackClock } from "./lib/playback-clock";
+import { PlaybackControls } from "./components/playback-controls";
 import { usePlaybackStore } from "./store/usePlaybackStore";
 
 
 export default function App() {
+  useEffect(startPlaybackClock, []);
   const data = usePlaybackStore(
     (state) => state.data
   );
@@ -123,7 +126,7 @@ export default function App() {
 
           {/* PLAYBACK TIMELINE */}
           <section className="panel playback-region">
-
+            <PlaybackControls />
             <PlaybackTimeline />
 
           </section>

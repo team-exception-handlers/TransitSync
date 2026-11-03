@@ -15,6 +15,12 @@ interface StationViewStore {
   // current position in the run, in seconds
   currentTime_s: number;
   selectedConnectionId: string | null;
+  isPlaying: boolean;
+  // Monotonic wall time, in milliseconds; null while paused.
+  updatedAt_ms: number | null;
+  play: () => void;
+  pause: () => void;
+  advance: () => void;
 
   // load simulation data
   loadData: (data: unknown) => void;
@@ -51,6 +57,13 @@ function clampTime(
   );
 }
 
+/** Convert elapsed wall milliseconds into run seconds, clamped at the run end. */
+function positionNow(state: StationViewStore, now_ms: number): number {
+  if (!state.isPlaying || state.updatedAt_ms === null) return state.currentTime_s;
+  const elapsed_s = Math.max(0, now_ms - state.updatedAt_ms) / 1000;
+  return clampTime(state.currentTime_s + elapsed_s, state.data?.duration_s ?? 0);
+}
+
 export const usePlaybackStore = create<StationViewStore>(
   (set, get) => ({
     // INITIAL STATE
@@ -58,6 +71,8 @@ export const usePlaybackStore = create<StationViewStore>(
     availableRuns: [],
     currentTime_s: 0,
     selectedConnectionId: null,
+    isPlaying: false,
+    updatedAt_ms: null,
 
     // Validate the entire catalog before publishing it, so failure is atomic.
     setAvailableRuns: (runs) => {
@@ -73,6 +88,8 @@ export const usePlaybackStore = create<StationViewStore>(
       set({
         data,
         currentTime_s: 0,
+        isPlaying: false,
+        updatedAt_ms: null,
         selectedConnectionId:
           data.connections[0]?.id ?? null,
       });
@@ -80,12 +97,36 @@ export const usePlaybackStore = create<StationViewStore>(
 
     // seeking
     seek: (time_s) => {
-      set((state) => ({
-        currentTime_s: clampTime(
-          time_s,
-          state.data?.duration_s ?? 0
-        ),
-      }));
+      set((state) => {
+        const duration = state.data?.duration_s ?? 0;
+        const currentTime_s = clampTime(time_s, duration);
+        const isPlaying = state.isPlaying && currentTime_s < duration;
+        return { currentTime_s, isPlaying, updatedAt_ms: isPlaying ? performance.now() : null };
+      });
+    },
+
+    // Repeated Play is a no-op, including its wall-time anchor.
+    play: () => {
+      const state = get();
+      if (state.isPlaying || !state.data || state.currentTime_s >= state.data.duration_s) return;
+      set({ isPlaying: true, updatedAt_ms: performance.now() });
+    },
+
+    // Settle the fraction since the last frame before freezing the display.
+    pause: () => {
+      const state = get();
+      if (!state.isPlaying) return;
+      set({ currentTime_s: positionNow(state, performance.now()), isPlaying: false, updatedAt_ms: null });
+    },
+
+    // A frame only moves the presentation clock; recorded results stay immutable.
+    advance: () => {
+      const state = get();
+      if (!state.isPlaying || !state.data) return;
+      const now = performance.now();
+      const currentTime_s = positionNow(state, now);
+      const isPlaying = currentTime_s < state.data.duration_s;
+      set({ currentTime_s, isPlaying, updatedAt_ms: isPlaying ? now : null });
     },
 
     selectConnection: (connectionId) => {
@@ -109,6 +150,8 @@ export const usePlaybackStore = create<StationViewStore>(
       set({
         data,
         currentTime_s: 0,
+        isPlaying: false,
+        updatedAt_ms: null,
         selectedConnectionId: connectionId,
       });
     },
