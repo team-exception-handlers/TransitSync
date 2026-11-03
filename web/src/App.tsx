@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { PlaybackTimeline } from "./components/PlaybackTimeline";
 import { StationCanvas } from "./components/station-canvas";
+import { ConnectionSelector } from "./components/connection-selector";
 import { stationViewData } from "./data/stationViewData";
 import { formatTime } from "./lib/time";
 import { usePlaybackStore } from "./store/usePlaybackStore";
@@ -59,6 +60,7 @@ export default function App() {
 
         </div>
 
+        <ConnectionSelector />
       </header>
 
       {/* APPLICATION WORKSPACE */}

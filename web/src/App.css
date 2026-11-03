@@ -42,13 +42,14 @@ body {
 /* HEADER */
 
 .topbar {
-  height: 73px;
   min-height: 73px;
 
   display: flex;
   align-items: center;
 
   padding: 0 24px;
+  gap: 24px;
+  flex-wrap: wrap;
 
   background-color: #ffffff;
 
@@ -209,6 +210,37 @@ body {
 }
 
 .station-message { padding: 20px; color: #5b6168; }
+
+/* Segmented controls share Figma's 52px group and 44px touch targets. */
+.segmented-control {
+  display: flex;
+  align-items: center;
+  padding: 3px;
+  border: 1px solid #d8dbd5;
+  border-radius: 10px;
+  background: #fff;
+}
+.segmented-control button {
+  min-height: 44px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: #3d434a;
+  font: 500 13px "IBM Plex Sans", Arial, sans-serif;
+  cursor: pointer;
+}
+.segmented-control button[aria-pressed="true"] { background: #16191d; color: white; }
+button:focus-visible { outline: 3px solid #4b96dd; outline-offset: 3px; }
+button:disabled { cursor: default; opacity: 0.45; }
+.segmented-control button:hover:not(:disabled):not([aria-pressed="true"]) { background: #ecede9; }
+.connection-selector { flex-wrap: wrap; margin: 8px 0; }
+.connection-selector button { display: flex; align-items: center; gap: 8px; padding: 0 14px; }
+.connection-line { font-size: 10px; text-transform: capitalize; }
+.line-swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+.line-swatch.rem { background: #84b819; }
+.line-swatch.orange { background: #f08123; }
+.line-swatch.green { background: #00923f; }
+.line-swatch.blue { background: #0072bc; }
 
 /* RIGHT-HAND LAYOUT */
 

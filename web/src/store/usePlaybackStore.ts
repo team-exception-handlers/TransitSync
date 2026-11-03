@@ -1,4 +1,5 @@
-// AI contribution: Below 50% AI-generated
+// AI contribution: 50% or more AI-generated
+/** Authoritative frontend playback position, loaded run and connection selection. */
 import { create } from "zustand";
 
 import { getNetworkSnapshot } from "../lib/getNetworkSnapshot";
@@ -8,6 +9,8 @@ import type { NetworkSnapshot, StationViewData } from "../types/stationView";
 
 interface StationViewStore {
   data: StationViewData | null;
+  availableRuns: StationViewData[];
+  setAvailableRuns: (runs: readonly unknown[]) => void;
 
   // current position in the run, in seconds
   currentTime_s: number;
@@ -52,8 +55,17 @@ export const usePlaybackStore = create<StationViewStore>(
   (set, get) => ({
     // INITIAL STATE
     data: null,
+    availableRuns: [],
     currentTime_s: 0,
     selectedConnectionId: null,
+
+    // Validate the entire catalog before publishing it, so failure is atomic.
+    setAvailableRuns: (runs) => {
+      const availableRuns = runs.map(parseStationViewData);
+      const ids = availableRuns.flatMap((run) => run.connections.map((item) => item.id));
+      if (new Set(ids).size !== ids.length) throw new Error("Duplicate connection in catalog");
+      set({ availableRuns });
+    },
 
     loadData: (value) => {
       const data = parseStationViewData(value);
@@ -77,7 +89,11 @@ export const usePlaybackStore = create<StationViewStore>(
     },
 
     selectConnection: (connectionId) => {
-      const data = get().data;
+      const state = get();
+      if (connectionId === state.selectedConnectionId) return;
+      const data = state.availableRuns.find((run) =>
+        run.connections.some((connection) => connection.id === connectionId)
+      ) ?? state.data;
 
       if (
         !data?.connections.some(
@@ -91,6 +107,8 @@ export const usePlaybackStore = create<StationViewStore>(
       }
 
       set({
+        data,
+        currentTime_s: 0,
         selectedConnectionId: connectionId,
       });
     },

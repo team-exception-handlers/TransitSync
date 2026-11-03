@@ -13,6 +13,7 @@ describe("TransitSync application shell", () => {
             data: null,
             currentTime_s: 0,
             selectedConnectionId: null,
+            availableRuns: [],
         });
     });
 
@@ -94,11 +95,11 @@ describe("TransitSync application shell", () => {
         ).toBeGreaterThan(0);
     });
 
-    it("does not include controls assigned to Person 8", () => {
+    it("indicates the active shared connection", () => {
         render(<App />);
 
         expect(
-            screen.queryByRole("button")
-        ).toBeNull();
+            screen.getByRole("button", { name: /McGill/ }).getAttribute("aria-pressed")
+        ).toBe("true");
     });
 });
