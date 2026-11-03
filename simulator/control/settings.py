@@ -10,6 +10,10 @@ The optional ``"hold_search"`` and ``"weights"`` objects configure the
 break-even search (US-2.2, #43): the candidate increment and upper bound, and
 the weights of waiting against riding time. Both are saved in the manifest,
 so every run records the values its holds were chosen with.
+
+Headway regulation (#48) needs a fixed target in seconds for each platform.
+Targets are copied and frozen. The component factory checks known platform
+IDs, complete trips and the gap used by the train engine.
 """
 
 from collections.abc import Mapping
@@ -20,9 +24,10 @@ from simulator.control.break_even import BreakEvenWeights
 from simulator.control.hold_search import HoldSearchSettings
 from simulator.control.registry import StrategyRegistry
 from simulator.control.strategies import STRATEGIES
+from simulator.control.strategies.headway_regulation import HeadwayRegulationStrategy
 
 DEFAULT_STRATEGY = "no_control"
-CONTROL_FIELDS = frozenset({"strategy", "hold_search", "weights"})
+CONTROL_FIELDS = frozenset({"strategy", "hold_search", "weights", "target_headways_s"})
 OPERATING_RULES_FIELDS = frozenset({"max_hold_time", "min_safe_gap", "rule_action_map"})
 
 
@@ -37,14 +42,35 @@ class ControlSettings:
     strategy: str = DEFAULT_STRATEGY
     hold_search: HoldSearchSettings = field(default_factory=HoldSearchSettings)
     weights: BreakEvenWeights = field(default_factory=BreakEvenWeights)
+    target_headways_s: Mapping[str, float] | None = None
+
+    def __post_init__(self) -> None:
+        """Freeze targets in seconds; raise ControlSettingsError for bad targets."""
+        if self.strategy != HeadwayRegulationStrategy.name:
+            if self.target_headways_s is not None:
+                raise ControlSettingsError(
+                    "control.target_headways_s: only valid for headway_regulation"
+                )
+            return
+        if self.target_headways_s is None:
+            raise ControlSettingsError("control.target_headways_s: required")
+        try:
+            targets = HeadwayRegulationStrategy(self.target_headways_s)
+        except ValueError as error:
+            raise ControlSettingsError(f"control.target_headways_s: {error}") from error
+        object.__setattr__(self, "target_headways_s", targets.target_headways_s)
 
     def to_dict(self) -> dict[str, Any]:
         """Return the settings as saved in a scenario file and in the manifest."""
-        return {
+        saved: dict[str, Any] = {
             "strategy": self.strategy,
             "hold_search": self.hold_search.to_dict(),
             "weights": self.weights.to_dict(),
         }
+        # Keep the saved format unchanged for other strategies.
+        if self.target_headways_s is not None:
+            saved["target_headways_s"] = dict(self.target_headways_s)
+        return saved
 
 
 def parse_control_settings(
@@ -74,10 +100,15 @@ def parse_control_settings(
         raise ControlSettingsError(
             f"control.strategy: unknown strategy {strategy!r}; choose {choices}"
         )
+    if "target_headways_s" in value and strategy != HeadwayRegulationStrategy.name:
+        raise ControlSettingsError(
+            "control.target_headways_s: only valid for headway_regulation"
+        )
     return ControlSettings(
         strategy=strategy,
         hold_search=_parse_section(value, "hold_search", HoldSearchSettings),
         weights=_parse_section(value, "weights", BreakEvenWeights),
+        target_headways_s=value.get("target_headways_s"),
     )
 
 
