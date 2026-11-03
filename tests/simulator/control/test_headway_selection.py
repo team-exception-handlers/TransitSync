@@ -1,121 +1,28 @@
 # AI contribution: 50% or more AI-generated
-"""Run saved headway selections through the train engine (#48).
+"""Check that saved settings control when trains leave (#48).
 
 A leaves at 200; B is scheduled and ready at 400.
-Headway holds B; schedule-based control does not.
-The event and manifest checks must agree.
+Keeping a target gap holds B; following the timetable does not.
+Check what happened and which settings were saved.
 
-The runs use the same arrivals and dwell times.
+Use the same arrival times and normal stop lengths in each run.
 B starts on time, so its hold creates lateness.
-A second target checks that saved values affect the hold.
+Changing the target gap must change the hold.
 """
 
 import json
-from datetime import date
 
 import pytest
 
-from simulator.control.decision import DecisionPipeline
-from simulator.control.headway_configuration import validate_headway_configuration
-from simulator.control.rules import OperatingRulesEnforcer
-from simulator.control.strategies import STRATEGIES
-from simulator.engine.random_streams import StreamManager
-from simulator.engine.runner import run_scenario
-from simulator.scenario import (
-    DatasetMetadata,
-    ScenarioValidationError,
-    load_scenario_json,
-)
+from simulator.scenario import ScenarioValidationError
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
-
-
-def scenario_input(strategy="headway_regulation", target=300, scenario_gap=60):
-    """Build fresh scenario values with a fixed date and seed.
-
-    Nondefault search settings expose values lost when saving or loading.
-    Their 90-second cap does not apply to headway holds.
-    """
-    control = {
-        "strategy": strategy,
-        "hold_search": {"step_s": 10, "max_hold_s": 90},
-        "weights": {"w_wait": 1.5, "w_onboard": 0.75},
-    }
-    if strategy == "headway_regulation":
-        control["target_headways_s"] = {"P": target}
-    return {
-        "dataset_id": "test",
-        "date": "2026-10-05",
-        "start_time": "07:00",
-        "duration_s": 600,
-        "master_seed": 7,
-        "interchanges": ["mcgill"],
-        "control": control,
-        "operating_rules": {"min_safe_gap": scenario_gap, "max_hold_time": 300},
-    }
-
-
-def load(values):
-    """Load a scenario using local test dataset metadata.
-
-    A fixed service date keeps coverage checks repeatable.
-    """
-    dataset = DatasetMetadata(
-        "test",
-        date(2026, 10, 5),
-        date(2026, 10, 5),
-        {"mcgill": 86400},
-        frozenset({"mcgill"}),
-    )
-    return load_scenario_json(json.dumps(values), {"test": dataset})
-
-
-def run_selected(output_dir, values, *, engine_gap=90, trains=None, catalog=None):
-    """Run the saved policy with one gap for validation and movement.
-
-    The factory builds the strategy from loaded scenario settings.
-    Optional trains and platform IDs test complete-trip validation.
-    Check settings before any component starts.
-    Create a fresh strategy on every call.
-    """
-    scenario = load(values)
-    if trains is None:
-        trains = [
-            Train("A", 800, (ScheduledStop("S", "P", 170, 200),)),
-            Train("B", 800, (ScheduledStop("S", "P", 370, 400),)),
-        ]
-    if catalog is None:
-        catalog = {"P"}
-
-    def build_components(settings, _streams):
-        validate_headway_configuration(settings.control, trains, catalog, engine_gap)
-        policy = STRATEGIES.build(
-            settings.control.strategy,
-            target_headways_s=settings.control.target_headways_s,
-        )
-        return [
-            TrainComponent(
-                trains,
-                minimum_gap_s=engine_gap,
-                decision=DecisionPipeline(
-                    policy, enforcer=OperatingRulesEnforcer(settings.operating_rules)
-                ),
-            )
-        ]
-
-    return run_scenario(scenario, StreamManager, build_components, output_dir)
-
-
-def event_tuples(records, event_type, fields):
-    """Collect every matching event, including duplicates.
-
-    Keep log order so tests can catch events in the wrong order.
-    """
-    return [
-        tuple(record[field] for field in fields)
-        for record in records
-        if record["event_type"] == event_type
-    ]
+from tests.simulator.control.headway_run_helpers import (
+    event_tuples,
+    load,
+    run_selected,
+    scenario_input,
+)
 
 
 @pytest.mark.parametrize(
@@ -131,8 +38,8 @@ def test_saved_selection_controls_actual_events(
 ):
     """Check exact movements, holds and delay causes.
 
-    Both targets produce different departures from schedule-based control.
-    B's hold causes lateness, but must not count as a disruption.
+    Both targets must differ from schedule-based control.
+    B's hold adds lateness, but no disruption delay.
     """
     values = scenario_input(strategy, target)
     result = run_selected(tmp_path, values)
@@ -173,10 +80,10 @@ def test_saved_selection_controls_actual_events(
 
 
 def test_saved_headway_scenario_round_trips_exactly():
-    """Saving and loading must preserve targets, search settings and weights.
+    """Keep targets, search settings and weights when saving and loading.
 
     A fractional target catches rounding to whole seconds.
-    Check exact values too, in case saving and loading share the same mistake.
+    Check exact values so matching save/load mistakes cannot pass.
     """
     original = load(scenario_input(target=300.25))
     saved = original.to_dict()
@@ -191,7 +98,7 @@ def test_saved_headway_scenario_round_trips_exactly():
 
 
 def test_scenario_translates_bad_targets_to_field_error():
-    """Bad targets raise the scenario loader's field-specific error.
+    """Report the target field when the loader rejects a bad value.
 
     JSON accepts bools; target validation must reject them.
     """
@@ -207,7 +114,7 @@ def test_bad_configuration_fails_before_components_start(
     """Reject bad settings before components start or write output.
 
     Return R starts after the 600-second cutoff but still needs a target.
-    Target 75 exceeds scenario gap 60, but is below the real engine gap 90.
+    Target 75 exceeds scenario gap 60 but is below engine gap 90.
     """
     starts = []
     original_start = TrainComponent.start
