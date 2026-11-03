@@ -21,6 +21,7 @@ and adds to it; the runner collects from every ``DecisionAuditSource`` once
 the run ends, so no strategy touches the output files.
 """
 
+import copy
 import json
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, is_dataclass
@@ -61,12 +62,16 @@ class DecisionAuditLog:
         self._records: list[dict[str, Any]] = []
 
     def record(self, result: HoldSearchResult) -> None:
-        """Store the record for ``result``, built at once so it cannot change."""
+        """Store the record for ``result``, built now from the search result."""
         self._records.append(decision_record(result))
 
     def decision_records(self) -> tuple[dict[str, Any], ...]:
-        """Return every record so far, oldest first."""
-        return tuple(self._records)
+        """Return a deep copy of every record so far, oldest first.
+
+        The records are nested dicts and lists, so a copy is returned to stop
+        a caller from changing what is written to the audit log.
+        """
+        return tuple(copy.deepcopy(self._records))
 
 
 def decision_record(result: HoldSearchResult) -> dict[str, Any]:

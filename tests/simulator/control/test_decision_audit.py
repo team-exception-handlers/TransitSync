@@ -142,6 +142,17 @@ def test_log_collects_records_in_decision_order():
     assert [r["chosen_hold_s"] for r in log.decision_records()] == [20.0, 0.0]
 
 
+def test_changing_a_returned_record_leaves_the_stored_record_unchanged():
+    log = DecisionAuditLog()
+    log.record(result_for(load=400))
+    returned = log.decision_records()[0]
+    returned["inputs"]["load"] = 999
+    returned["candidates"][0]["net_ps"] = -1.0
+    stored = log.decision_records()[0]
+    assert stored["inputs"]["load"] == 400
+    assert stored["candidates"][0]["net_ps"] == 0.0
+
+
 def test_log_is_a_decision_audit_source():
     assert isinstance(DecisionAuditLog(), DecisionAuditSource)
 

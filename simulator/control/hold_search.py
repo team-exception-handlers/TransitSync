@@ -158,6 +158,8 @@ class HoldSearch:
         candidates = tuple(
             self._evaluate(inputs, hold_s) for hold_s in self.settings.candidates()
         )
+        # J can have several peaks when groups arrive at different times,
+        # so every candidate is checked instead of stopping at the first drop.
         # max keeps the first of equal values and candidates ascend, so a
         # tie goes to the shorter hold
         best = max(candidates, key=lambda result: result.net_ps)
