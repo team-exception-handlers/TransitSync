@@ -4,6 +4,7 @@
 import math
 from collections import defaultdict, deque
 from collections.abc import Sequence
+from typing import Any
 
 from simulator.control.decision import DecisionPipeline
 from simulator.control.interface import PlatformState, TrainState
@@ -206,6 +207,10 @@ class TrainComponent:
                 }
             )
         return tuple(entries)
+
+    def decision_records(self) -> tuple[dict[str, Any], ...]:
+        """Return the strategy's audit records for ``decisions.jsonl`` (#44)."""
+        return self.decision.decision_records()
 
     def train_states(self) -> tuple[TrainState, ...]:
         """Copy each train's next stop, delay and load for an observation (#38)."""

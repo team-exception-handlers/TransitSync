@@ -22,6 +22,8 @@ Output, written to ``output_dir``:
 - ``events.jsonl``: processed events except skipped types, one JSON record per line
 - ``summary.json``: counts for the run
 - ``manifest.json``: scenario metadata and configured disruption status
+- ``decisions.jsonl``: one audit record per hold decision (#44), from every
+  component that keeps them; empty when the strategy keeps none
 
 The output files always come from the same run. A folder that already holds
 any output file is rejected before the run starts, and a run that fails removes
@@ -37,6 +39,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
+from simulator.control.decision_audit import (
+    DECISIONS_FILE,
+    DecisionAuditSource,
+    write_decision_log,
+)
 from simulator.control.settings import ControlSettings
 from simulator.engine.event_log import (
     EVENTS_FILE,
@@ -107,6 +114,7 @@ class RunResult:
     events_path: Path
     summary_path: Path
     manifest_path: Path
+    decisions_path: Path
 
 
 def _check_scenario(scenario: Scenario) -> None:
@@ -227,6 +235,16 @@ def _manifest_record(
     return manifest
 
 
+def _decision_records(components: Sequence[Component]) -> list[dict[str, Any]]:
+    """Collect audit records in component order, so the file is reproducible."""
+    return [
+        record
+        for component in components
+        if isinstance(component, DecisionAuditSource)
+        for record in component.decision_records()
+    ]
+
+
 def _get_code_version() -> str:
     """Return the current Git commit, or 'unknown' if unavailable."""
     try:
@@ -272,7 +290,9 @@ def run_scenario(
     events_path = output_dir / EVENTS_FILE
     summary_path = output_dir / SUMMARY_FILE
     manifest_path = output_dir / MANIFEST_FILE
-    _check_output_dir(events_path, summary_path, manifest_path)
+    decisions_path = output_dir / DECISIONS_FILE
+    output_paths = (events_path, summary_path, manifest_path, decisions_path)
+    _check_output_dir(*output_paths)
     _manifest_record(scenario, ())
     streams = build_streams(scenario.master_seed)
     components = list(build_components(scenario, streams))
@@ -299,14 +319,15 @@ def run_scenario(
         )
         write_summary(summary, summary_path)
         write_manifest(_manifest_record(scenario, components), manifest_path)
+        write_decision_log(_decision_records(components), decisions_path)
     except OSError as error:
-        _discard_output(events_path, summary_path, manifest_path)
+        _discard_output(*output_paths)
         log.exception("could not write run output to %s: %s", output_dir, error)
         raise RunError(f"could not write run output to {output_dir}") from error
     except BaseException:
         # Any other failure (a component error, Ctrl+C) also removes the
         # partial output, then propagates unchanged
-        _discard_output(events_path, summary_path, manifest_path)
+        _discard_output(*output_paths)
         raise
 
     log.info(
@@ -320,4 +341,5 @@ def run_scenario(
         events_path=events_path,
         summary_path=summary_path,
         manifest_path=manifest_path,
+        decisions_path=decisions_path,
     )

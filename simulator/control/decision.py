@@ -6,8 +6,9 @@ and gets back the hold to apply, without knowing the parts behind it.
 """
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
+from simulator.control.decision_audit import DecisionAuditSource
 from simulator.control.interface import (
     DecisionController,
     HoldAction,
@@ -75,3 +76,13 @@ class DecisionPipeline:
                 f"{self.strategy.name} may only hold {decision.train_id} once here"
             )
         return self._enforcer.validate(actions[0], observation)
+
+    def decision_records(self) -> tuple[dict[str, Any], ...]:
+        """Return the strategy's audit records (#44); none if it keeps none.
+
+        The ``Hold`` event already records what the rules applied, so the
+        audit only needs the strategy's own reasoning.
+        """
+        if isinstance(self.strategy, DecisionAuditSource):
+            return tuple(self.strategy.decision_records())
+        return ()

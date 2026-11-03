@@ -106,7 +106,11 @@ def test_defaults_and_saved_settings_round_trip(dataset):
         "dst_fold": None,
         "resolved_start_utc": "2026-10-05T11:00:00+00:00",
         "resolved_start_utc_offset": "-04:00",
-        "control": {"strategy": "no_control"},
+        "control": {
+            "strategy": "no_control",
+            "hold_search": {"step_s": 5.0, "max_hold_s": 60.0},
+            "weights": {"w_wait": 2.0, "w_onboard": 1.0},
+        },
         "operating_rules": {
             "max_hold_time": 300.0,
             "min_safe_gap": 60.0,
@@ -450,4 +454,6 @@ def test_manifest_records_strategy_of_the_run(
     scenario = load(dataset, duration_s=600, control={"strategy": "schedule_based"})
     result = run_scenario(scenario, build_streams, build_tiny_network, tmp_path)
     manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
-    assert manifest["control"] == {"strategy": "schedule_based"}
+    assert manifest["control"]["strategy"] == "schedule_based"
+    # The search settings are saved too, so each hold can be recalculated (#43)
+    assert manifest["control"]["hold_search"] == {"step_s": 5.0, "max_hold_s": 60.0}

@@ -1,0 +1,94 @@
+{
+  "about": "Hand-verified break-even cases (US-2.2, #32). N(h) = sum of M * (F(s + h) - F(s)); Benefit = N * H * w_wait; Cost = L * h * w_onboard; J = Benefit - Cost; hold the candidate with the highest J only if J > 0, shorter hold on a tie. Values were re-derived without the simulator code. Changing any value requires re-verifying the case by hand.",
+  "cases": [
+    {
+      "name": "high_volume_holds_at_the_maximum",
+      "note": "F(t) = 1 - exp(-(t - 30) / 270). N(30) = 200 * (exp(-30/270) - exp(-60/270)) = 200 * (0.894839 - 0.800737) = 18.820383. J(30) = 18.820383 * 300 - 50 * 30 = 4146.1148, still rising at h_max",
+      "walking": {"family": "shifted_exponential", "mean_s": 300, "min_s": 30},
+      "weights": {"w_wait": 1, "w_onboard": 1},
+      "hold_search": {"step_s": 10, "max_hold_s": 30},
+      "load": 50,
+      "headway_s": 300,
+      "transfers": [{"group_size": 200, "conn_window_s": 60}],
+      "chosen_hold_s": 30,
+      "candidates": [
+        {"hold_s": 0, "n_caught": 0.0, "benefit_ps": 0.0, "cost_ps": 0.0},
+        {"hold_s": 10, "n_caught": 6.507192, "benefit_ps": 1952.1576, "cost_ps": 500.0},
+        {"hold_s": 20, "n_caught": 12.777785, "benefit_ps": 3833.3356, "cost_ps": 1000.0},
+        {"hold_s": 30, "n_caught": 18.820383, "benefit_ps": 5646.1148, "cost_ps": 1500.0}
+      ]
+    },
+    {
+      "name": "interior_optimum",
+      "note": "Same group, L = 190. J(10) = 1952.1576 - 1900 = 52.1576 beats J(20) = 33.3356; J(30) = -53.8852. Each 10 s catches fewer passengers than the last, so the best hold is the shortest one",
+      "walking": {"family": "shifted_exponential", "mean_s": 300, "min_s": 30},
+      "weights": {"w_wait": 1, "w_onboard": 1},
+      "hold_search": {"step_s": 10, "max_hold_s": 30},
+      "load": 190,
+      "headway_s": 300,
+      "transfers": [{"group_size": 200, "conn_window_s": 60}],
+      "chosen_hold_s": 10,
+      "candidates": [
+        {"hold_s": 0, "n_caught": 0.0, "benefit_ps": 0.0, "cost_ps": 0.0},
+        {"hold_s": 10, "n_caught": 6.507192, "benefit_ps": 1952.1576, "cost_ps": 1900.0},
+        {"hold_s": 20, "n_caught": 12.777785, "benefit_ps": 3833.3356, "cost_ps": 3800.0},
+        {"hold_s": 30, "n_caught": 18.820383, "benefit_ps": 5646.1148, "cost_ps": 5700.0}
+      ]
+    },
+    {
+      "name": "low_volume_declines",
+      "note": "M = 20 is a tenth of the first case, so N(10) = 0.650719 and Benefit 195.2158 < Cost 500. Every J < 0, so no hold",
+      "walking": {"family": "shifted_exponential", "mean_s": 300, "min_s": 30},
+      "weights": {"w_wait": 1, "w_onboard": 1},
+      "hold_search": {"step_s": 10, "max_hold_s": 30},
+      "load": 50,
+      "headway_s": 300,
+      "transfers": [{"group_size": 20, "conn_window_s": 60}],
+      "chosen_hold_s": 0,
+      "candidates": [
+        {"hold_s": 0, "n_caught": 0.0, "benefit_ps": 0.0, "cost_ps": 0.0},
+        {"hold_s": 10, "n_caught": 0.650719, "benefit_ps": 195.2158, "cost_ps": 500.0},
+        {"hold_s": 20, "n_caught": 1.277779, "benefit_ps": 383.3336, "cost_ps": 1000.0},
+        {"hold_s": 30, "n_caught": 1.882038, "benefit_ps": 564.6115, "cost_ps": 1500.0}
+      ]
+    },
+    {
+      "name": "two_groups_loss_then_gain",
+      "note": "Group 1 (s = 60) catches 100 * (exp(-1/9) - exp(-(60 + h - 30)/270)); group 2 (s = 0) catches nobody until h > 30, the fastest walk. J is negative at 15 and 30 s, then positive at 45 and 60 s, so the search must check every candidate rather than stop at the first loss. w_wait = 2: J(60) = 28.346869 * 300 * 2 - 200 * 60 = 5008.1214",
+      "walking": {"family": "shifted_exponential", "mean_s": 300, "min_s": 30},
+      "weights": {"w_wait": 2, "w_onboard": 1},
+      "hold_search": {"step_s": 15, "max_hold_s": 60},
+      "load": 200,
+      "headway_s": 300,
+      "transfers": [
+        {"group_size": 100, "conn_window_s": 60},
+        {"group_size": 100, "conn_window_s": 0}
+      ],
+      "chosen_hold_s": 60,
+      "candidates": [
+        {"hold_s": 0, "n_caught": 0.0, "benefit_ps": 0.0, "cost_ps": 0.0},
+        {"hold_s": 15, "n_caught": 4.835759, "benefit_ps": 2901.4555, "cost_ps": 3000.0},
+        {"hold_s": 30, "n_caught": 9.410191, "benefit_ps": 5646.1148, "cost_ps": 6000.0},
+        {"hold_s": 45, "n_caught": 19.141472, "benefit_ps": 11484.8832, "cost_ps": 9000.0},
+        {"hold_s": 60, "n_caught": 28.346869, "benefit_ps": 17008.1214, "cost_ps": 12000.0}
+      ]
+    },
+    {
+      "name": "lognormal_walk_interior_optimum",
+      "note": "Median walk 110 s, sigma 0.5, so F(t) = Phi((ln t - ln 110) / 0.5) and F(110) = 0.5. N(40) = 60 * (Phi(ln(150/110) / 0.5) - 0.5) = 60 * (0.732473 - 0.5) = 13.948386. J(40) = 2369.0315 beats J(20) = 1710.6372 and J(60) = 2088.8486",
+      "walking": {"family": "lognormal", "median_s": 110, "sigma": 0.5},
+      "weights": {"w_wait": 2, "w_onboard": 1},
+      "hold_search": {"step_s": 20, "max_hold_s": 60},
+      "load": 150,
+      "headway_s": 300,
+      "transfers": [{"group_size": 60, "conn_window_s": 110}],
+      "chosen_hold_s": 40,
+      "candidates": [
+        {"hold_s": 0, "n_caught": 0.0, "benefit_ps": 0.0, "cost_ps": 0.0},
+        {"hold_s": 20, "n_caught": 7.851062, "benefit_ps": 4710.6372, "cost_ps": 3000.0},
+        {"hold_s": 40, "n_caught": 13.948386, "benefit_ps": 8369.0315, "cost_ps": 6000.0},
+        {"hold_s": 60, "n_caught": 18.481414, "benefit_ps": 11088.8486, "cost_ps": 9000.0}
+      ]
+    }
+  ]
+}

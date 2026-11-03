@@ -216,7 +216,7 @@ def test_manifest_records_executed_schedule_strategy(tmp_path):
     """Check that the recorded policy also controls actual departures."""
     result, records = run_selected(tmp_path)
     manifest = json.loads(result.manifest_path.read_text())
-    assert manifest["control"] == {"strategy": "schedule_based"}
+    assert manifest["control"]["strategy"] == "schedule_based"
     assert movements(records, "hold") == [("A", "P1", 120)]
     assert movements(records, "train_departure") == [("A", "P1", 130), ("A", "P2", 230)]
 
