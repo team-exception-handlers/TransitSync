@@ -1,5 +1,9 @@
 // AI contribution: 50% or more AI-generated
-/** Figma Play/Pause toggle reads and changes the real shared playback state. */
+/**
+ * Figma playback controls read and change the real shared playback state.
+ * The native buttons supply keyboard behavior, while their labels and disabled
+ * states reflect loaded data, run boundaries and the current playback intent.
+ */
 import { usePlaybackStore } from "../store/usePlaybackStore";
 
 /** Keep native button behavior and accessible labels for icon-only actions. */

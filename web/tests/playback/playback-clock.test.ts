@@ -228,4 +228,13 @@ describe("playback clock", () => {
     state().setSpeed(0.5);
     expect(frames.size).toBe(1);
   });
+  it("cannot start a zero-duration run or rewind an unloaded run", () => {
+    state().loadData({ ...stationViewData, duration_s: 0, passenger_tracks: [], train_events: [] });
+    state().play();
+    expect(state().isPlaying).toBe(false);
+    expect(frames.size).toBe(0);
+    usePlaybackStore.setState({ data: null });
+    state().rewind30();
+    expect(state().currentTime_s).toBe(0);
+  });
 });

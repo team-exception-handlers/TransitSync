@@ -1,5 +1,9 @@
 // AI contribution: 50% or more AI-generated
-/** Isolate the ticking clock so the full application shell does not rerender. */
+/**
+ * Isolate the ticking clock so the full application shell does not rerender.
+ * Stored time is elapsed seconds; the loaded data supplies the wall-clock
+ * offset used by both this display and the existing timeline.
+ */
 import { formatTime } from "../lib/time";
 import { usePlaybackStore } from "../store/usePlaybackStore";
 

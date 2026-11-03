@@ -36,6 +36,34 @@ Verified against PR #164, task issues, parent stories, and Figma MCP designs.
 Canvas tests check hand-calculated passenger coordinates after backward seeks;
 baseline and prerequisite frontend tests, lint and type checks pass.
 
+Person 8 connection/playback/speed implementation (#75, #76, #80–#83, #85–#87):
+Codex (OpenAI), 50% or more AI-generated. New or substantially changed code:
+`web/src/store/usePlaybackStore.ts`, `web/src/lib/playback-clock.ts`,
+`web/src/data/connection-runs.ts`, `web/src/types/playback-speed.ts`,
+`web/src/components/connection-selector.tsx`, `playback-controls.tsx`,
+`simulation-clock.tsx`, `speed-selector.tsx`, `station-canvas.tsx`,
+`web/src/App.tsx`, `web/src/App.css`, and the corresponding store, data,
+component and playback tests. Exact original Figma SVG assets are stored under
+`web/public/playback/`; no new external library was added.
+
+Development examples:
+
+- Connection selection loads a validated catalog entry atomically and resets
+  playback. Tests verify all three station identities against the saved backend
+  mapping, selected-state feedback, invalid IDs and same-selection behavior
+- Playback uses an Observer subscription to request one animation frame. Tests
+  simulate React StrictMode, multiple clock consumers, idempotent cleanup,
+  pause/resume, rewind and dataset changes without concurrent loops
+- Speed transitions settle at the old rate before reanchoring. Tests compare
+  hand-calculated fractional times at four speeds, irregular frames and multiple
+  changes inside one frame, and identical snapshots at equal simulated times
+- Review found that responsive overrides preceded existing shell breakpoints;
+  they were moved after those rules so mobile playback rows can grow. Browser
+  screenshot verification was blocked by the computer-use policy's inability to
+  verify the current Chrome URL; no rendered visual-match claim is made
+
+Full validation and remaining integration limits are in `docs/person-8-review.md`.
+
 | Date | Feature or fix | Issue | Pull request | AI contribution level | AI-assisted files | How the AI-generated code was verified |
 |---|---|---|---|---|---|---|
 | 2026-10-17 | Python project configuration and tooling | setup | [#102](https://github.com/team-exception-handlers/TransitSync/pull/102) | 50% or more AI-generated | `pyproject.toml`, `requirements.txt`, `requirements-dev.txt` | `ruff check .`, `ruff format --check .` and `pytest` run locally with the pinned versions |

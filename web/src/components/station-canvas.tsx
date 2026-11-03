@@ -1,5 +1,9 @@
 // AI contribution: 50% or more AI-generated
-/** Station-view Canvas consumer of Person 9's deterministic playback snapshots. */
+/**
+ * Station-view Canvas consumer of Person 9's deterministic playback snapshots.
+ * It uses fixture coordinates directly; it does not introduce a second mutable
+ * simulation model, passenger positions or playback timer.
+ */
 import { useEffect, useRef } from "react";
 import { getNetworkSnapshot } from "../lib/getNetworkSnapshot";
 import { usePlaybackStore } from "../store/usePlaybackStore";

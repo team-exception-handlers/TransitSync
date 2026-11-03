@@ -1,6 +1,6 @@
 /* AI contribution: 50% or more AI-generated */
 
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
 
 /* GLOBAL STYLES */
 
@@ -319,25 +319,8 @@ button:disabled { cursor: default; opacity: 0.45; }
 .speed-selector button { flex: 1; padding: 0 12px; }
 .playback-timeline { min-width: 0; }
 
-@media (max-width: 1400px) {
-  .playback-region { flex-wrap: wrap; height: auto; }
-  .content { grid-template-rows: minmax(650px, 1fr) auto; }
-  .speed-selector { margin-left: auto; }
-  .timeline-clock { min-width: 180px; }
-  .playback-timeline { flex: 1; }
-}
-@media (max-width: 660px) {
-  .topbar { padding: 12px 16px; gap: 8px; }
-  .connection-selector { width: 100%; }
-  .connection-selector button { width: 100%; justify-content: flex-start; }
-  .playback-region { padding: 12px; }
-  .playback-timeline { flex-basis: 100%; flex-wrap: wrap; gap: 12px; }
-  .timeline-container { flex-basis: 100%; }
-  .content { grid-template-rows: auto auto auto; }
-}
-
 .playback-timeline {
-  width: 100%;
+  flex: 1;
   height: 100%;
 
   display: flex;
@@ -484,4 +467,23 @@ button:disabled { cursor: default; opacity: 0.45; }
       140px
       180px;
   }
+}
+
+/* Keep control overrides after shell breakpoints so wrapped rows can grow. */
+@media (max-width: 1400px) {
+  .playback-region { flex-wrap: wrap; height: auto; }
+  .content { grid-template-rows: minmax(650px, 1fr) auto; }
+  .speed-selector { margin-left: auto; }
+  .timeline-clock { min-width: 180px; }
+}
+@media (max-width: 930px) {
+  .content { grid-template-rows: auto auto auto; }
+}
+@media (max-width: 660px) {
+  .topbar { padding: 12px 16px; gap: 8px; }
+  .connection-selector { width: 100%; }
+  .connection-selector button { width: 100%; justify-content: flex-start; }
+  .playback-region { padding: 12px; }
+  .playback-timeline { flex-basis: 100%; flex-wrap: wrap; gap: 12px; }
+  .timeline-container { flex-basis: 100%; }
 }

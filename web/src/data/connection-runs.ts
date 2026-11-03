@@ -1,5 +1,9 @@
 // AI contribution: 50% or more AI-generated
-/** Synthetic runs for the three documented interchanges, using saved platform IDs. */
+/**
+ * Synthetic runs for the three documented interchanges, using saved platform IDs.
+ * These are explicitly frontend fixtures until the simulator-output adapter is
+ * connected. They reuse the tested McGill pulse, not real station geometries.
+ */
 import rawMapping from "./interchange_mapping.json";
 import rawMock from "./mock-interchange.json";
 import { stationViewData } from "./stationViewData";
@@ -21,23 +25,30 @@ function buildMockRun(interchangeId: string, label: string) {
   const platformId = (id: string) => replacements.get(id)!.platform_id;
   const metro = entries.find((item) => item.line_id !== "rem")!;
   const connectionId = `${interchangeId}-rem-${metro.line_id}`;
+  const stationId = (id: string) => id.replace("mcgill", interchangeId);
+  const corridorId = (id: string) => id.replace("mcgill", interchangeId);
 
   // Keep all references aligned with the mapping adapter and validator contracts.
   mock.interchange = { id: interchangeId, name: label };
   mock.stations = mock.stations.map((station) => ({
     ...station,
+    id: stationId(station.id),
     name: station.line_id === "rem" ? `${label} REM` : metro.stop_name,
     line_id: station.line_id === "rem" ? "rem" : metro.line_id,
   }));
   mock.platform_layouts = Object.fromEntries(Object.entries(mock.platform_layouts)
-    .map(([id, layout]) => [platformId(id), layout]));
+    .map(([id, layout]) => [platformId(id), { ...layout, station_id: stationId(layout.station_id) }]));
+  // Directional endpoints remain consistent across corridors and connections.
   mock.corridors = mock.corridors.map((item) => ({ ...item,
+    id: corridorId(item.id),
     from_platform_id: platformId(item.from_platform_id), to_platform_id: platformId(item.to_platform_id),
   }));
   mock.connections = mock.connections.map((item) => ({ ...item, id: connectionId, label,
+    corridor_id: corridorId(item.corridor_id),
     from_platform_id: platformId(item.from_platform_id), to_platform_id: platformId(item.to_platform_id),
   }));
   mock.passenger_tracks = mock.passenger_tracks.map((track) => ({ ...track, connection_id: connectionId }));
+  // Person 9's train contract uses backend stop_id for event.station_id.
   mock.train_events = mock.train_events.map((event) => ({ ...event,
     platform_id: platformId(event.platform_id), station_id: replacements.get(event.platform_id)!.stop_id,
   }));

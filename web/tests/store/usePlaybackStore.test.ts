@@ -1,4 +1,5 @@
 // AI contribution: 50% or more AI-generated
+/** Shared-state regression tests extend Person 9's seek/snapshot contract. */
 import {beforeEach, describe, expect, it } from "vitest";
 import { stationViewData } from "../../src/data/stationViewData";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
