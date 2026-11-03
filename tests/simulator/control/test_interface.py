@@ -35,6 +35,8 @@ TRANSFER = IncomingTransfer(
     passenger_count=18,
     first_arrival_s=150.0,
     last_arrival_s=210.0,
+    feeder_arrival_s=90.0,
+    group_size=40,
 )
 
 

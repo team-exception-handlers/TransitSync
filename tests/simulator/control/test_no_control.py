@@ -27,6 +27,8 @@ BIG_TRANSFER = IncomingTransfer(
     passenger_count=250,
     first_arrival_s=125.0,
     last_arrival_s=200.0,
+    feeder_arrival_s=95.0,
+    group_size=250,
 )
 
 
