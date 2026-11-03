@@ -31,4 +31,13 @@ describe("PlaybackControls", () => {
     });
     expect((screen.getByRole("button", { name: "Play" }) as HTMLButtonElement).disabled).toBe(true);
   });
+  it("disables rewind at the start and sends the real rewind action after seeking", () => {
+    render(<PlaybackControls />);
+    const button = screen.getByRole("button", { name: "Rewind 30 seconds" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    act(() => usePlaybackStore.getState().seek(115));
+    fireEvent.click(button);
+    expect(usePlaybackStore.getState().currentTime_s).toBe(85);
+    expect(usePlaybackStore.getState().isPlaying).toBe(false);
+  });
 });

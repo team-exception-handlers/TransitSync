@@ -20,6 +20,7 @@ interface StationViewStore {
   updatedAt_ms: number | null;
   play: () => void;
   pause: () => void;
+  rewind30: () => void;
   advance: () => void;
 
   // load simulation data
@@ -117,6 +118,16 @@ export const usePlaybackStore = create<StationViewStore>(
       const state = get();
       if (!state.isPlaying) return;
       set({ currentTime_s: positionNow(state, performance.now()), isPlaying: false, updatedAt_ms: null });
+    },
+
+    // Figma/wiki define rewind as 30 simulated seconds, independent of speed.
+    // Settle the in-flight fraction first; preserve running/paused intent.
+    rewind30: () => {
+      const state = get();
+      if (!state.data) return;
+      const now = performance.now();
+      set({ currentTime_s: Math.max(0, positionNow(state, now) - 30),
+        updatedAt_ms: state.isPlaying ? now : null });
     },
 
     // A frame only moves the presentation clock; recorded results stay immutable.

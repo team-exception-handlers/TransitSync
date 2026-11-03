@@ -9,10 +9,16 @@ export function PlaybackControls() {
   const playing = usePlaybackStore((state) => state.isPlaying);
   const play = usePlaybackStore((state) => state.play);
   const pause = usePlaybackStore((state) => state.pause);
+  const rewind = usePlaybackStore((state) => state.rewind30);
   const label = playing ? "Pause" : "Play";
 
   return (
     <div className="playback-controls" role="group" aria-label="Playback controls">
+      <button type="button" className="playback-button rewind" aria-label="Rewind 30 seconds"
+        title="Rewind 30 seconds" disabled={!data || time === 0} onClick={rewind}>
+        <img src="/playback/rewind.svg" alt="" width="18" height="18" />
+        <span>30 s</span>
+      </button>
       <button type="button" className="playback-button primary" aria-label={label}
         title={label} disabled={!data || (!playing && time >= data.duration_s)}
         onClick={playing ? pause : play}>

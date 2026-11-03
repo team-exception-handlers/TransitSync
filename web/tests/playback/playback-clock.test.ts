@@ -75,4 +75,36 @@ describe("playback clock", () => {
     expect(state().currentTime_s).toBe(0);
     expect(state().isPlaying).toBe(false);
   });
+  it("rewinds a running run by 30 simulated seconds and rebuilds passenger positions", () => {
+    state().seek(115);
+    state().play();
+    state().rewind30();
+    expect(state().currentTime_s).toBe(85);
+    expect(state().snapshot()?.passengers.find((passenger) => passenger.passenger_id === "p-001")?.position)
+      .toEqual({ x: 389, y: 135 });
+    expect(state().isPlaying).toBe(true);
+    expect(frames.size).toBe(1);
+    frameAt(1000);
+    expect(state().currentTime_s).toBe(86);
+  });
+  it("rewinds paused and completed runs, clamping at the start", () => {
+    state().seek(360);
+    state().rewind30();
+    expect(state().currentTime_s).toBe(330);
+    expect(state().isPlaying).toBe(false);
+    state().seek(10);
+    state().rewind30();
+    state().rewind30();
+    expect(state().currentTime_s).toBe(0);
+    expect(state().isPlaying).toBe(false);
+  });
+  it("includes elapsed time since the last frame when rewinding", () => {
+    state().seek(100);
+    state().play();
+    now = 500;
+    state().rewind30();
+    expect(state().currentTime_s).toBe(70.5);
+    frameAt(1000);
+    expect(state().currentTime_s).toBe(71);
+  });
 });
