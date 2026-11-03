@@ -384,6 +384,9 @@ class TrainComponent:
                 )
             )
             if hold.applied_s > 0:
+                # Task 2.4.4 (#53): Flag train as system-delayed
+                # when a hold is successfully applied
+                train.system_delayed = True
                 # The train leaves at HoldEnd, still subject to the minimum gap
                 self._hold_s[visit] = hold.applied_s
                 scheduler.schedule(
