@@ -47,6 +47,7 @@ class Train:
     inherited_delay_s: float = 0.0
     line_id: str = ""
     return_trips: tuple[tuple[ScheduledStop, ...], ...] = ()
+    system_delayed: bool = False  # 2.4.4
     current_trip_index: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
@@ -177,6 +178,7 @@ class Train:
             return False
 
         self.current_stop_index += 1
+        self.system_delayed = False  # 2.4.4
         return True
 
     def begin_return_trip(self) -> float | None:

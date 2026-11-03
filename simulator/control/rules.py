@@ -1,6 +1,6 @@
 # AI contribution: 50% or more AI-generated
 """Rule checking and enforcement layer for transit control actions
-(US-2.4, US-2.5, Task 2.4.1, Task 2.5.4, #50, #57).
+(US-2.4, US-2.5, Task 2.4.1, Task 2.5.4, Task 2.4.4, #50, #57, #53).
 """
 
 from __future__ import annotations
@@ -15,8 +15,8 @@ class RuleViolationError(ValueError):
 
 
 class OperatingRulesEnforcer:
-    """Enforces scenario operating rules on control actions
-    (US-2.5, Task 2.5.4, #57).
+    """Enforces scenario operating rules and connection protection
+    on control actions (US-2.4, US-2.5, #53, #57).
     """
 
     def __init__(self, rules: OperatingRulesConfig) -> None:
@@ -25,8 +25,35 @@ class OperatingRulesEnforcer:
     def validate(
         self, action: HoldAction, observation: ObservationSnapshot | None = None
     ) -> HoldDecision:
-        """Validate a proposed HoldAction against operating rules."""
+        """Validate a proposed HoldAction against
+
+        operating rules and one-hop constraints.
+        """
         duration = action.duration_s
+
+        # Task 2.4.4 (#53): One-hop constraint check
+        # Refuse if target train is already system-delayed.
+        if (
+            observation
+            and hasattr(observation, "target_train")
+            and observation.target_train
+        ):
+            if getattr(observation.target_train, "system_delayed", False):
+                return HoldDecision(
+                    requested_s=duration,
+                    applied_s=0.0,
+                    reason="refused: one-hop constraint violation "
+                    "(train already system-delayed)",
+                )
+        # Fallback check if observation uses a direct boolean attribute
+        if observation and getattr(observation, "target_train_system_delayed", False):
+            return HoldDecision(
+                requested_s=duration,
+                applied_s=0.0,
+                reason="refused: one-hop constraint violation "
+                "(train already system-delayed)",
+            )
+
         limit = self.rules.max_hold_time
 
         if duration <= limit:

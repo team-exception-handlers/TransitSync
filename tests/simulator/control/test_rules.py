@@ -56,3 +56,20 @@ def test_unknown_rule_action_raises_error():
 
     with pytest.raises(RuleViolationError, match="Unknown action type"):
         enforcer.validate(action)
+
+
+def test_one_hop_constraint_refuses_system_delayed_train():
+    rules = OperatingRulesConfig(max_hold_time=300.0)
+    enforcer = OperatingRulesEnforcer(rules)
+    action = HoldAction(train_id="train_1", duration_s=120.0, reason="test")
+
+    class MockTrain:
+        system_delayed = True
+
+    class MockObservation:
+        target_train = MockTrain()
+
+    decision = enforcer.validate(action, observation=MockObservation())
+    assert decision.requested_s == 120.0
+    assert decision.applied_s == 0.0
+    assert "one-hop constraint" in decision.reason
