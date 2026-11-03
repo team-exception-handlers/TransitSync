@@ -51,6 +51,7 @@ def snapshot(*transfers):
         train_id="green_0001",
         station_id="mcgill",
         platform_id="green_mcgill_0",
+        scheduled_departure_s=300.0,
         trains=(),
         platforms=(),
         incoming_transfers=transfers,

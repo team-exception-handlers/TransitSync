@@ -181,6 +181,7 @@ def observation(trains):
         train_id="green_1",
         station_id="mcgill",
         platform_id="green",
+        scheduled_departure_s=150.0,
         trains=trains,
         platforms=(),
         incoming_transfers=(transfer, elsewhere),
