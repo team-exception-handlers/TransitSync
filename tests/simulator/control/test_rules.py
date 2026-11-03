@@ -1,6 +1,6 @@
 # AI contribution: 50% or more AI-generated
-"""Tests for operating rules enforcement and rule checking
-(US-2.4, US-2.5, Task 2.4.1, Task 2.5.4, #50, #57).
+"""Tests for operating rules enforcement, clamping, refusal, and logging
+(US-2.4, US-2.5, Task 2.4.1, Task 2.5.4, #50, #57, #58).
 """
 
 import pytest
@@ -31,7 +31,7 @@ def test_max_hold_exceeded_clamps_when_configured():
     decision = enforcer.validate(action)
     assert decision.requested_s == 120.0
     assert decision.applied_s == 100.0
-    assert "clamped" in decision.reason
+    assert "clamped to max_hold_time" in decision.reason
 
 
 def test_max_hold_exceeded_refuses_when_configured():
@@ -44,7 +44,7 @@ def test_max_hold_exceeded_refuses_when_configured():
     decision = enforcer.validate(action)
     assert decision.requested_s == 120.0
     assert decision.applied_s == 0.0
-    assert "refused" in decision.reason
+    assert "refused: over max hold" in decision.reason
 
 
 def test_unknown_rule_action_raises_error():
@@ -72,4 +72,4 @@ def test_one_hop_constraint_refuses_system_delayed_train():
     decision = enforcer.validate(action, observation=MockObservation())
     assert decision.requested_s == 120.0
     assert decision.applied_s == 0.0
-    assert "one-hop constraint" in decision.reason
+    assert "one-hop constraint violation" in decision.reason
