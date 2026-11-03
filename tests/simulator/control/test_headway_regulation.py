@@ -5,8 +5,10 @@ Check actual departure gaps, fixed targets and inputs the policy must ignore.
 """
 
 import dataclasses
+from fractions import Fraction
 from sys import float_info
 
+import numpy as np
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -189,6 +191,12 @@ def test_targets_reject_invalid_platform_ids(platform_id):
         float("inf"),
         pytest.param(10**400, id="oversized_positive_integer"),
         pytest.param(-(10**400), id="oversized_negative_integer"),
+        pytest.param(int(float_info.max) + 1, id="above_float_limit"),
+        pytest.param(Fraction(10**400), id="oversized_real"),
+        pytest.param(np.bool_(True), id="numpy_bool"),
+        pytest.param(np.int64(0), id="numpy_zero"),
+        pytest.param(np.float32("nan"), id="numpy_nan"),
+        pytest.param(np.float64("inf"), id="numpy_inf"),
     ],
 )
 def test_targets_reject_invalid_seconds(target_s):
@@ -213,6 +221,27 @@ def test_largest_representable_targets_remain_valid(target_s):
     observation = snapshot(0, 0)
     assert strategy.evaluate(observation) == (
         HoldAction("B", target_s, "headway_regulation"),
+    )
+
+
+@pytest.mark.parametrize(
+    ("target", "hold", "number_type"),
+    [
+        (np.int64(300), 120, int),
+        (np.float32(300.25), 120.25, float),
+        (np.float64(300.25), 120.25, float),
+    ],
+)
+def test_numpy_targets_produce_plain_number_holds(target, hold, number_type):
+    """Accept NumPy numbers and store Python numbers for saving.
+
+    The gap is 180 seconds: targets 300 and 300.25 need holds 120 and 120.25.
+    Quarter seconds are exact, so no rounding tolerance is needed.
+    """
+    strategy = HeadwayRegulationStrategy({"P1": target})
+    assert type(strategy.target_headways_s["P1"]) is number_type
+    assert strategy.evaluate(snapshot()) == (
+        HoldAction("B", hold, "headway_regulation"),
     )
 
 

@@ -5,8 +5,10 @@ Check missing, invalid and mutable target inputs.
 Keep the saved format for no-control and schedule-based settings.
 """
 
+import json
 from dataclasses import FrozenInstanceError
 
+import numpy as np
 import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -233,3 +235,26 @@ def test_target_settings_round_trip(targets):
     restored = parse_control_settings(original.to_dict())
     assert restored == original
     assert restored.target_headways_s == targets
+
+
+@pytest.mark.parametrize(
+    ("target", "expected"), [(np.int64(300), 300.0), (np.float32(300.25), 300.25)]
+)
+def test_numpy_targets_save_and_load_as_json(target, expected):
+    """Save NumPy targets as JSON numbers without losing their value.
+
+    This exercises the settings path as well as direct strategy construction.
+    """
+    control = configured({"P1": target})
+    saved = json.loads(json.dumps(control.to_dict()))
+    assert saved["target_headways_s"] == {"P1": expected}
+    assert parse_control_settings(saved) == control
+
+
+def test_large_integer_targets_keep_their_exact_saved_value():
+    """Keep integer targets exact even beyond float's whole-number precision.
+
+    Converting 2**53 + 1 to float would round it down by one second.
+    """
+    control = configured({"P1": 2**53 + 1})
+    assert control.to_dict()["target_headways_s"] == {"P1": 9007199254740993}

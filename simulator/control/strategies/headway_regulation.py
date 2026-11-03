@@ -6,6 +6,7 @@ See Mathematical Foundations (Section 6) for train timing.
 The simulator applies operating limits to the requested hold.
 """
 
+import numbers
 from collections.abc import Mapping
 from dataclasses import dataclass
 from sys import float_info
@@ -24,6 +25,7 @@ class HeadwayRegulationStrategy(DecisionController):
     """Use a fixed positive, finite target gap in seconds for each platform.
 
     Copy and freeze ``target_headways_s`` so caller changes cannot affect it.
+    Store Python numbers so settings can be saved as JSON.
     Raise ``ValueError`` for bad mappings, blank IDs or invalid target seconds.
     """
 
@@ -38,7 +40,7 @@ class HeadwayRegulationStrategy(DecisionController):
         for platform_id, target_s in targets.items():
             if not isinstance(platform_id, str) or not platform_id.strip():
                 raise ValueError("target platform ID must be a non-empty string")
-            _check_target(platform_id, target_s)
+            targets[platform_id] = _check_target(platform_id, target_s)
         # Copy first: a read-only view still follows changes to the original.
         object.__setattr__(self, "target_headways_s", MappingProxyType(targets))
 
@@ -66,9 +68,18 @@ class HeadwayRegulationStrategy(DecisionController):
         return (HoldAction(observation.train_id, hold_s, self.name),)
 
 
-def _check_target(platform_id: str, target_s: float) -> None:
-    if isinstance(target_s, bool) or not isinstance(target_s, int | float):
-        raise ValueError(f"Target for {platform_id!r} must be finite positive seconds")
-    # Avoid overflow by checking large integers without converting to floats.
-    if not 0 < target_s <= float_info.max:
-        raise ValueError(f"Target for {platform_id!r} must be finite positive seconds")
+def _check_target(platform_id: str, target_s: float) -> float:
+    """Return positive finite seconds as a Python number, or raise ValueError."""
+    message = f"Target for {platform_id!r} must be finite positive seconds"
+    if isinstance(target_s, bool) or not isinstance(target_s, numbers.Real):
+        raise ValueError(message)
+    try:
+        # Preserve integer precision while making NumPy values JSON-compatible.
+        seconds = (
+            int(target_s) if isinstance(target_s, numbers.Integral) else float(target_s)
+        )
+    except OverflowError as error:
+        raise ValueError(message) from error
+    if not 0 < seconds <= float_info.max:
+        raise ValueError(message)
+    return seconds
