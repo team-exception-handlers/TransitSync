@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { PlaybackTimeline } from "./components/PlaybackTimeline";
 import { StationCanvas } from "./components/station-canvas";
 import { ConnectionSelector } from "./components/connection-selector";
+import { connectionRuns } from "./data/connection-runs";
 import { stationViewData } from "./data/stationViewData";
 import { formatTime } from "./lib/time";
 import { usePlaybackStore } from "./store/usePlaybackStore";
@@ -22,6 +23,7 @@ export default function App() {
     const store = usePlaybackStore.getState();
 
     if (store.data === null) {
+      store.setAvailableRuns(connectionRuns);
       store.loadData(stationViewData);
     }
   }, []);
@@ -87,6 +89,11 @@ export default function App() {
             className="panel station-region"
             aria-label="Station view"
           >
+            <div className="station-heading">
+              <span className="clock-heading">Selected connection</span>
+              <h1>{data?.connections[0]?.label ?? "Choose a connection"}</h1>
+              <small>Mock playback · synthetic passenger and train data</small>
+            </div>
             <StationCanvas />
           </section>
 
