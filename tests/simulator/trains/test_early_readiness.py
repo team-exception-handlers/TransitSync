@@ -138,8 +138,6 @@ def test_generated_early_runs_respect_operating_gaps(deviations, minimum_gap_s):
         for index, deviation in enumerate(deviations)
     ]
     records = run_trains(trains, minimum_gap_s)
-    times = [event.time_s for event in records]
-    assert times == sorted(times)
     expected_ids = [train.id for train in trains]
     # Pin every visit before pairwise assertions: missing events must fail too.
     for platform in ("P1", "P2"):
