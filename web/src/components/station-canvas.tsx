@@ -12,6 +12,7 @@ import { fitLayout } from "../lib/fitLayout";
 import { getNetworkSnapshot } from "../lib/getNetworkSnapshot";
 import { samplePassengers } from "../lib/samplePassengers";
 import { usePlaybackStore } from "../store/usePlaybackStore";
+import type { PassengerPosition, Point } from "../types/stationView";
 
 interface ViewSize {
   width: number;
@@ -20,6 +21,74 @@ interface ViewSize {
 
 /** Marker budget for an individual connection; above this we sample and label the true count. */
 const MAX_PASSENGER_MARKERS = 60;
+
+/**
+ * Draws one passenger marker. Each non-walking phase uses a distinct shape
+ * and outline, not just a different fill color, so the state reads even
+ * without color vision (see connection-selector.tsx for the same approach).
+ */
+function drawPassengerMarker(
+  context: CanvasRenderingContext2D,
+  position: Point,
+  phase: PassengerPosition["phase"],
+) {
+  const { x, y } = position;
+
+  switch (phase) {
+    case "queued": {
+      // Queued: an outlined square (standing in a line), no fill.
+      context.strokeStyle = "#16191d";
+      context.lineWidth = 1.5;
+      context.strokeRect(x - 4, y - 4, 8, 8);
+      return;
+    }
+    case "waiting": {
+      // Waiting on the platform: a filled circle with a visible ring outline.
+      context.beginPath();
+      context.arc(x, y, 4, 0, 2 * Math.PI);
+      context.fillStyle = "#16191d";
+      context.fill();
+      context.strokeStyle = "#ffffff";
+      context.lineWidth = 1.5;
+      context.stroke();
+      return;
+    }
+    case "boarding": {
+      // Boarding: a filled triangle, distinct in shape as well as color.
+      context.beginPath();
+      context.moveTo(x, y - 5);
+      context.lineTo(x + 5, y + 4);
+      context.lineTo(x - 5, y + 4);
+      context.closePath();
+      context.fillStyle = "#007b78";
+      context.fill();
+      return;
+    }
+    case "missed": {
+      // Missed the connection: an outlined circle with a cross through it.
+      context.beginPath();
+      context.arc(x, y, 4, 0, 2 * Math.PI);
+      context.strokeStyle = "#b3261e";
+      context.lineWidth = 1.5;
+      context.stroke();
+      context.beginPath();
+      context.moveTo(x - 3, y - 3);
+      context.lineTo(x + 3, y + 3);
+      context.moveTo(x - 3, y + 3);
+      context.lineTo(x + 3, y - 3);
+      context.stroke();
+      return;
+    }
+    default: {
+      // Walking: a simple filled circle.
+      context.beginPath();
+      context.arc(x, y, 4, 0, 2 * Math.PI);
+      context.fillStyle = "#16191d";
+      context.fill();
+      return;
+    }
+  }
+}
 
 /** Draw recorded map coordinates; seeking rebuilds rather than mutating sprites. */
 export function StationCanvas() {
@@ -115,10 +184,7 @@ export function StationCanvas() {
     );
     const { sampled, trueCount } = samplePassengers(connectionPassengers, MAX_PASSENGER_MARKERS);
     for (const passenger of sampled) {
-      context.beginPath();
-      context.arc(passenger.position.x, passenger.position.y, 4, 0, 2 * Math.PI);
-      context.fillStyle = passenger.phase === "boarding" ? "#007b78" : "#16191d";
-      context.fill();
+      drawPassengerMarker(context, passenger.position, passenger.phase);
     }
 
     // The true count is always labeled, even when the drawn markers are a sample.

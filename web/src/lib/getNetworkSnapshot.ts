@@ -4,10 +4,13 @@ import type {
     NetworkSnapshot,
     PassengerPosition,
     PassengerTrack,
+    Point,
     StationViewData,
     TrainAtPlatform,
     TrainMovementEvent,
 } from "../types/stationView";
+
+import { interpolateAlongCorridor } from "./interpolateAlongCorridor";
 
 function clampTime(
     time_s: number,
@@ -26,6 +29,7 @@ function clampTime(
 function getPassengerPosition(
     track: PassengerTrack,
     time_s: number,
+    corridorPath: readonly Point[] | undefined,
 ): PassengerPosition | null {
     const samples = track.samples;
 
@@ -73,17 +77,12 @@ function getPassengerPosition(
             (time_s - current.time_s) /
             (next.time_s - current.time_s);
 
-        position = {
-            x:
-                current.position.x +
-                (next.position.x - current.position.x) *
-                fraction,
-
-            y:
-                current.position.y +
-                (next.position.y - current.position.y) *
-                fraction,
-        };
+        position = interpolateAlongCorridor(
+            current.position,
+            next.position,
+            fraction,
+            corridorPath,
+        );
     }
 
     return {
@@ -114,6 +113,29 @@ function compareTrainEvents(
     }
 
     return a.train_id.localeCompare(b.train_id);
+}
+
+function getCorridorPathByConnection(
+    data: StationViewData,
+): Map<string, Point[]> {
+    const corridorById = new Map(
+        data.corridors.map((corridor) => [
+            corridor.id,
+            corridor.path,
+        ]),
+    );
+
+    const result = new Map<string, Point[]>();
+
+    for (const connection of data.connections) {
+        const path = corridorById.get(connection.corridor_id);
+
+        if (path) {
+            result.set(connection.id, path);
+        }
+    }
+
+    return result;
 }
 
 function getTrainsAtTime(
@@ -168,9 +190,18 @@ export function getNetworkSnapshot(
         data.duration_s,
     );
 
+    const corridorPathByConnection =
+        getCorridorPathByConnection(data);
+
     const passengers = data.passenger_tracks
         .map((track) =>
-            getPassengerPosition(track, time_s),
+            getPassengerPosition(
+                track,
+                time_s,
+                corridorPathByConnection.get(
+                    track.connection_id,
+                ),
+            ),
         )
         .filter(
             (passenger): passenger is PassengerPosition =>
