@@ -45,6 +45,10 @@ from simulator.control.decision_audit import (
     write_decision_log,
 )
 from simulator.control.settings import ControlSettings
+from simulator.control.validation import (
+    PostRunValidationFailedError,
+    validate_run_results,
+)
 from simulator.engine.event_log import (
     EVENTS_FILE,
     MANIFEST_FILE,
@@ -320,6 +324,13 @@ def run_scenario(
         write_summary(summary, summary_path)
         write_manifest(_manifest_record(scenario, components), manifest_path)
         write_decision_log(_decision_records(components), decisions_path)
+
+        # Task 2.5.6 (#59): Verify constraints and passenger conservation after the run.
+        try:
+            validate_run_results(summary)
+        except PostRunValidationFailedError as error:
+            raise RunError(f"Post-run validation failed: {error}") from error
+
     except OSError as error:
         _discard_output(*output_paths)
         log.exception("could not write run output to %s: %s", output_dir, error)
