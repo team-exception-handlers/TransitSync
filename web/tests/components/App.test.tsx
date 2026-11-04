@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import App from "../../src/App";
+import { connectionRuns } from "../../src/data/connection-runs";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
 
 describe("TransitSync application shell", () => {
@@ -101,5 +102,35 @@ describe("TransitSync application shell", () => {
         expect(
             screen.getByRole("button", { name: /McGill/ }).getAttribute("aria-pressed")
         ).toBe("true");
+    });
+
+    it("shows the selected connection's label in the heading, not connections[0]", () => {
+        usePlaybackStore.getState().setAvailableRuns(connectionRuns);
+        render(<App />);
+
+        const buttons = screen.getAllByRole("button", { name: /line$/ });
+        fireEvent.click(buttons[buttons.length - 1]);
+
+        const selectedId = usePlaybackStore.getState().selectedConnectionId;
+        const selectedLabel = usePlaybackStore.getState().data?.connections
+            .find((connection) => connection.id === selectedId)?.label;
+
+        expect(selectedLabel).toBeTruthy();
+        expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(selectedLabel);
+    });
+
+    it("keeps the heading on the selected connection through a playback time change", () => {
+        render(<App />);
+
+        const buttons = screen.getAllByRole("button", { name: /line$/ });
+        fireEvent.click(buttons[buttons.length - 1]);
+        const selectedLabel = screen.getByRole("heading", { level: 1 }).textContent;
+
+        fireEvent.change(
+            screen.getByRole("slider", { name: "Seek simulation time" }),
+            { target: { value: "60" } },
+        );
+
+        expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(selectedLabel);
     });
 });
