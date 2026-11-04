@@ -199,12 +199,22 @@ body {
 
 .station-region {
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.station-canvas-wrap {
+  display: block;
+  width: 100%;
+  /* Flexes to fill the remaining panel height; fitLayout() letterboxes the
+     fixture's fixed-size map inside whatever box this resolves to. */
+  flex: 1;
+  min-height: 320px;
+  overflow: hidden;
 }
 
 .station-canvas {
   display: block;
-  width: 100%;
-  height: auto;
   background: #f9faf7;
   border-radius: 10px;
 }
