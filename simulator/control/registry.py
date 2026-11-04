@@ -7,7 +7,7 @@ simulator never imports a strategy class directly.
 """
 
 import inspect
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 from simulator.control.interface import DecisionController
 
@@ -52,16 +52,28 @@ class StrategyRegistry:
     def __contains__(self, name: object) -> bool:
         return name in self._classes
 
-    def build(self, name: str) -> DecisionController:
-        """Create a new instance of the strategy called ``name``.
+    def build(
+        self, name: str, *, target_headways_s: Mapping[str, float] | None = None
+    ) -> DecisionController:
+        """Build a new strategy with supplied headway targets in seconds.
 
-        Raises:
-            UnknownStrategyError: no strategy has that name. The message lists
-                the valid names so a typo in a scenario is easy to fix.
+        Raise UnknownStrategyError for unknown names, listing valid choices.
+        Raise ValueError for missing or bad targets, or targets on other strategies.
         """
+        # Delay this import to avoid a cycle with built-in registration.
+        from simulator.control.strategies.headway_regulation import (
+            HeadwayRegulationStrategy,
+        )
+
         strategy_class = self._classes.get(name) if isinstance(name, str) else None
         if strategy_class is None:
             raise UnknownStrategyError(
                 f"unknown strategy {name!r}; available: {', '.join(self.names())}"
             )
+        if issubclass(strategy_class, HeadwayRegulationStrategy):
+            if target_headways_s is None:
+                raise ValueError("target_headways_s required for headway_regulation")
+            return strategy_class(target_headways_s)
+        if target_headways_s is not None:
+            raise ValueError("target_headways_s only valid for headway_regulation")
         return strategy_class()

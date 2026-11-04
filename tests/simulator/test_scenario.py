@@ -443,7 +443,10 @@ def test_invalid_control_settings_name_the_field(dataset, control, message):
 
 
 def test_unknown_strategy_error_lists_choices(dataset):
-    with pytest.raises(ScenarioValidationError, match="choose no_control"):
+    with pytest.raises(
+        ScenarioValidationError,
+        match="choose headway_regulation, no_control, schedule_based",
+    ):
         load(dataset, control={"strategy": "schedule"})
 
 

@@ -220,6 +220,12 @@ inbound terminal dwell is also retained. For delay attribution, recovery reduces
 inherited lateness first, then generated lateness. Passenger alighting and
 destination selection remain responsibilities of passenger movement logic.
 
+Holding delay is tracked separately from disruption delay. The hold record keeps
+all time spent waiting, even when the train is early: a train held for 30 seconds
+while 10 seconds early gains only 20 seconds of lateness. This distinction stays
+with the train at later stops. Recovery first removes delay inherited from other
+trains, then reduces its own holding and disruption delays in proportion.
+
 **Line suspension.** Configure immutable `LineSuspension(line_id, start_s, end_s)`
 objects on `TrainComponent`. Explicit line IDs are required for every train
 when suspensions are configured; generators set these automatically. A suspension
@@ -230,6 +236,11 @@ with the existing safe gap. Each platform admits only one train at a time;
 following arrivals wait until the train occupying it departs. Blocked dispatch
 time becomes generated disruption delay and travels downstream, including
 through terminal recovery.
+
+Overlapping holds and suspensions are not counted twice. If a train is ready at
+280 seconds, held until 400, but already blocked until 450, the hold adds no extra
+lateness. If the blockage ends at 350, only the extra 50 seconds count as holding
+delay. A blockage caused by staying for a hold counts towards that hold's delay.
 
 An optional `PlatformQueue` queues existing `PassengerArrival` events FIFO on
 selected platforms. Attach it to the train component as the sole boarding owner
@@ -542,6 +553,46 @@ for name in ("no_control", "schedule_based"):
 
 In this example, no-control departs at 120 and 220 seconds. Schedule control
 adds a 10-second hold at the first stop, giving departures at 130 and 230.
+
+### Headway regulation
+
+Headway is the time between trains leaving the same platform. Headway regulation
+(`headway_regulation`) holds a train when that gap is shorter than the chosen
+target. For a 300-second target, a train ready 180 seconds after the previous
+train left requests a 120-second hold. The first train leaves without a hold.
+
+Set a target in seconds for each platform; there is no default. This policy uses
+actual departure times and ignores the timetable, passenger counts and transfers.
+Operating rules can shorten or refuse a hold, so equal spacing is not guaranteed.
+
+```json
+{"control": {"strategy": "headway_regulation", "target_headways_s": {"P": 300}}}
+```
+
+#### Comparing the three baselines
+
+A, B and C are scheduled to leave at 100, 400 and 700 seconds. Each has a normal
+30-second stop, but B arrives 120 seconds early and is ready to leave at 280.
+With a 300-second target, both holding policies make B wait until 400:
+
+| Policy | Departures A / B / C | Holds | Gaps between departures |
+|---|---|---|---|
+| No control | 100 / 280 / 700 s | None | 180 / 420 s |
+| Schedule-based | 100 / 400 / 700 s | B waits 120 s | 300 / 300 s |
+| Headway regulation | 100 / 400 / 700 s | B waits 120 s | 300 / 300 s |
+
+The difference between the largest and smallest gap falls from 240 seconds to
+zero. B uses its earliness to wait, so the hold adds no lateness.
+
+The holding policies can give different results. If A leaves at 200 and B is
+scheduled and ready at 400, schedule-based control lets B leave. Headway
+regulation holds it until 500 to reach the 300-second gap.
+
+Tests repeat each baseline with fresh trains and the same settings and seed.
+They check exact departures and holds, repeatable output files, separate platform
+histories, hold limits and departure restrictions after a hold ends. The example
+uses fixed inputs, seed 7, a 1000-second run, a 90-second minimum gap and a
+300-second maximum hold.
 
 ## Team
 
