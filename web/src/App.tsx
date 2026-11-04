@@ -7,6 +7,8 @@ import { ConnectionSelector } from "./components/connection-selector";
 import { connectionRuns } from "./data/connection-runs";
 import { stationViewData } from "./data/stationViewData";
 import { SimulationClock } from "./components/simulation-clock";
+import { OperatingRulesPanel } from "./components/operating-rules-panel";
+import { DecisionView } from "./components/decision-view";
 import { startPlaybackClock } from "./lib/playback-clock";
 import { PlaybackControls } from "./components/playback-controls";
 import { SpeedSelector } from "./components/speed-selector";
@@ -98,11 +100,11 @@ export default function App() {
             {/* SIMULATION TIME */}
             <SimulationClock />
 
-            {/* EMPTY SECTION */}
-            <div className="panel" />
+            {/* OPERATING RULES */}
+            <OperatingRulesPanel />
 
-            {/* EMPTY SECTION */}
-            <div className="panel" />
+            {/* DECISIONS */}
+            <DecisionView />
 
           </aside>
 
