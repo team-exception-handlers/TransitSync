@@ -340,7 +340,9 @@ supplies this standalone calculation and hand-calculated tests in
 `TrainComponent` still uses scheduled dwell. Connecting this calculation to live
 passenger counts and departure scheduling remains separate integration work.
 
-Task #23 adds optional crowding to this calculation:
+[Task #23](https://github.com/team-exception-handlers/TransitSync/issues/23) adds
+optional crowding in
+[PR #179](https://github.com/team-exception-handlers/TransitSync/pull/179):
 
 ```python
 model = DwellModel(20.0, 1.5, 0.75, crowding_strength=2.0)
