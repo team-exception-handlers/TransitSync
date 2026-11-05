@@ -26,7 +26,7 @@ This is a 1 year software engineering capstone project at Concordia University, 
 
 ## Getting started
 
-The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. There is no user interface or command-line program yet; a run is started from Python or from the tests.
+The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend currently provides a health check only; it does not yet expose simulation runs. There is no user interface or command-line program yet, so a simulation run is started from Python or from the tests.
 
 ### Requirements
 
@@ -53,6 +53,20 @@ If PowerShell blocks `Activate.ps1`, running `Set-ExecutionPolicy -Scope Current
 pytest -v                 # all tests, one line per test
 ruff check .              # lint, including the complexity and function size limits
 ruff format --check .     # formatting
+```
+
+### Running the API
+
+The backend currently exposes `GET /health`. It allows the Vite development
+server at `http://localhost:5173` by default. Set
+`TRANSITSYNC_CORS_ORIGINS` to a comma-separated list of exact HTTP(S) origins
+to allow other front ends; invalid origins are rejected when the app starts.
+The API reads this setting from the process environment and does not load
+committed files.
+
+```powershell
+$env:TRANSITSYNC_CORS_ORIGINS = "http://localhost:5173"
+python -m uvicorn api.main:app --reload
 ```
 
 ### Seeing a simulation run
@@ -111,6 +125,8 @@ when applying them to a different timetable. Set the enclosing scenario's
 
 | Path | Contents |
 |---|---|
+| `api/main.py` | FastAPI application factory and health endpoint |
+| `api/settings.py` | Environment-backed API settings and CORS origin validation |
 | `simulator/engine/events.py` | Event types, the versioned record schema and the tie order for events at the same time |
 | `simulator/engine/event_queue.py` | Event queue and simulation clock |
 | `simulator/engine/event_log.py` | Event log, summary and run manifest writers |

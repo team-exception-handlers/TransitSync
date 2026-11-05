@@ -2,6 +2,10 @@
 # Add a package here only when merged code imports it.
 numpy==2.5.4
 
+# FastAPI backend and ASGI server.
+fastapi==0.162.0
+uvicorn==0.54.0
+
 # Supabase access and local connection settings.
 psycopg[binary]==3.3.6
 python-dotenv==1.2.4
