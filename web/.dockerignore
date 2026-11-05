@@ -1,0 +1,12 @@
+.git
+node_modules
+dist
+dist-ssr
+coverage
+.vite
+.env
+.env.*
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*

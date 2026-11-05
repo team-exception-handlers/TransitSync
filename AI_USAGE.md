@@ -67,6 +67,7 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
 
 | Date | Feature or fix | Issue | Pull request | AI contribution level | AI-assisted files | How the AI-generated code was verified |
 |---|---|---|---|---|---|---|
+| 2026-11-05 | Docker Compose workflow for the FastAPI backend and React frontend | [#177](https://github.com/team-exception-handlers/TransitSync/issues/177) | Not opened | 50% or more AI-generated | `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `web/Dockerfile`, `web/.dockerignore`, `README.md`, `AI_USAGE.md` | Compose config validated; both images built; both containers became healthy; backend returned `{"status":"ok"}` and frontend returned HTTP 200; full Python and frontend test suites passed |
 | 2026-11-05 | FastAPI backend skeleton and health check | [#153](https://github.com/team-exception-handlers/TransitSync/issues/153) | Not opened | 50% or more AI-generated | `api/__init__.py`, `api/main.py`, `api/settings.py`, `tests/api/test_main.py`, `requirements.txt`, `requirements-dev.txt`, `.env.example`, `README.md` | 7 API tests cover the typed health response, configured/default CORS, untrusted-origin rejection and invalid-origin validation; full suite: 1,130 passed; Ruff lint and formatting passed |
 | 2026-10-17 | Python project configuration and tooling | setup | [#102](https://github.com/team-exception-handlers/TransitSync/pull/102) | 50% or more AI-generated | `pyproject.toml`, `requirements.txt`, `requirements-dev.txt` | `ruff check .`, `ruff format --check .` and `pytest` run locally with the pinned versions |
 | 2026-10-17 | Event types and record schema | [#96](https://github.com/Gur-Lal/TransitSync/issues/96) | [#102](https://github.com/team-exception-handlers/TransitSync/pull/102) | 50% or more AI-generated | `simulator/engine/events.py`, `tests/simulator/engine/test_events.py` | Round-trip tests for every event type, field validation edge cases, Hypothesis round-trip property test |
@@ -104,6 +105,17 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
 | 2026-11-03 | Headway regulation, delay tracking and baseline comparison | [#48](https://github.com/team-exception-handlers/TransitSync/issues/48) | [#167](https://github.com/team-exception-handlers/TransitSync/pull/167) | 50% or more AI-generated | `simulator/trains/train.py`, `simulator/trains/train_component.py`, `tests/simulator/trains/test_delay_accounting.py`, `tests/simulator/trains/test_hold_attribution.py`, `simulator/control/strategies/headway_regulation.py`, `tests/simulator/control/test_headway_regulation.py`, `simulator/control/settings.py`, `simulator/control/registry.py`, `simulator/control/strategies/__init__.py`, `simulator/control/headway_configuration.py`, `tests/simulator/control/test_headway_settings.py`, `tests/simulator/control/test_headway_configuration.py`, `tests/simulator/control/test_headway_selection.py`, `tests/simulator/test_scenario.py`, `tests/simulator/control/headway_run_helpers.py`, `tests/simulator/control/test_headway_comparison.py` | Added fixed per-platform headway targets, saved policy selection and checks for platform IDs, full return schedules and the engine's minimum gap. Kept holding and disruption delays separate during travel and recovery. Hand-calculated tests, full simulation runs, Hypothesis properties and targeted mutation checks cover first departures, changed targets, platform history, hold limits, dispatch clearance and invalid settings. The three-baseline example improves gaps from 180/420 to 300/300 seconds; repeated runs produce identical event/summary files and matching manifests apart from their timestamp. Review fixes added NumPy target support and strengthened oversized-target handling and fixtures for later targets, passenger independence and engine-gap wiring. Latest full suite: 1119 passed; Ruff lint/format, extended checks and whitespace checks passed. |
 
 ## Development examples
+
+### Docker Compose workflow (#177)
+
+- **Date:** 2026-11-05
+- **Tool:** Copilot SDK in VS Code
+- **AI contribution:** 50% or more AI-generated
+- **Files:** `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `web/Dockerfile`, `web/.dockerignore`, `README.md`, `AI_USAGE.md`
+- **Pull request:** Not opened
+- **Change:** Build the FastAPI backend from pinned Python requirements and the Vite production bundle from `package-lock.json`; serve both through Docker Compose and recommend Docker for local use.
+- **Verification:** Compose config validation passed. Both images built using an isolated BuildKit builder; both services reached healthy status, and the API health response and frontend HTTP 200 were checked from the host. Full test suites passed (1,130 Python and 107 frontend tests).
+- **Issue encountered:** Docker Desktop's integrated builder returned `exec format error` even for a minimal `RUN` step. A temporary isolated BuildKit builder built and ran the services; it and the test containers were removed after verification.
 
 ### Pulsed transfer arrivals (#18)
 
