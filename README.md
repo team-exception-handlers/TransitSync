@@ -337,9 +337,34 @@ passenger movements, dwell equals the base. A zero coefficient disables its term
 [Task #22](https://github.com/team-exception-handlers/TransitSync/issues/22)
 supplies this standalone calculation and hand-calculated tests in
 [PR #136](https://github.com/team-exception-handlers/TransitSync/pull/136).
-`TrainComponent` still uses scheduled dwell: live passenger counts and dynamic
-departure scheduling require integration with boarding/alighting (#100).
-Crowding penalties are separate work (#23).
+`TrainComponent` still uses scheduled dwell. Connecting this calculation to live
+passenger counts and departure scheduling remains separate integration work.
+
+Task #23 adds optional crowding to this calculation:
+
+```python
+model = DwellModel(20.0, 1.5, 0.75, crowding_strength=2.0)
+assert model.compute(
+    boarded_count=10, alighted_count=8, onboard_load=50, capacity=100
+) == 43.625
+```
+
+Let `service = boarding_coefficient * B + alighting_coefficient * A` and
+`r = onboard_load / capacity`. Dwell is
+`base + service + service * crowding_strength * r**4`.
+Use load **after alighting and boarding**, excluding passengers left behind.
+For the example, service is 21 seconds and the extra delay is
+`21 * 2 * 0.5**4 = 2.625` seconds. At full capacity dwell is 83 seconds.
+The quartic curve gives progressively steeper increases near capacity and stays
+finite at full load. It is a modeling choice requiring calibration, rather than
+a measured transit relationship. Strength is dimensionless and non-negative;
+at full load it specifies the extra fraction of passenger service time.
+The default strength of zero preserves the original model and allows omitted
+load/capacity. Enabled crowding requires both: integer load between zero and
+capacity, and positive integer capacity. Supplied load/capacity are validated
+even when crowding is disabled. Zero passenger service still returns base dwell.
+Non-finite computed dwell is rejected with `ValueError`.
+Dynamic departure scheduling remains separate integration work.
 
 ### Passenger entity and generation
 
