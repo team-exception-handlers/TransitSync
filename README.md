@@ -346,9 +346,10 @@ optional crowding in
 
 ```python
 model = DwellModel(20.0, 1.5, 0.75, crowding_strength=2.0)
-assert model.compute(
-    boarded_count=10, alighted_count=8, onboard_load=50, capacity=100
-) == 43.625
+assert (
+    model.compute(boarded_count=10, alighted_count=8, onboard_load=50, capacity=100)
+    == 43.625
+)
 ```
 
 Let `service = boarding_coefficient * B + alighting_coefficient * A` and
