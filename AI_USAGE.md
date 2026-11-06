@@ -48,6 +48,15 @@ component and playback tests. Exact original Figma SVG assets are stored under
 
 Development examples:
 
+- Station layout API (#74): Task: serve the static station/connection map data.
+  Files: `api/main.py`, `api/station_layout.py`, `config/station_layouts.json`,
+  `tests/api/test_main.py`, `README.md`, and `AI_USAGE.md`. PR: opened.
+  Verification checks front-end fixture coordinates, canonical platform fields
+  from `network.json`, map-only geometry in the new catalog, each interchange,
+  and unknown-ID handling; all 1,142 tests, `ruff check .`, and
+  `ruff format --check .` pass. An initial McGill station-label mismatch and
+  duplicated schedule metadata were corrected; tests now guard the API's
+  coordinates, canonical metadata source, and geometry-only catalog shape.
 - Connection selection loads a validated catalog entry atomically and resets
   playback. Tests verify all three station identities against the saved backend
   mapping, selected-state feedback, invalid IDs and same-selection behavior
@@ -67,6 +76,7 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
 
 | Date | Feature or fix | Issue | Pull request | AI contribution level | AI-assisted files | How the AI-generated code was verified |
 |---|---|---|---|---|---|---|
+| 2026-11-06 | Station layout endpoint | [#74](https://github.com/team-exception-handlers/TransitSync/issues/74) | Not opened | 50% or more AI-generated | `api/main.py`, `api/station_layout.py`, `config/station_layouts.json`, `tests/api/test_main.py`, `README.md`, `AI_USAGE.md` | 19 API tests verify McGill map coordinates, canonical network metadata, geometry-only catalog records, all three interchanges, and 404 for an unknown interchange; full suite: 1,142 passed; `ruff check .` and `ruff format --check .` passed |
 | 2026-11-05 | Docker Compose workflow for the FastAPI backend and React frontend | [#177](https://github.com/team-exception-handlers/TransitSync/issues/177) | [#178](https://github.com/team-exception-handlers/TransitSync/pull/178) | 50% or more AI-generated | `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `web/Dockerfile`, `web/.dockerignore`, `.github/workflows/docker.yml`, `README.md`, `AI_USAGE.md` | Compose config validated; base image tags and multi-platform digests verified against Docker Hub; prior images built and both containers became healthy with successful backend/frontend HTTP checks; full Python and frontend test suites passed. CI smoke checks are added and await the PR run |
 | 2026-11-05 | FastAPI backend skeleton and health check | [#153](https://github.com/team-exception-handlers/TransitSync/issues/153) | Not opened | 50% or more AI-generated | `api/__init__.py`, `api/main.py`, `api/settings.py`, `tests/api/test_main.py`, `requirements.txt`, `requirements-dev.txt`, `.env.example`, `README.md` | 7 API tests cover the typed health response, configured/default CORS, untrusted-origin rejection and invalid-origin validation; full suite: 1,130 passed; Ruff lint and formatting passed |
 | 2026-10-17 | Python project configuration and tooling | setup | [#102](https://github.com/team-exception-handlers/TransitSync/pull/102) | 50% or more AI-generated | `pyproject.toml`, `requirements.txt`, `requirements-dev.txt` | `ruff check .`, `ruff format --check .` and `pytest` run locally with the pinned versions |
