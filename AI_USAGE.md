@@ -39,9 +39,19 @@ wrap to negative dwell and oversized integer coefficients leaked `OverflowError`
 Normalize counts before arithmetic and reject unrepresentable coefficients with
 `ValueError`. Regression tests cover both fixes; property tests check monotonicity
 and endpoint bounds. All four targeted mutations (NumPy overflow, linear growth,
-disabled penalty and scaling base dwell) were caught. Full suite: 1179 passed;
-95 dwell cases give 100% statement/branch coverage. Ruff lint/format passed for
+disabled penalty and scaling base dwell) were caught. Full suite: 1228 passed;
+144 dwell cases give 100% statement/branch coverage. Ruff lint/format passed for
 tracked Python files with configured exclusions; whitespace checks passed.
+PR review: document the Metro-only model and fixed REM dwell; accept and
+normalize `numbers.Real` coefficients, including NumPy scalars. Infer arrival
+load by passenger conservation and use the peak of arrival/final load for
+crowding, rejecting impossible passenger movements. Make the exponent
+configurable (default four, strictly greater than one) for sensitivity analysis.
+Regressions cover a packed train unloading, mixed passenger flows, NumPy
+coefficients and alternate exponents. Five further targeted mutations (final
+load only, wrong arrival conservation, hardcoded exponent, unnormalized
+coefficients and allowing a linear exponent) were caught. A corresponding
+Mathematical Foundations section 4 wiki update is prepared separately.
 Dynamic departure scheduling remains separate.
 
 Station Canvas integration (2026-11-02): Codex (OpenAI), 50% or more AI-generated.

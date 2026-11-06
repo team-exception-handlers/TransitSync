@@ -300,7 +300,12 @@ applied status to `manifest.json`; event logs remain byte-reproducible.
 
 ### Dwell time model
 
-`simulator.trains.dwell.DwellModel` computes stop dwell in seconds:
+`simulator.trains.dwell.DwellModel` computes demand-dependent **Metro** dwell in
+seconds, following [Mathematical Foundations, section 4](https://github.com/team-exception-handlers/TransitSync/wiki/Mathematical-Foundations#4-dwell-time-and-boarding-capacity).
+Use it only for Metro trains. **REM dwell stays fixed at the scheduled value**
+because REM doors close on a timer. Setting crowding strength to zero alone is
+not enough for REM: the boarding/alighting terms would still vary its dwell.
+The caller must select the model by network; `DwellModel` has no network identity.
 
 ```python
 from simulator.trains.dwell import DwellModel
@@ -353,19 +358,31 @@ assert (
 ```
 
 Let `service = boarding_coefficient * B + alighting_coefficient * A` and
-`r = onboard_load / capacity`. Dwell is
-`base + service + service * crowding_strength * r**4`.
-Use load **after alighting and boarding**, excluding passengers left behind.
+`r = max(arrival_load, onboard_load) / capacity`. Dwell is
+`base + service + service * crowding_strength * r**crowding_exponent`.
+Supply final `onboard_load` **after alighting and boarding**, excluding passengers
+left behind. The model infers `arrival_load = onboard_load - B + A`, assuming
+alighting precedes boarding. Using the peak of arrival and final load keeps a
+crowding penalty when a train arrives packed and many passengers get off.
 For the example, service is 21 seconds and the extra delay is
 `21 * 2 * 0.5**4 = 2.625` seconds. At full capacity dwell is 83 seconds.
-The quartic curve gives progressively steeper increases near capacity and stays
-finite at full load. It is a modeling choice requiring calibration, rather than
-a measured transit relationship. Strength is dimensionless and non-negative;
+For example, with base 20, alighting coefficient 1 and strength 1, a train that
+arrives full at capacity 1000 and drops off 500 passengers has 1020 seconds of
+dwell: `20 + 500 + 500 * 1**4`. Using only its final load would give 551.25 seconds.
+
+The default quartic curve gives progressively steeper increases near capacity
+and has no singularity at full load. Set `crowding_exponent` (default `4.0`) to
+any finite value greater than one for sensitivity analysis, such as 2, 3 or 4.
+Strength and exponent are modeling choices requiring calibration, rather than
+measured transit relationships. Strength is dimensionless and non-negative;
 at full load it specifies the extra fraction of passenger service time.
 The default strength of zero preserves the original model and allows omitted
 load/capacity. Enabled crowding requires both: integer load between zero and
 capacity, and positive integer capacity. Supplied load/capacity are validated
-even when crowding is disabled. Zero passenger service still returns base dwell.
+even when crowding is disabled. Passenger counts must be consistent with the
+supplied loads: boarded passengers cannot exceed final load and inferred arrival
+load cannot exceed capacity. Real numeric coefficients, including NumPy scalars,
+are normalized to Python floats. Zero passenger service still returns base dwell.
 Non-finite computed dwell is rejected with `ValueError`.
 Dynamic departure scheduling remains separate integration work.
 
