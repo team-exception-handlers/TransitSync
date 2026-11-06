@@ -63,6 +63,76 @@ def test_cors_does_not_allow_unconfigured_origins(
     assert "access-control-allow-origin" not in response.headers
 
 
+def test_cors_allows_get_preflight_with_content_type_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Allow the current GET API and its required content-type header.
+
+    Browsers preflight this header, so check the method and header allowlists.
+    """
+    monkeypatch.setenv("TRANSITSYNC_CORS_ORIGINS", "http://localhost:5173")
+    client = TestClient(create_app())
+
+    response = client.options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "Content-Type",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-methods"] == "GET"
+    assert "content-type" in response.headers["access-control-allow-headers"].lower()
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "DELETE"])
+def test_cors_rejects_unconfigured_preflight_methods(
+    monkeypatch: pytest.MonkeyPatch, method: str
+) -> None:
+    """Reject preflights for methods not currently exposed by the API.
+
+    A failed preflight prevents browsers from issuing that cross-origin method.
+    """
+    monkeypatch.setenv("TRANSITSYNC_CORS_ORIGINS", "http://localhost:5173")
+    client = TestClient(create_app())
+
+    response = client.options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": method,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.text == "Disallowed CORS method"
+
+
+def test_cors_rejects_unconfigured_preflight_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Reject headers outside Content-Type, such as a custom client header.
+
+    Arbitrary request headers must not become allowed through the CORS policy.
+    """
+    monkeypatch.setenv("TRANSITSYNC_CORS_ORIGINS", "http://localhost:5173")
+    client = TestClient(create_app())
+
+    response = client.options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Headers": "X-API-Key",
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.text == "Disallowed CORS headers"
+
+
 @pytest.mark.parametrize(
     "origins",
     [

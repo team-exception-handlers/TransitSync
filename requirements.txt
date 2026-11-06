@@ -4,6 +4,7 @@ numpy==2.5.4
 
 # FastAPI backend and ASGI server.
 fastapi==0.162.0
+pydantic==2.14.3
 uvicorn==0.54.0
 
 # Supabase access and local connection settings.
