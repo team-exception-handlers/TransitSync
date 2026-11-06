@@ -288,11 +288,14 @@ def _validate_references(layout: StationLayoutResponse) -> None:
     """Reject duplicate or dangling station, platform, and corridor references.
 
     Map points must fit inside the pixel dimensions; invalid references raise
-    ValueError during application startup.
+    ValueError during application startup. Platform IDs are checked before
+    dereferencing; connection endpoints must match the corridor's directed
+    order so an existing but different platform cannot misdirect the map path.
     """
     station_by_id = {station.id: station for station in layout.stations}
     platforms_by_id = {platform.platform_id: platform for platform in layout.platforms}
-    corridor_ids = {corridor.id for corridor in layout.corridors}
+    corridors_by_id = {corridor.id: corridor for corridor in layout.corridors}
+    corridor_ids = set(corridors_by_id)
     identifiers = (
         ("station", station_by_id, len(layout.stations)),
         ("platform", platforms_by_id, len(layout.platforms)),
@@ -340,20 +343,41 @@ def _validate_references(layout: StationLayoutResponse) -> None:
         raise ValueError(
             f"{layout.interchange.id}: transfer has an unknown platform or corridor"
         )
+    for connection in layout.connections:
+        corridor = corridors_by_id[connection.corridor_id]
+        if (
+            connection.from_platform_id != corridor.from_platform_id
+            or connection.to_platform_id != corridor.to_platform_id
+        ):
+            raise ValueError(
+                f"{layout.interchange.id}: connection {connection.id!r} endpoints "
+                f"do not match corridor {corridor.id!r}"
+            )
 
 
 def load_station_layouts() -> dict[str, StationLayoutResponse]:
     """Load map geometry and join canonical platform metadata for each interchange.
 
-    A mismatched catalog key or invalid reference raises ValueError during app
-    creation; the endpoint never substitutes a fallback layout. Platform
-    descriptions come from network.json, while this API's catalog stores only
-    the station and transfer coordinates not present there. Returns layouts
-    keyed by interchange ID.
+    A missing layout or invalid reference raises ValueError during app creation
+    rather than causing a later 404. Catalog and network interchange IDs must
+    match exactly. Connection endpoints must match their corridor's directed
+    endpoints so selectable transfers align with drawn paths. Platform
+    descriptions come from network.json; returns layouts keyed by interchange.
     """
     catalog = json.loads(LAYOUT_PATH.read_text(encoding="utf-8"))
     geometries = LayoutCatalog.model_validate(catalog).layouts
-    metadata_by_id = _index_platform_metadata(_read_reference_network())
+    metadata = _read_reference_network()
+    metadata_by_id = _index_platform_metadata(metadata)
+    reference_interchanges = {platform.interchange_id for platform in metadata}
+    catalog_interchanges = set(geometries)
+    missing_interchanges = reference_interchanges - catalog_interchanges
+    unexpected_interchanges = catalog_interchanges - reference_interchanges
+    if missing_interchanges or unexpected_interchanges:
+        raise ValueError(
+            "station layout catalog interchange IDs do not match reference network: "
+            f"missing={sorted(missing_interchanges)}, "
+            f"unexpected={sorted(unexpected_interchanges)}"
+        )
     layouts = {}
     for interchange_id, geometry in geometries.items():
         if interchange_id != geometry.interchange.id:

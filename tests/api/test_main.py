@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
+from api import station_layout
 from api.main import create_app
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -107,6 +108,41 @@ def test_station_layout_endpoint_rejects_unknown_interchange() -> None:
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Unknown interchange: unknown"}
+
+
+def test_station_layout_startup_rejects_missing_reference_interchange(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Fail app startup when a supported interchange has no catalog entry.
+
+    The route should not hide a broken static catalog behind a later 404.
+    """
+    catalog = json.loads(station_layout.LAYOUT_PATH.read_text(encoding="utf-8"))
+    del catalog["layouts"]["edouard_montpetit"]
+    catalog_path = tmp_path / "station_layouts.json"
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    monkeypatch.setattr(station_layout, "LAYOUT_PATH", catalog_path)
+
+    with pytest.raises(ValueError, match="missing=.*edouard_montpetit"):
+        create_app()
+
+
+def test_station_layout_startup_rejects_connection_corridor_endpoint_mismatch(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Reject an existing but inconsistent platform endpoint at startup.
+
+    The connection endpoints must describe the same map path as its corridor.
+    """
+    catalog = json.loads(station_layout.LAYOUT_PATH.read_text(encoding="utf-8"))
+    connection = catalog["layouts"]["mcgill"]["connections"][0]
+    connection["to_platform_id"] = "green_mcgill_1"
+    catalog_path = tmp_path / "station_layouts.json"
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    monkeypatch.setattr(station_layout, "LAYOUT_PATH", catalog_path)
+
+    with pytest.raises(ValueError, match="endpoints do not match corridor"):
+        create_app()
 
 
 @pytest.mark.parametrize(
