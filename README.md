@@ -26,48 +26,99 @@ This is a 1 year software engineering capstone project at Concordia University, 
 
 ## Getting started
 
-The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend currently provides a health check only; it does not yet expose simulation runs. There is no user interface or command-line program yet, so a simulation run is started from Python or from the tests.
+The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend currently provides a health check only; it does not yet expose simulation runs. The frontend is a mock playback interface and does not yet retrieve simulation data from the backend. Simulation runs are started from Python or from the tests.
 
 ### Requirements
 
-- Python 3.12 or newer (`py --list` shows the installed versions on Windows)
+- Docker Desktop for Windows with Docker Compose
 - Git
 
-### Setup
+Python and Node.js are not required to run the application with Docker. Docker
+downloads the base images and installs the pinned project dependencies during
+the first build.
+
+### Build and run with Docker (recommended)
 
 ```powershell
 git clone https://github.com/Gur-Lal/TransitSync.git
 cd TransitSync
+docker compose up --build
+```
+
+When the services start, open:
+
+- Frontend: <http://localhost:5173>
+- Backend health check: <http://localhost:8000/health>
+- Backend API documentation: <http://localhost:8000/docs>
+
+The backend permits the frontend origin `http://localhost:5173` by default.
+To allow additional browser origins, set `TRANSITSYNC_CORS_ORIGINS` to a
+comma-separated list of exact HTTP(S) origins in PowerShell before starting
+Compose:
+
+```powershell
+$env:TRANSITSYNC_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+docker compose up --build
+```
+
+Press `Ctrl+C` to stop services running in the foreground. To run them in the
+background instead, use `docker compose up --build --detach`; stop and remove
+the containers and network with `docker compose down`.
+
+If Docker Desktop's integrated builder fails with `exec format error`, try a
+separate BuildKit builder:
+
+```powershell
+docker buildx create --name transitsync-builder --driver docker-container
+docker compose build --builder transitsync-builder
+docker compose up --detach
+```
+
+### Local development (optional)
+
+For running the Python tests or developing without containers, install Python
+3.12 or newer and Node.js 22.22.2 or newer. From the repository root, create a
+Python virtual environment and install the development dependencies:
+
+```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements-dev.txt
 ```
 
-On macOS or Linux, the environment is created with `python3.12 -m venv .venv` and activated with `source .venv/bin/activate`.
+On macOS or Linux, create the environment with `python3.12 -m venv .venv` and
+activate it with `source .venv/bin/activate`. In VS Code, select
+`.venv\Scripts\python.exe` through **Python: Select Interpreter** on Windows.
 
-If PowerShell blocks `Activate.ps1`, running `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once allows it. In VS Code, the interpreter is set to `.venv\Scripts\python.exe` through **Python: Select Interpreter**.
-
-### Running the checks
-
-```powershell
-pytest -v                 # all tests, one line per test
-ruff check .              # lint, including the complexity and function size limits
-ruff format --check .     # formatting
-```
-
-### Running the API
-
-The backend currently exposes `GET /health`. It allows the Vite development
-server at `http://localhost:5173` by default. Set
-`TRANSITSYNC_CORS_ORIGINS` to a comma-separated list of exact HTTP(S) origins
-to allow other front ends; invalid origins are rejected when the app starts.
-The API reads this setting from the process environment and does not load
-committed files.
+Install the frontend dependencies from the lockfile with `npm ci` in `web/`.
+Run the frontend with `npm run dev` from that directory and the API in a
+separate terminal from the repository root:
 
 ```powershell
 $env:TRANSITSYNC_CORS_ORIGINS = "http://localhost:5173"
 python -m uvicorn api.main:app --reload
 ```
+
+The `.venv` and `web/node_modules` directories are local development artifacts;
+they are excluded from Docker build contexts.
+
+### Running the checks
+
+```powershell
+pytest -v                     # all tests, one line per test
+ruff check .                  # lint, including complexity and function size limits
+ruff format --check .         # formatting
+docker compose config         # validate the container configuration
+```
+
+### API behavior
+
+The backend currently exposes `GET /health`. Its default allowed browser origin
+is `http://localhost:5173`. Configure additional exact HTTP(S) origins through
+the `TRANSITSYNC_CORS_ORIGINS` environment variable; invalid values are rejected
+when the API starts. The API reads settings from its process environment, not
+from committed files. The health endpoint is available at
+<http://localhost:8000/health> when running with Docker.
 
 ### Seeing a simulation run
 
