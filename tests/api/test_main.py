@@ -1,7 +1,5 @@
 """Tests for the FastAPI endpoints and environment configuration."""
 
-# AI contribution: 50% or more AI-generated
-
 import json
 from pathlib import Path
 
