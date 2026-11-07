@@ -431,6 +431,17 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
 - **AI correction:** Initial fixture construction omitted the required
   `TrainArrival.disruption_delay_s`; it now explicitly supplies zero.
 
+## Shared whole-passenger validation (#24 review)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `simulator/trains/train.py` and this record.
+- **Change:** Extracted `_whole_count` for the integer-type check and Python
+  integer normalization shared by construction, boarding and alighting. Existing
+  context-specific range checks and error messages are preserved.
+- **Verification:** Existing capacity boundary, NumPy, invalid-movement and
+  passenger-journey tests exercise the helper through all three public paths.
+  No helper-only tests were added for this behaviour-preserving refactor.
+
 ## Keeping this file up to date
 
 For every feature or fix pull request with AI-generated code:

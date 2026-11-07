@@ -26,6 +26,17 @@ class ScheduledStop:
             raise ValueError("Invalid stop arrival/departure times")
 
 
+def _whole_count(name: str, value: object) -> int:
+    """Normalize Python/NumPy integers; reject booleans and non-integer types.
+
+    Range checks belong to the caller: capacity, load and passenger movements
+    have different bounds. Convert before arithmetic to avoid NumPy overflow.
+    """
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise ValueError(f"{name} must be an integer")
+    return int(value)
+
+
 def _check_chronological(stops: tuple[ScheduledStop, ...]) -> None:
     """Require each stop to arrive no earlier than the previous one departs."""
     for previous, current in zip(stops, stops[1:], strict=False):
@@ -68,12 +79,10 @@ class Train:
         # Capacity arithmetic counts whole passengers. Normalize NumPy scalars
         # before arithmetic so fixed-width addition cannot wrap the live load.
         for name, minimum in (("capacity", 1), ("onboard_load", 0)):
-            value = getattr(self, name)
-            if isinstance(value, bool) or not isinstance(value, Integral):
-                raise ValueError(f"Train {name} must be an integer")
+            value = _whole_count(f"Train {name}", getattr(self, name))
             if value < minimum:
                 raise ValueError(f"Train {name} must be >= {minimum}")
-            setattr(self, name, int(value))
+            setattr(self, name, value)
         if self.onboard_load > self.capacity:
             raise ValueError("Onboard load exceeds train capacity")
 
@@ -150,10 +159,7 @@ class Train:
 
     def board(self, count: int) -> None:
         """Add passengers without exceeding capacity."""
-        if isinstance(count, bool) or not isinstance(count, Integral):
-            raise ValueError("Boarding count must be an integer")
-
-        count = int(count)
+        count = _whole_count("Boarding count", count)
         if count < 0 or count > self.available_capacity:
             raise ValueError("Invalid boarding count")
 
@@ -161,10 +167,7 @@ class Train:
 
     def alight(self, count: int) -> None:
         """Remove a whole-passenger count; reject invalid requests atomically."""
-        if isinstance(count, bool) or not isinstance(count, Integral):
-            raise ValueError("Alighting count must be an integer")
-
-        count = int(count)
+        count = _whole_count("Alighting count", count)
         if count < 0 or count > self.onboard_load:
             raise ValueError("Invalid alighting count")
 
