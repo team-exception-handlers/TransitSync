@@ -26,7 +26,7 @@ This is a 1 year software engineering capstone project at Concordia University, 
 
 ## Getting started
 
-The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend currently provides a health check only; it does not yet expose simulation runs. The frontend is a mock playback interface and does not yet retrieve simulation data from the backend. Simulation runs are started from Python or from the tests.
+The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend provides a health check and a station-layout endpoint, but does not yet expose simulation runs. The frontend is a mock playback interface and does not yet retrieve simulation data from the backend. Simulation runs are started from Python or from the tests.
 
 ### Requirements
 
@@ -49,6 +49,7 @@ When the services start, open:
 
 - Frontend: <http://localhost:5173>
 - Backend health check: <http://localhost:8000/health>
+- Backend McGill layout: <http://localhost:8000/station-layout/mcgill>
 - Backend API documentation: <http://localhost:8000/docs>
 
 The backend permits the frontend origin `http://localhost:5173` by default.
@@ -113,8 +114,20 @@ docker compose config         # validate the container configuration
 
 ### API behavior
 
-The backend currently exposes `GET /health`. Its default allowed browser origin
-is `http://localhost:5173`. Configure additional exact HTTP(S) origins through
+The backend exposes `GET /health` and `GET /station-layout/{interchange_id}`.
+The station-layout endpoint returns platforms, their map coordinates, station
+markers, connection records, and transfer corridor paths for
+`gare_centrale_bonaventure`, `mcgill`, or `edouard_montpetit`. The current
+coordinates are schematic: the front end's McGill fixture geometry is reused
+for all three interchanges. The Gare Centrale–Bonaventure and
+Édouard-Montpetit entries are placeholders; replace their geometry in
+`config/station_layouts.json` when real layouts are prepared. Platform metadata
+comes from the reference network; the layout catalog stores only map-specific
+platform positions and transfer geometry. The endpoint does not include
+passenger or train playback data.
+
+The default allowed browser origin is `http://localhost:5173`. Configure
+additional exact HTTP(S) origins through
 the `TRANSITSYNC_CORS_ORIGINS` environment variable; invalid values are rejected
 when the API starts. The API reads settings from its process environment, not
 from committed files. The health endpoint is available at
@@ -176,8 +189,10 @@ when applying them to a different timetable. Set the enclosing scenario's
 
 | Path | Contents |
 |---|---|
-| `api/main.py` | FastAPI application factory and health endpoint |
+| `api/main.py` | FastAPI application factory, health, and station-layout endpoints |
 | `api/settings.py` | Environment-backed API settings and CORS origin validation |
+| `api/station_layout.py` | Validated map geometry and platform mapping |
+| `config/station_layouts.json` | Map-ready station layouts for the three interchanges |
 | `simulator/engine/events.py` | Event types, the versioned record schema and the tie order for events at the same time |
 | `simulator/engine/event_queue.py` | Event queue and simulation clock |
 | `simulator/engine/event_log.py` | Event log, summary and run manifest writers |
@@ -365,6 +380,69 @@ Operational minimum gaps and suspensions can alter the realised headway
 distribution. Tests check the requested distribution separately from these
 safety constraints. The runner writes configured delay disruptions and their
 applied status to `manifest.json`; event logs remain byte-reproducible.
+
+### Train capacity and left-behind passengers (#24)
+
+`Train.capacity` is an explicit whole-passenger limit, including seated and
+standing riders. Initial load must be an integer between zero and capacity.
+Python and NumPy integers are accepted and normalized before arithmetic;
+booleans and fractional counts are rejected.
+
+The existing `PlatformQueue` boards compatible destinations in arrival order,
+up to remaining capacity. Skipped destinations and overflow passengers stay in
+their original queue order for later trains; callers must not enqueue them again.
+Tracked passengers remain `WAITING` until they board. A missed-connection record
+does not remove them. Destination alighting frees space before boarding, and
+untracked initial riders continue to occupy capacity.
+
+Capacity research for scenario authors (whole train, not seats; researched
+2026-11-06):
+
+| Rolling stock | Published capacity | Interpretation and source |
+|---|---:|---|
+| REM, four cars | 600 | Theoretical capacity in the operator's [rolling-stock specification](https://rem.info/en/rolling-stock). |
+| REM, four cars | 780 | Maximum comparison figure in the operator's [capacity explanation](https://rem.info/en/news/rem-seating-and-capacity), rather than the theoretical 600. |
+| AZUR, nine cars | 1,104 | W3 loading figure from STM's [technical sheet](https://www.stm.info/sites/default/files/feuillet_azur-web_ang.pdf). Search-indexed sheet; direct retrieval returned 404 during research. Reconfirm the document before using it for calibrated scenarios. |
+| MR-73 | 160 per car | Historical total-capacity entry in [TCRP Report 13, Table A3.5](https://onlinepubs.trb.org/onlinepubs/tcrp/tcrp_rpt_13.pdf). Multiplying by a scenario's six or nine cars gives 960 or 1,440; these are derived historical assumptions, not verified current operating limits. |
+
+Choose and record the actual stock, formation, source, and loading assumption
+when constructing trains. Do not infer stock or formation from a line or GTFS
+trip. No universal capacity default is introduced. Test fixtures deliberately
+use small capacities; they are not estimates of real trains.
+
+REM door throughput follows the aggregate fixed-window budget in
+[Mathematical Foundations, section 4](https://github.com/team-exception-handlers/TransitSync/wiki/Mathematical-Foundations#4-dwell-time-and-boarding-capacity)
+via explicit per-train configuration:
+
+```python
+from simulator.trains.door_throughput import DoorThroughput
+
+# Illustrative only: replace with measured or documented scenario parameters.
+component = TrainComponent(
+    trains,
+    passenger_queue=queue,
+    rem_door_throughput={"rem-train-id": DoorThroughput(0.2, 2)},
+)
+```
+
+Each configured train gets `floor(rate * scheduled_dwell_seconds * doors)`
+boardings per stop, additionally bounded by remaining vehicle capacity. Repeated
+arrivals share the budget; passengers who cannot board retain their queue order
+and `WAITING` state. Each new visit starts a fresh budget. Unknown train IDs and
+invalid rates or door counts are rejected. The run manifest records the settings.
+
+Following section 4's scheduled-dwell formula, holds and dispatch waits allow
+later arrivals to use an unspent budget but do not enlarge or reset it. Scheduled
+REM dwell remains unchanged. This is an aggregate stop budget, not continuous
+per-passenger door-service timing. Metro and other unlisted trains keep their
+existing boarding behaviour. No REM identity or measured rate is inferred:
+scenario builders must supply this configuration for REM runs; unconfigured
+trains enforce vehicle capacity only.
+
+The [LLL prototype PR #186](https://github.com/team-exception-handlers/TransitSync/pull/186)
+supplies the original stateful checks. The #24 tests extend its independent FIFO
+reference model to tracked passengers, different destinations and later trains.
+Existing scheduler integration tests cover full departures and later recovery.
 
 ### Dwell time model
 

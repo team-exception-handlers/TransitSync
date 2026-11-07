@@ -75,6 +75,15 @@ component and playback tests. Exact original Figma SVG assets are stored under
 
 Development examples:
 
+- Station layout API (#74): Task: serve the static station/connection map data.
+  Files: `api/main.py`, `api/station_layout.py`, `config/station_layouts.json`,
+  `tests/api/test_main.py`, `README.md`, and `AI_USAGE.md`. PR: opened.
+  Verification checks front-end fixture coordinates, canonical platform fields
+  from `network.json`, map-only geometry in the new catalog, each interchange,
+  and unknown-ID handling; all 1,142 tests, `ruff check .`, and
+  `ruff format --check .` pass. An initial McGill station-label mismatch and
+  duplicated schedule metadata were corrected; tests now guard the API's
+  coordinates, canonical metadata source, and geometry-only catalog shape.
 - Connection selection loads a validated catalog entry atomically and resets
   playback. Tests verify all three station identities against the saved backend
   mapping, selected-state feedback, invalid IDs and same-selection behavior
@@ -94,6 +103,7 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
 
 | Date | Feature or fix | Issue | Pull request | AI contribution level | AI-assisted files | How the AI-generated code was verified |
 |---|---|---|---|---|---|---|
+| 2026-11-06 | Station layout endpoint | [#74](https://github.com/team-exception-handlers/TransitSync/issues/74) | Not opened | 50% or more AI-generated | `api/main.py`, `api/station_layout.py`, `config/station_layouts.json`, `tests/api/test_main.py`, `README.md`, `AI_USAGE.md` | 19 API tests verify McGill map coordinates, canonical network metadata, geometry-only catalog records, all three interchanges, and 404 for an unknown interchange; full suite: 1,142 passed; `ruff check .` and `ruff format --check .` passed |
 | 2026-11-05 | Docker Compose workflow for the FastAPI backend and React frontend | [#177](https://github.com/team-exception-handlers/TransitSync/issues/177) | [#178](https://github.com/team-exception-handlers/TransitSync/pull/178) | 50% or more AI-generated | `Dockerfile`, `.dockerignore`, `docker-compose.yml`, `web/Dockerfile`, `web/.dockerignore`, `.github/workflows/docker.yml`, `README.md`, `AI_USAGE.md` | Compose config validated; base image tags and multi-platform digests verified against Docker Hub; prior images built and both containers became healthy with successful backend/frontend HTTP checks; full Python and frontend test suites passed. CI smoke checks are added and await the PR run |
 | 2026-11-05 | FastAPI backend skeleton and health check | [#153](https://github.com/team-exception-handlers/TransitSync/issues/153) | Not opened | 50% or more AI-generated | `api/__init__.py`, `api/main.py`, `api/settings.py`, `tests/api/test_main.py`, `requirements.txt`, `requirements-dev.txt`, `.env.example`, `README.md` | 7 API tests cover the typed health response, configured/default CORS, untrusted-origin rejection and invalid-origin validation; full suite: 1,130 passed; Ruff lint and formatting passed |
 | 2026-10-17 | Python project configuration and tooling | setup | [#102](https://github.com/team-exception-handlers/TransitSync/pull/102) | 50% or more AI-generated | `pyproject.toml`, `requirements.txt`, `requirements-dev.txt` | `ruff check .`, `ruff format --check .` and `pytest` run locally with the pinned versions |
@@ -338,6 +348,110 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
 - **Verification:** Hand-calculated cases and full runs check exact events, delay causes, invalid settings, return trips and operating limits. Hypothesis checks safety, recovery, target serialization and hold behavior. Repeated runs compare complete event/summary bytes and saved settings, ignoring only the recording timestamp. Latest full suite: **1119 passed**; Ruff lint/format, extended checks and whitespace checks passed.
 - **AI fixes:** Corrected oversized targets raising the wrong error, preserved exact readiness at suspension boundaries, and added tests for hold-cause limits. Strengthened fixtures that had missed reused hold values, passenger dependence, skipped later targets and a mismatched engine gap. Closer trains now expose an engine using 90 seconds when configured for 45. Added NumPy target support and JSON-saving tests. Review caught integer rounding during conversion; integer targets now stay exact.
 - **Review:** Targeted mutations confirm tests catch wrong policies, targets, platform history, operating limits and reused train state. Bypassing clearance fails an existing runtime check; it is not counted as an assertion failure. Helper typing and comment edits preserved executable logic and assertions. Documentation was shortened to explain the same results in plain language.
+
+## Capacity stateful testing prototype (#24)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `tests/simulator/passengers/test_capacity_stateful.py` and this record.
+- **Change:** Generated a Hypothesis state machine comparing existing train and
+  platform boarding with an independent FIFO model, plus explicit empty,
+  partially occupied and full train cases. No production capacity logic changed.
+- **Verification:** 173 passenger/train tests passed; targeted Ruff lint,
+  extended checks and formatting passed. An in-memory passenger-loss mutation
+  failed the queue-count invariant and shrank to capacity one, two arrivals,
+  and one boarding attempt. The patch was restored and normal tests passed.
+- **Attribution:** Implementation and verification were performed by Codex.
+  They do not establish the student's independent learning. Prototype evidence
+  is prepared for the draft PR description rather than a separate Markdown file.
+  No PR created.
+
+## Capacity limits and left-behind handling (#24)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `simulator/trains/train.py`,
+  `tests/simulator/trains/test_capacity.py`,
+  `tests/simulator/passengers/test_capacity_journeys_stateful.py`,
+  `README.md`, and this record. The original prototype remains in
+  `tests/simulator/passengers/test_capacity_stateful.py` (PR #186).
+- **Change:** Reused merged #100 boarding/overflow handling and the #186
+  reference-model prototype. Added a tracked-passenger state machine covering
+  destination compatibility, successive services, initial loads, FIFO order,
+  retention and conservation. Reject invalid capacity/load types at construction
+  and normalize Python/NumPy integer counts before movement arithmetic.
+- **Research:** README records REM, AZUR and historical MR-73 capacity sources,
+  formations, loading assumptions and source limitations. No line-based stock
+  inference or universal default was added.
+- **Verification:** Full suite: 1,318 tests passed, including API and determinism;
+  Ruff lint/format over tracked Python files plus new tests and targeted extended
+  rules passed. Repository-wide traversal reported the existing inaccessible
+  `%TS_TEST_TEMP%` directory. API tests initially lacked
+  FastAPI; installing the pinned development requirements resolved collection.
+- **Development example:** Fractional capacity or initial load could pass Train
+  construction and make FIFO boarding fail after removing queue entries. New
+  validation rejects these states before use. Tests also check NumPy arithmetic
+  at the int8 boundary (120 + 10 remains 130), invalid movements leave load
+  unchanged, and compatibility with both integer families. The state machine
+  binds all trains through the public interface and never edits private queues.
+- **Attribution:** Codex implemented and verified this change; individual study
+  and learning claims remain the student's responsibility.
+
+## REM door-throughput budget (review follow-up for #24)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `simulator/trains/door_throughput.py`,
+  `simulator/trains/train_component.py`,
+  `simulator/passengers/platform_queue.py`, `simulator/engine/runner.py`,
+  `tests/simulator/passengers/test_door_throughput.py`, `README.md`, and this record.
+- **Change:** Added explicit per-train REM rate/door configuration with no
+  calibrated defaults. Enforce a cumulative whole-passenger scheduled-dwell
+  budget alongside vehicle space, preserving skipped destinations and overflow.
+  Repeated attempts, holds and clearance waits cannot reset or enlarge that
+  budget; each visit starts fresh. This follows Mathematical Foundations section
+  4's fixed-window formula rather than adding a continuous door-service model.
+  Run manifests record the configuration and rounding/window assumptions.
+- **Verification:** Full Python suite: **1,353 passed**. Scheduler tests check
+  a train departing with spare capacity and left-behind passengers, later FIFO
+  recovery, repeated arrivals, capacity as a second bound, unused budget during
+  holds and at exact closure, reset on the same train's next stop, and manifest
+  replay. Boundary tests reject invalid rates, door counts, dwell and train IDs;
+  decimal whole-passenger thresholds are checked independently.
+- **AI corrections:** The initial hold fixture omitted a target for its second
+  platform; adding that explicit target fixed the test configuration. Extracted
+  REM configuration validation into a helper to preserve function-size limits.
+  An import-order issue was corrected before final lint/format verification.
+- **Limitation:** Unconfigured vehicles retain existing capacity-only boarding.
+  Scenario builders must explicitly identify REM train IDs and supply measured
+  rates or documented assumptions. No inference from line IDs was added.
+
+## Destination-alighting state-machine extension (#24 review)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `tests/simulator/passengers/test_capacity_journeys_stateful.py`
+  and this record.
+- **Change:** Added an alighting rule enabled only when a train carries tracked
+  passengers. The reference model now separates waiting, onboard and completed
+  identities and checks each train's expected load. A finite repeating schedule
+  supports destination arrivals and later origin visits without resetting loads
+  or editing private manifests. This tests queue behaviour; the existing
+  scheduler integration tests continue to own movement timing.
+- **Verification:** Generated sequences and a forced two-cycle example check
+  emitted alighting IDs, completed states, retained aggregate load, newly freed
+  seats, and FIFO recovery with an incompatible passenger still waiting. An
+  in-memory mutation disabling `Train.alight` failed the new example; restoring
+  the method made it pass. No production code changed for this review finding.
+- **AI correction:** Initial fixture construction omitted the required
+  `TrainArrival.disruption_delay_s`; it now explicitly supplies zero.
+
+## Shared whole-passenger validation (#24 review)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `simulator/trains/train.py` and this record.
+- **Change:** Extracted `_whole_count` for the integer-type check and Python
+  integer normalization shared by construction, boarding and alighting. Existing
+  context-specific range checks and error messages are preserved.
+- **Verification:** Existing capacity boundary, NumPy, invalid-movement and
+  passenger-journey tests exercise the helper through all three public paths.
+  No helper-only tests were added for this behaviour-preserving refactor.
 
 ## Keeping this file up to date
 
