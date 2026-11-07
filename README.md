@@ -189,6 +189,7 @@ when applying them to a different timetable. Set the enclosing scenario's
 | `simulator/passengers/demand.py` | Time-varying demand profiles and expected passenger counts |
 | `simulator/passengers/generation.py` | Seeded passenger batches and configurable destination assignment |
 | `simulator/passengers/transfer_component.py` | Train-triggered transfer groups, walking times and corridor arrivals |
+| `simulator/passengers/platform_queue.py` | FIFO boarding, destination alighting, onboard identities and missed connections |
 | `tests/` | pytest and Hypothesis tests, mirroring the source tree |
 
 The developer guide on the wiki ("Engine Core Developer Guide") explains how the US-1.1 tasks plug into the runner.
@@ -409,8 +410,9 @@ passenger movements, dwell equals the base. A zero coefficient disables its term
 [Task #22](https://github.com/team-exception-handlers/TransitSync/issues/22)
 supplies this standalone calculation and hand-calculated tests in
 [PR #136](https://github.com/team-exception-handlers/TransitSync/pull/136).
-`TrainComponent` still uses scheduled dwell. Connecting this calculation to live
-passenger counts and departure scheduling remains separate integration work.
+`TrainComponent` uses scheduled dwell, extended by configured holds and dispatch
+constraints. Task #100 records live boarding/alighting counts in departures;
+rescheduling dwell from `DwellModel` coefficients remains separate integration work.
 
 [Task #23](https://github.com/team-exception-handlers/TransitSync/issues/23) adds
 optional crowding in
@@ -507,7 +509,7 @@ order when the count crosses one million.
 
 This generator returns batches without scheduling platform arrivals. Task #18
 connects it to train arrivals, walking times and corridor queues as described below.
-Task #100 supplies destination alighting and the remaining boarding rules.
+Task #100 connects those arrivals to destination-aware boarding and alighting.
 
 ### Pulsed transfer arrivals
 
@@ -563,7 +565,12 @@ def build_components(scenario, streams):
         streams,
     )
     return [
-        TrainComponent(trains, passenger_queue=PlatformQueue(("green_mcgill_1",))),
+        TrainComponent(
+            trains,
+            passenger_queue=PlatformQueue(
+                ("green_mcgill_1",), passengers=transfers.passengers
+            ),
+        ),
         transfers,
     ]
 ```
@@ -579,8 +586,8 @@ train loads. Walking uses the existing seeded `WalkingTimeSampler` distribution.
 Use one route per station/feeder-platform pair. Routes sharing a physical corridor
 must share the same `CorridorQueue` instance. Construct fresh components and
 queues for each run. The existing `PlatformQueue` remains the sole boarding owner
-on its platforms; transfer snapshots observe its `Boarding` events. Detailed
-destination alighting, door throughput and missed connections remain task #100.
+on its platforms. With the shared passenger dictionary attached, it tracks
+destinations, boarding, completed journeys and missed connections as described below.
 
 Event schema version 4 adds `CorridorArrival` between alighting and platform
 arrival in the event tie order. The passenger log filter automatically includes
@@ -590,6 +597,51 @@ Run the focused tests on macOS with:
 
 ```sh
 .venv/bin/python -m pytest tests/simulator/passengers/test_transfer_component.py -v
+```
+
+### Boarding, alighting and missed connections
+
+Task #100 extends the existing `PlatformQueue`. Pass the same passenger dictionary
+used by `TransferComponent` through `PlatformQueue(..., passengers=transfers.passengers)`.
+Attach the queue to `TrainComponent`; it does all event handling for the queue,
+so no second boarding component is needed. The example above uses this wiring.
+
+Passengers board in platform arrival order while the train is present, including
+during holds, line suspensions and minimum-gap departure waits. Available seats
+limit boarding. A passenger whose destination is absent from the train's remaining
+trip stays queued and does not block compatible passengers behind them. Arrivals
+at exactly the actual departure time can board because passenger arrivals and
+boarding sort before departure in the event queue.
+
+At each arrival, tracked passengers whose destination matches the station alight
+and become `COMPLETED`. Their seats are freed before waiting passengers board.
+This also works at a terminus before the vehicle starts its return trip. Departure
+records contain final boarding/alighting counts and onboard load for that stop.
+The existing controller observations read the same queue and live train loads.
+
+A compatible passenger left waiting when a train departs gets a `MissedConnection`
+record. A passenger reaching the platform later gets a miss for the first compatible
+departure since their feeder alighting. Each passenger's transfer gets at most one
+miss, even if more full trains leave them behind. Trains that left before the
+transfer began are excluded. A missed passenger stays waiting and can board a later
+train; the record does not mark their journey completed.
+
+For passengers already onboard at run start, supply `initial_onboard`, mapping
+train IDs to passenger ID sequences. Each listed passenger must be `ON_BOARD`,
+have a reachable destination and already be included in that train's initial
+`onboard_load`. All initial `ON_BOARD` passengers must be listed exactly once.
+Untracked aggregate passengers retain their seats. Newly generated feeder
+transfers count as external alightings without subtracting that load again.
+
+Without a passenger dictionary, `PlatformQueue` retains capacity-only FIFO
+boarding for existing callers. Times are simulation seconds. Passenger movements
+use the current door-open window; calibrated door throughput and dynamic dwell
+rescheduling are not introduced by this task. No event schema change is required.
+
+Run the focused macOS checks with:
+
+```sh
+.venv/bin/python -m pytest tests/simulator/passengers/test_boarding.py tests/simulator/passengers/test_boarding_validation.py -v
 ```
 
 ### Network model
