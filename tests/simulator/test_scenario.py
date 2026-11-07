@@ -110,6 +110,11 @@ def test_defaults_and_saved_settings_round_trip(dataset):
             "strategy": "no_control",
             "hold_search": {"step_s": 5.0, "max_hold_s": 60.0},
             "weights": {"w_wait": 2.0, "w_onboard": 1.0},
+            "prediction_error": {
+                "arrival_kappa": 1.0,
+                "transfer_kappa": 1.0,
+                "load_kappa": 1.0,
+            },
         },
         "operating_rules": {
             "max_hold_time": 300.0,
@@ -460,3 +465,18 @@ def test_manifest_records_strategy_of_the_run(
     assert manifest["control"]["strategy"] == "schedule_based"
     # The search settings are saved too, so each hold can be recalculated (#43)
     assert manifest["control"]["hold_search"] == {"step_s": 5.0, "max_hold_s": 60.0}
+
+
+@pytest.mark.parametrize(
+    ("kappas", "upper_bound"),
+    [({"arrival_kappa": 0, "transfer_kappa": 0, "load_kappa": 0}, True), ({}, False)],
+)
+def test_manifest_labels_perfect_information_as_upper_bound(
+    dataset, tmp_path, build_streams, build_tiny_network, kappas, upper_bound
+):
+    scenario = load(dataset, duration_s=600, control={"prediction_error": kappas})
+    result = run_scenario(scenario, build_streams, build_tiny_network, tmp_path)
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["upper_bound"] is upper_bound
+    expected = 0.0 if upper_bound else 1.0
+    assert manifest["control"]["prediction_error"]["arrival_kappa"] == expected

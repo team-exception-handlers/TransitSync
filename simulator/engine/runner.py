@@ -245,6 +245,9 @@ def _manifest_record(
     control = getattr(scenario, "control", None)
     if isinstance(control, ControlSettings):
         manifest["control"] = control.to_dict()
+        # Every kappa = 0: perfect information, reported as an unachievable
+        # upper bound and never as a deployable result (section 7, #39)
+        manifest["upper_bound"] = control.prediction_error.perfect_information
     boarding = [
         entry
         for component in components
