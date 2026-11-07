@@ -26,7 +26,7 @@ This is a 1 year software engineering capstone project at Concordia University, 
 
 ## Getting started
 
-The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend currently provides a health check only; it does not yet expose simulation runs. The frontend is a mock playback interface and does not yet retrieve simulation data from the backend. Simulation runs are started from Python or from the tests.
+The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend provides a health check and a station-layout endpoint, but does not yet expose simulation runs. The frontend is a mock playback interface and does not yet retrieve simulation data from the backend. Simulation runs are started from Python or from the tests.
 
 ### Requirements
 
@@ -49,6 +49,7 @@ When the services start, open:
 
 - Frontend: <http://localhost:5173>
 - Backend health check: <http://localhost:8000/health>
+- Backend McGill layout: <http://localhost:8000/station-layout/mcgill>
 - Backend API documentation: <http://localhost:8000/docs>
 
 The backend permits the frontend origin `http://localhost:5173` by default.
@@ -113,8 +114,20 @@ docker compose config         # validate the container configuration
 
 ### API behavior
 
-The backend currently exposes `GET /health`. Its default allowed browser origin
-is `http://localhost:5173`. Configure additional exact HTTP(S) origins through
+The backend exposes `GET /health` and `GET /station-layout/{interchange_id}`.
+The station-layout endpoint returns platforms, their map coordinates, station
+markers, connection records, and transfer corridor paths for
+`gare_centrale_bonaventure`, `mcgill`, or `edouard_montpetit`. The current
+coordinates are schematic: the front end's McGill fixture geometry is reused
+for all three interchanges. The Gare Centrale–Bonaventure and
+Édouard-Montpetit entries are placeholders; replace their geometry in
+`config/station_layouts.json` when real layouts are prepared. Platform metadata
+comes from the reference network; the layout catalog stores only map-specific
+platform positions and transfer geometry. The endpoint does not include
+passenger or train playback data.
+
+The default allowed browser origin is `http://localhost:5173`. Configure
+additional exact HTTP(S) origins through
 the `TRANSITSYNC_CORS_ORIGINS` environment variable; invalid values are rejected
 when the API starts. The API reads settings from its process environment, not
 from committed files. The health endpoint is available at
@@ -176,8 +189,10 @@ when applying them to a different timetable. Set the enclosing scenario's
 
 | Path | Contents |
 |---|---|
-| `api/main.py` | FastAPI application factory and health endpoint |
+| `api/main.py` | FastAPI application factory, health, and station-layout endpoints |
 | `api/settings.py` | Environment-backed API settings and CORS origin validation |
+| `api/station_layout.py` | Validated map geometry and platform mapping |
+| `config/station_layouts.json` | Map-ready station layouts for the three interchanges |
 | `simulator/engine/events.py` | Event types, the versioned record schema and the tie order for events at the same time |
 | `simulator/engine/event_queue.py` | Event queue and simulation clock |
 | `simulator/engine/event_log.py` | Event log, summary and run manifest writers |
