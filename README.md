@@ -366,6 +366,41 @@ distribution. Tests check the requested distribution separately from these
 safety constraints. The runner writes configured delay disruptions and their
 applied status to `manifest.json`; event logs remain byte-reproducible.
 
+### Train capacity and left-behind passengers (#24)
+
+`Train.capacity` is an explicit whole-passenger limit, including seated and
+standing riders. Initial load must be an integer between zero and capacity.
+Python and NumPy integers are accepted and normalized before arithmetic;
+booleans and fractional counts are rejected.
+
+The existing `PlatformQueue` boards compatible destinations in arrival order,
+up to remaining capacity. Skipped destinations and overflow passengers stay in
+their original queue order for later trains; callers must not enqueue them again.
+Tracked passengers remain `WAITING` until they board. A missed-connection record
+does not remove them. Destination alighting frees space before boarding, and
+untracked initial riders continue to occupy capacity.
+
+Capacity research for scenario authors (whole train, not seats; researched
+2026-11-06):
+
+| Rolling stock | Published capacity | Interpretation and source |
+|---|---:|---|
+| REM, four cars | 600 | Theoretical capacity in the operator's [rolling-stock specification](https://rem.info/en/rolling-stock). |
+| REM, four cars | 780 | Maximum comparison figure in the operator's [capacity explanation](https://rem.info/en/news/rem-seating-and-capacity), rather than the theoretical 600. |
+| AZUR, nine cars | 1,104 | W3 loading figure from STM's [technical sheet](https://www.stm.info/sites/default/files/feuillet_azur-web_ang.pdf). Search-indexed sheet; direct retrieval returned 404 during research. Reconfirm the document before using it for calibrated scenarios. |
+| MR-73 | 160 per car | Historical total-capacity entry in [TCRP Report 13, Table A3.5](https://onlinepubs.trb.org/onlinepubs/tcrp/tcrp_rpt_13.pdf). Multiplying by a scenario's six or nine cars gives 960 or 1,440; these are derived historical assumptions, not verified current operating limits. |
+
+Choose and record the actual stock, formation, source, and loading assumption
+when constructing trains. Do not infer stock or formation from a line or GTFS
+trip. No universal capacity default is introduced. Test fixtures deliberately
+use small capacities; they are not estimates of real trains. Vehicle capacity
+does not model door throughput or change the scheduled door-open window.
+
+The [LLL prototype PR #186](https://github.com/team-exception-handlers/TransitSync/pull/186)
+supplies the original stateful checks. The #24 tests extend its independent FIFO
+reference model to tracked passengers, different destinations and later trains.
+Existing scheduler integration tests cover full departures and later recovery.
+
 ### Dwell time model
 
 `simulator.trains.dwell.DwellModel` computes demand-dependent **Metro** dwell in

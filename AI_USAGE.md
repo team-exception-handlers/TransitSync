@@ -354,6 +354,36 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
   is prepared for the draft PR description rather than a separate Markdown file.
   No PR created.
 
+## Capacity limits and left-behind handling (#24)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `simulator/trains/train.py`,
+  `tests/simulator/trains/test_capacity.py`,
+  `tests/simulator/passengers/test_capacity_journeys_stateful.py`,
+  `README.md`, and this record. The original prototype remains in
+  `tests/simulator/passengers/test_capacity_stateful.py` (PR #186).
+- **Change:** Reused merged #100 boarding/overflow handling and the #186
+  reference-model prototype. Added a tracked-passenger state machine covering
+  destination compatibility, successive services, initial loads, FIFO order,
+  retention and conservation. Reject invalid capacity/load types at construction
+  and normalize Python/NumPy integer counts before movement arithmetic.
+- **Research:** README records REM, AZUR and historical MR-73 capacity sources,
+  formations, loading assumptions and source limitations. No line-based stock
+  inference or universal default was added.
+- **Verification:** Full suite: 1,318 tests passed, including API and determinism;
+  Ruff lint/format over tracked Python files plus new tests and targeted extended
+  rules passed. Repository-wide traversal reported the existing inaccessible
+  `%TS_TEST_TEMP%` directory. API tests initially lacked
+  FastAPI; installing the pinned development requirements resolved collection.
+- **Development example:** Fractional capacity or initial load could pass Train
+  construction and make FIFO boarding fail after removing queue entries. New
+  validation rejects these states before use. Tests also check NumPy arithmetic
+  at the int8 boundary (120 + 10 remains 130), invalid movements leave load
+  unchanged, and compatibility with both integer families. The state machine
+  binds all trains through the public interface and never edits private queues.
+- **Attribution:** Codex implemented and verified this change; individual study
+  and learning claims remain the student's responsibility.
+
 ## Keeping this file up to date
 
 For every feature or fix pull request with AI-generated code:
