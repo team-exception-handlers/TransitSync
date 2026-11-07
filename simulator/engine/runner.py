@@ -100,6 +100,15 @@ class ManifestContributor(Protocol):
         ...
 
 
+@runtime_checkable
+class BoardingManifestContributor(Protocol):
+    """A component reporting configured boarding-throughput constraints."""
+
+    def boarding_manifest_entries(self) -> Sequence[dict[str, object]]:
+        """Return JSON-compatible per-train fixed-window settings."""
+        ...
+
+
 # The runner only passes the random streams on to the components, so their
 # type is left to the stream factory (Task 1.1.3, #9)
 StreamFactory = Callable[[int], object]
@@ -236,6 +245,14 @@ def _manifest_record(
     control = getattr(scenario, "control", None)
     if isinstance(control, ControlSettings):
         manifest["control"] = control.to_dict()
+    boarding = [
+        entry
+        for component in components
+        if isinstance(component, BoardingManifestContributor)
+        for entry in component.boarding_manifest_entries()
+    ]
+    if boarding:
+        manifest["rem_door_throughput"] = boarding
     return manifest
 
 

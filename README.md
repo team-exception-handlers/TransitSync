@@ -393,8 +393,36 @@ Capacity research for scenario authors (whole train, not seats; researched
 Choose and record the actual stock, formation, source, and loading assumption
 when constructing trains. Do not infer stock or formation from a line or GTFS
 trip. No universal capacity default is introduced. Test fixtures deliberately
-use small capacities; they are not estimates of real trains. Vehicle capacity
-does not model door throughput or change the scheduled door-open window.
+use small capacities; they are not estimates of real trains.
+
+REM door throughput follows the aggregate fixed-window budget in
+[Mathematical Foundations, section 4](https://github.com/team-exception-handlers/TransitSync/wiki/Mathematical-Foundations#4-dwell-time-and-boarding-capacity)
+via explicit per-train configuration:
+
+```python
+from simulator.trains.door_throughput import DoorThroughput
+
+# Illustrative only: replace with measured or documented scenario parameters.
+component = TrainComponent(
+    trains,
+    passenger_queue=queue,
+    rem_door_throughput={"rem-train-id": DoorThroughput(0.2, 2)},
+)
+```
+
+Each configured train gets `floor(rate * scheduled_dwell_seconds * doors)`
+boardings per stop, additionally bounded by remaining vehicle capacity. Repeated
+arrivals share the budget; passengers who cannot board retain their queue order
+and `WAITING` state. Each new visit starts a fresh budget. Unknown train IDs and
+invalid rates or door counts are rejected. The run manifest records the settings.
+
+Following section 4's scheduled-dwell formula, holds and dispatch waits allow
+later arrivals to use an unspent budget but do not enlarge or reset it. Scheduled
+REM dwell remains unchanged. This is an aggregate stop budget, not continuous
+per-passenger door-service timing. Metro and other unlisted trains keep their
+existing boarding behaviour. No REM identity or measured rate is inferred:
+scenario builders must supply this configuration for REM runs; unconfigured
+trains enforce vehicle capacity only.
 
 The [LLL prototype PR #186](https://github.com/team-exception-handlers/TransitSync/pull/186)
 supplies the original stateful checks. The #24 tests extend its independent FIFO

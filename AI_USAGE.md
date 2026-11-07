@@ -384,6 +384,34 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
 - **Attribution:** Codex implemented and verified this change; individual study
   and learning claims remain the student's responsibility.
 
+## REM door-throughput budget (review follow-up for #24)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `simulator/trains/door_throughput.py`,
+  `simulator/trains/train_component.py`,
+  `simulator/passengers/platform_queue.py`, `simulator/engine/runner.py`,
+  `tests/simulator/passengers/test_door_throughput.py`, `README.md`, and this record.
+- **Change:** Added explicit per-train REM rate/door configuration with no
+  calibrated defaults. Enforce a cumulative whole-passenger scheduled-dwell
+  budget alongside vehicle space, preserving skipped destinations and overflow.
+  Repeated attempts, holds and clearance waits cannot reset or enlarge that
+  budget; each visit starts fresh. This follows Mathematical Foundations section
+  4's fixed-window formula rather than adding a continuous door-service model.
+  Run manifests record the configuration and rounding/window assumptions.
+- **Verification:** Full Python suite: **1,353 passed**. Scheduler tests check
+  a train departing with spare capacity and left-behind passengers, later FIFO
+  recovery, repeated arrivals, capacity as a second bound, unused budget during
+  holds and at exact closure, reset on the same train's next stop, and manifest
+  replay. Boundary tests reject invalid rates, door counts, dwell and train IDs;
+  decimal whole-passenger thresholds are checked independently.
+- **AI corrections:** The initial hold fixture omitted a target for its second
+  platform; adding that explicit target fixed the test configuration. Extracted
+  REM configuration validation into a helper to preserve function-size limits.
+  An import-order issue was corrected before final lint/format verification.
+- **Limitation:** Unconfigured vehicles retain existing capacity-only boarding.
+  Scenario builders must explicitly identify REM train IDs and supply measured
+  rates or documented assumptions. No inference from line IDs was added.
+
 ## Keeping this file up to date
 
 For every feature or fix pull request with AI-generated code:
