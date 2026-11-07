@@ -6,7 +6,11 @@
  */
 import { useEffect, useRef } from "react";
 import { getNetworkSnapshot } from "../lib/getNetworkSnapshot";
+import { samplePassengers } from "../lib/samplePassengers";
 import { usePlaybackStore } from "../store/usePlaybackStore";
+
+/** Marker budget for an individual connection; above this we sample and label the true count. */
+const MAX_PASSENGER_MARKERS = 60;
 
 /** Draw recorded map coordinates; seeking rebuilds rather than mutating sprites. */
 export function StationCanvas() {
@@ -51,12 +55,24 @@ export function StationCanvas() {
     }
 
     // No incremental passenger state: pause and backward seeking stay exact.
-    for (const passenger of snapshot.passengers) {
-      if (passenger.connection_id !== selected) continue;
+    const connectionPassengers = snapshot.passengers.filter(
+      (passenger) => passenger.connection_id === selected,
+    );
+    const { sampled, trueCount } = samplePassengers(connectionPassengers, MAX_PASSENGER_MARKERS);
+    for (const passenger of sampled) {
       context.beginPath();
       context.arc(passenger.position.x, passenger.position.y, 4, 0, 2 * Math.PI);
       context.fillStyle = passenger.phase === "boarding" ? "#007b78" : "#16191d";
       context.fill();
+    }
+    // The true count is always labeled, even when the drawn markers are a sample.
+    if (selected) {
+      context.fillStyle = "#16191d";
+      context.font = "12px Arial";
+      const label = sampled.length < trueCount
+        ? `Passengers: ${trueCount} (showing ${sampled.length})`
+        : `Passengers: ${trueCount}`;
+      context.fillText(label, 12, 20);
     }
   }, [data, time, selected]);
 
