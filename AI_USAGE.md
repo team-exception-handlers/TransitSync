@@ -453,6 +453,36 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
   passenger-journey tests exercise the helper through all three public paths.
   No helper-only tests were added for this behaviour-preserving refactor.
 
+## Release demo scenario files (#189)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `config/scenarios/gare_centrale_bonaventure.json`,
+  `config/scenarios/mcgill.json`, `config/scenarios/edouard_montpetit.json`,
+  `config/scenarios/README.md`, `tests/simulator/test_scenario.py`, and this record.
+  JSON attribution is recorded here because JSON does not support comments.
+- **Change:** Added one connection per weekday demo file, using 2026-10-05,
+  07:00 Toronto time, 3,600 seconds, one repetition and seed 42. Policy fields
+  remain omitted for loader defaults and later endpoint overrides. Documented
+  `reference-network` as the proposed shared dataset identifier for #180;
+  neither issue had specified one, and no runtime registration is claimed.
+- **Verification:** All three committed files load through `load_scenario_file`
+  and equal the weekday-morning preset for their single interchange. Tests also
+  check seed 42 and omitted policy fields. Targeted scenario suite: 97 passed;
+  full suite: 1,367 passed. Tracked Python lint/format, targeted extended Ruff
+  checks and whitespace checks passed.
+
+## Demo date validation against the reference network (#189 review)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `tests/simulator/test_scenario.py` and this record.
+- **Change:** Demo-file tests now read the committed network, assert their date
+  matches its weekday reference and exists in its extracted schedules, and build
+  validation service dates from those actual schedules instead of a fixed date.
+- **Verification:** All 97 scenario tests passed; extended Ruff, formatting and
+  whitespace checks passed. An in-memory file-read mutation changing the weekday
+  reference to 2026-10-06 made all three demo tests fail as expected. The original
+  reads were restored; `network.json` was never modified.
+
 ## Keeping this file up to date
 
 For every feature or fix pull request with AI-generated code:

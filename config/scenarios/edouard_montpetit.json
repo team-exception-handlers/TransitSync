@@ -1,0 +1,10 @@
+{
+  "dataset_id": "reference-network",
+  "date": "2026-10-05",
+  "start_time": "07:00:00",
+  "duration_s": 3600,
+  "repetitions": 1,
+  "master_seed": 42,
+  "interchanges": ["edouard_montpetit"],
+  "timezone": "America/Toronto"
+}

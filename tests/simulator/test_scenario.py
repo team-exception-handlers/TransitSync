@@ -5,6 +5,7 @@ import json
 import sys
 from dataclasses import replace
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -44,6 +45,46 @@ def load(dataset, **overrides):
     }
     values.update(overrides)
     return load_scenario_json(json.dumps(values), {dataset.dataset_id: dataset})
+
+
+@pytest.mark.parametrize(
+    "interchange", ["gare_centrale_bonaventure", "mcgill", "edouard_montpetit"]
+)
+def test_committed_demo_scenario_matches_weekday_preset(dataset, interchange):
+    """Load actual demo files; preserve one connection, seed and loader defaults.
+
+    Compare with the preset to check every common setting, including Toronto's
+    resolved start time. Policy fields stay absent so endpoint overrides do not
+    compete with a policy baked into the base file.
+    """
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "config"
+        / "scenarios"
+        / f"{interchange}.json"
+    )
+    network_path = path.parents[1] / "reference_network" / "network.json"
+    network = json.loads(network_path.read_text(encoding="utf-8"))
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    # Anchor the demo to both the declared weekday and actual extracted days.
+    # Otherwise a re-extraction could leave these files silently pointing at
+    # dates that the runtime dataset no longer contains.
+    assert raw["date"] == network["reference_dates"]["weekday"]
+    service_dates = tuple(
+        sorted(date.fromisoformat(day["service_date"]) for day in network["schedules"])
+    )
+    assert date.fromisoformat(raw["date"]) in service_dates
+    demo_dataset = replace(
+        dataset, dataset_id="reference-network", service_dates=service_dates
+    )
+    scenario = load_scenario_file(path, {demo_dataset.dataset_id: demo_dataset})
+    assert scenario.interchanges == (interchange,)
+    assert scenario.master_seed == 42
+    assert scenario == resolve_preset(
+        "weekday_morning", demo_dataset, interchanges=(interchange,)
+    )
+    assert "control" not in raw
+    assert "operating_rules" not in raw
 
 
 @pytest.mark.parametrize(
