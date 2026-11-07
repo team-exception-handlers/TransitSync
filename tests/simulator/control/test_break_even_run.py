@@ -31,15 +31,11 @@ from types import SimpleNamespace
 import pytest
 
 from simulator.control.break_even import BreakEvenWeights
+from simulator.control.connection_configuration import build_connection_protection
 from simulator.control.decision import DecisionPipeline
-from simulator.control.hold_search import HoldSearch
 from simulator.control.observation_builder import ObservationBuilder
 from simulator.control.rules import OperatingRulesEnforcer
 from simulator.control.settings import OperatingRulesConfig
-from simulator.control.strategies.connection_protection import (
-    ConnectionProtectionStrategy,
-)
-from simulator.control.walking_cdf import ShiftedExponentialCdf
 from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import run_scenario
 from simulator.passengers import (
@@ -61,6 +57,7 @@ HEADWAY_S = 300.0
 def run(tmp_path, rate_per_min, rules=None):
     """Run one REM-to-green transfer with seed 42; return events and decisions.
     Use the real train, transfer, strategy and rule-checking components.
+    Pass the same routes to passenger generation and the controller.
     ``rate_per_min`` controls demand; ``rules`` can override the operating limit.
     """
     streams = StreamManager(42)
@@ -74,11 +71,10 @@ def run(tmp_path, rate_per_min, rules=None):
         walking_mean_s=WALK_MEAN_S,
         walking_min_s=WALK_MIN_S,
     )
-    transfers = TransferComponent([route], streams)
-    strategy = ConnectionProtectionStrategy(
-        {"green": HoldSearch(ShiftedExponentialCdf(WALK_MEAN_S, WALK_MIN_S))},
-        {"green": HEADWAY_S},
-    )
+    routes = [route]
+    transfers = TransferComponent(routes, streams)
+    headways = {"green": HEADWAY_S}
+    strategy = build_connection_protection(routes, headways, ("rem", "green"))
     pipeline = DecisionPipeline(
         strategy,
         builder=ObservationBuilder([transfers]),
