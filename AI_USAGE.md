@@ -412,6 +412,25 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
   Scenario builders must explicitly identify REM train IDs and supply measured
   rates or documented assumptions. No inference from line IDs was added.
 
+## Destination-alighting state-machine extension (#24 review)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `tests/simulator/passengers/test_capacity_journeys_stateful.py`
+  and this record.
+- **Change:** Added an alighting rule enabled only when a train carries tracked
+  passengers. The reference model now separates waiting, onboard and completed
+  identities and checks each train's expected load. A finite repeating schedule
+  supports destination arrivals and later origin visits without resetting loads
+  or editing private manifests. This tests queue behaviour; the existing
+  scheduler integration tests continue to own movement timing.
+- **Verification:** Generated sequences and a forced two-cycle example check
+  emitted alighting IDs, completed states, retained aggregate load, newly freed
+  seats, and FIFO recovery with an incompatible passenger still waiting. An
+  in-memory mutation disabling `Train.alight` failed the new example; restoring
+  the method made it pass. No production code changed for this review finding.
+- **AI correction:** Initial fixture construction omitted the required
+  `TrainArrival.disruption_delay_s`; it now explicitly supplies zero.
+
 ## Keeping this file up to date
 
 For every feature or fix pull request with AI-generated code:
