@@ -26,34 +26,99 @@ This is a 1 year software engineering capstone project at Concordia University, 
 
 ## Getting started
 
-The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. There is no user interface or command-line program yet; a run is started from Python or from the tests.
+The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend currently provides a health check only; it does not yet expose simulation runs. The frontend is a mock playback interface and does not yet retrieve simulation data from the backend. Simulation runs are started from Python or from the tests.
 
 ### Requirements
 
-- Python 3.12 or newer (`py --list` shows the installed versions on Windows)
+- Docker Desktop for Windows with Docker Compose
 - Git
 
-### Setup
+Python and Node.js are not required to run the application with Docker. Docker
+downloads the base images and installs the pinned project dependencies during
+the first build.
+
+### Build and run with Docker (recommended)
 
 ```powershell
 git clone https://github.com/Gur-Lal/TransitSync.git
 cd TransitSync
+docker compose up --build
+```
+
+When the services start, open:
+
+- Frontend: <http://localhost:5173>
+- Backend health check: <http://localhost:8000/health>
+- Backend API documentation: <http://localhost:8000/docs>
+
+The backend permits the frontend origin `http://localhost:5173` by default.
+To allow additional browser origins, set `TRANSITSYNC_CORS_ORIGINS` to a
+comma-separated list of exact HTTP(S) origins in PowerShell before starting
+Compose:
+
+```powershell
+$env:TRANSITSYNC_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+docker compose up --build
+```
+
+Press `Ctrl+C` to stop services running in the foreground. To run them in the
+background instead, use `docker compose up --build --detach`; stop and remove
+the containers and network with `docker compose down`.
+
+If Docker Desktop's integrated builder fails with `exec format error`, try a
+separate BuildKit builder:
+
+```powershell
+docker buildx create --name transitsync-builder --driver docker-container
+docker compose build --builder transitsync-builder
+docker compose up --detach
+```
+
+### Local development (optional)
+
+For running the Python tests or developing without containers, install Python
+3.12 or newer and Node.js 22.22.2 or newer. From the repository root, create a
+Python virtual environment and install the development dependencies:
+
+```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements-dev.txt
 ```
 
-On macOS or Linux, the environment is created with `python3.12 -m venv .venv` and activated with `source .venv/bin/activate`.
+On macOS or Linux, create the environment with `python3.12 -m venv .venv` and
+activate it with `source .venv/bin/activate`. In VS Code, select
+`.venv\Scripts\python.exe` through **Python: Select Interpreter** on Windows.
 
-If PowerShell blocks `Activate.ps1`, running `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once allows it. In VS Code, the interpreter is set to `.venv\Scripts\python.exe` through **Python: Select Interpreter**.
+Install the frontend dependencies from the lockfile with `npm ci` in `web/`.
+Run the frontend with `npm run dev` from that directory and the API in a
+separate terminal from the repository root:
+
+```powershell
+$env:TRANSITSYNC_CORS_ORIGINS = "http://localhost:5173"
+python -m uvicorn api.main:app --reload
+```
+
+The `.venv` and `web/node_modules` directories are local development artifacts;
+they are excluded from Docker build contexts.
 
 ### Running the checks
 
 ```powershell
-pytest -v                 # all tests, one line per test
-ruff check .              # lint, including the complexity and function size limits
-ruff format --check .     # formatting
+pytest -v                     # all tests, one line per test
+ruff check .                  # lint, including complexity and function size limits
+ruff format --check .         # formatting
+docker compose config         # validate the container configuration
 ```
+
+### API behavior
+
+The backend currently exposes `GET /health`. Its default allowed browser origin
+is `http://localhost:5173`. Configure additional exact HTTP(S) origins through
+the `TRANSITSYNC_CORS_ORIGINS` environment variable; invalid values are rejected
+when the API starts. The API reads settings from its process environment, not
+from committed files. The health endpoint is available at
+<http://localhost:8000/health> when running with Docker.
 
 ### Seeing a simulation run
 
@@ -111,6 +176,8 @@ when applying them to a different timetable. Set the enclosing scenario's
 
 | Path | Contents |
 |---|---|
+| `api/main.py` | FastAPI application factory and health endpoint |
+| `api/settings.py` | Environment-backed API settings and CORS origin validation |
 | `simulator/engine/events.py` | Event types, the versioned record schema and the tie order for events at the same time |
 | `simulator/engine/event_queue.py` | Event queue and simulation clock |
 | `simulator/engine/event_log.py` | Event log, summary and run manifest writers |
@@ -301,7 +368,12 @@ applied status to `manifest.json`; event logs remain byte-reproducible.
 
 ### Dwell time model
 
-`simulator.trains.dwell.DwellModel` computes stop dwell in seconds:
+`simulator.trains.dwell.DwellModel` computes demand-dependent **Metro** dwell in
+seconds, following [Mathematical Foundations, section 4](https://github.com/team-exception-handlers/TransitSync/wiki/Mathematical-Foundations#4-dwell-time-and-boarding-capacity).
+Use it only for Metro trains. **REM dwell stays fixed at the scheduled value**
+because REM doors close on a timer. Setting crowding strength to zero alone is
+not enough for REM: the boarding/alighting terms would still vary its dwell.
+The caller must select the model by network; `DwellModel` has no network identity.
 
 ```python
 from simulator.trains.dwell import DwellModel
@@ -341,7 +413,47 @@ supplies this standalone calculation and hand-calculated tests in
 `TrainComponent` uses scheduled dwell, extended by configured holds and dispatch
 constraints. Task #100 records live boarding/alighting counts in departures;
 rescheduling dwell from `DwellModel` coefficients remains separate integration work.
-Crowding penalties are separate work (#23).
+
+[Task #23](https://github.com/team-exception-handlers/TransitSync/issues/23) adds
+optional crowding in
+[PR #179](https://github.com/team-exception-handlers/TransitSync/pull/179):
+
+```python
+model = DwellModel(20.0, 1.5, 0.75, crowding_strength=2.0)
+assert (
+    model.compute(boarded_count=10, alighted_count=8, onboard_load=50, capacity=100)
+    == 43.625
+)
+```
+
+Let `service = boarding_coefficient * B + alighting_coefficient * A` and
+`r = max(arrival_load, onboard_load) / capacity`. Dwell is
+`base + service + service * crowding_strength * r**crowding_exponent`.
+Supply final `onboard_load` **after alighting and boarding**, excluding passengers
+left behind. The model infers `arrival_load = onboard_load - B + A`, assuming
+alighting precedes boarding. Using the peak of arrival and final load keeps a
+crowding penalty when a train arrives packed and many passengers get off.
+For the example, service is 21 seconds and the extra delay is
+`21 * 2 * 0.5**4 = 2.625` seconds. At full capacity dwell is 83 seconds.
+For example, with base 20, alighting coefficient 1 and strength 1, a train that
+arrives full at capacity 1000 and drops off 500 passengers has 1020 seconds of
+dwell: `20 + 500 + 500 * 1**4`. Using only its final load would give 551.25 seconds.
+
+The default quartic curve gives progressively steeper increases near capacity
+and has no singularity at full load. Set `crowding_exponent` (default `4.0`) to
+any finite value greater than one for sensitivity analysis, such as 2, 3 or 4.
+Strength and exponent are modeling choices requiring calibration, rather than
+measured transit relationships. Strength is dimensionless and non-negative;
+at full load it specifies the extra fraction of passenger service time.
+The default strength of zero preserves the original model and allows omitted
+load/capacity. Enabled crowding requires both: integer load between zero and
+capacity, and positive integer capacity. Supplied load/capacity are validated
+even when crowding is disabled. Passenger counts must be consistent with the
+supplied loads: boarded passengers cannot exceed final load and inferred arrival
+load cannot exceed capacity. Real numeric coefficients, including NumPy scalars,
+are normalized to Python floats. Zero passenger service still returns base dwell.
+Non-finite computed dwell is rejected with `ValueError`.
+Dynamic departure scheduling remains separate integration work.
 
 ### Passenger entity and generation
 
