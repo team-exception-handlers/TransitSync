@@ -1,8 +1,10 @@
 # AI contribution: 50% or more AI-generated
-"""Decision pipeline: snapshot, strategy, then rule check (#38, #46).
+"""Decision pipeline: snapshot, error, strategy, then rule check (#38, #39, #46).
 
 Design pattern: Facade. ``TrainComponent`` makes one call at ``DepartureDue``
 and gets back the hold to apply, without knowing the parts behind it.
+The strategy sees estimates with prediction error (section 7), while the rule
+check still uses the true snapshot, since safety rules are the simulator's.
 """
 
 from dataclasses import dataclass
@@ -15,6 +17,7 @@ from simulator.control.interface import (
     ObservationSnapshot,
 )
 from simulator.control.observation_builder import ObservationBuilder, TrainSource
+from simulator.control.prediction_error import PredictionErrorModel
 from simulator.control.strategies.no_control import NoControlStrategy
 from simulator.engine.events import DepartureDue
 
@@ -46,17 +49,24 @@ class PassThroughEnforcer:
 
 
 class DecisionPipeline:
-    """Runs one strategy at every decision point; no control by default."""
+    """Runs one strategy at every decision point; no control by default.
+
+    Without ``error_model`` the strategy sees true values. A run built from a
+    scenario passes one made from ``control.prediction_error`` and the
+    ``prediction_errors`` stream.
+    """
 
     def __init__(
         self,
         strategy: DecisionController | None = None,
         builder: ObservationBuilder | None = None,
         enforcer: ConstraintEnforcer | None = None,
+        error_model: PredictionErrorModel | None = None,
     ) -> None:
         self.strategy = strategy or NoControlStrategy()
         self._builder = builder or ObservationBuilder()
         self._enforcer = enforcer or PassThroughEnforcer()
+        self._error_model = error_model
 
     def decide(
         self, decision: DepartureDue, trains: TrainSource
@@ -67,15 +77,16 @@ class DecisionPipeline:
             ValueError: the strategy asked to hold another train, or more than
                 once; a hold can only start at that train's own decision point.
         """
-        observation = self._builder.build(decision, trains)
-        actions = self.strategy.evaluate(observation)
+        truth = self._builder.build(decision, trains)
+        seen = self._error_model.apply(truth) if self._error_model else truth
+        actions = self.strategy.evaluate(seen)
         if not actions:
             return None
         if len(actions) > 1 or actions[0].train_id != decision.train_id:
             raise ValueError(
                 f"{self.strategy.name} may only hold {decision.train_id} once here"
             )
-        return self._enforcer.validate(actions[0], observation)
+        return self._enforcer.validate(actions[0], truth)
 
     def decision_records(self) -> tuple[dict[str, Any], ...]:
         """Return the strategy's audit records (#44); none if it keeps none.

@@ -9,6 +9,7 @@ import pytest
 from simulator.control.break_even import BreakEvenWeights
 from simulator.control.hold_search import HoldSearchSettings
 from simulator.control.interface import DecisionController, HoldAction
+from simulator.control.prediction_error import PredictionErrorSettings
 from simulator.control.registry import StrategyRegistry
 from simulator.control.settings import (
     ControlSettings,
@@ -49,6 +50,11 @@ def test_settings_save_as_plain_dict_with_search_defaults():
         "strategy": "fake_hold",
         "hold_search": {"step_s": 5.0, "max_hold_s": 60.0},
         "weights": {"w_wait": 2.0, "w_onboard": 1.0},
+        "prediction_error": {
+            "arrival_kappa": 1.0,
+            "transfer_kappa": 1.0,
+            "load_kappa": 1.0,
+        },
     }
 
 
@@ -153,3 +159,26 @@ def test_operating_rules_unknown_rule_key_raises_error():
         match="operating_rules.rule_action_map.max_hold_exceded: unknown rule",
     ):
         parse_operating_rules({"rule_action_map": {"max_hold_exceded": "REFUSE"}})
+
+
+def test_prediction_error_defaults_to_published_level():
+    assert parse_control_settings({}).prediction_error == PredictionErrorSettings()
+
+
+def test_prediction_error_is_read_from_the_scenario():
+    value = {"prediction_error": {"arrival_kappa": 0.5, "load_kappa": 0}}
+    settings = parse_control_settings(value).prediction_error
+    assert settings == PredictionErrorSettings(0.5, 1.0, 0.0)
+
+
+@pytest.mark.parametrize(
+    ("section", "message"),
+    [
+        ({"kappa": 1}, r"control\.prediction_error\.kappa: unknown field"),
+        ({"arrival_kappa": -1}, r"control\.prediction_error: .*arrival_kappa"),
+        (0, r"control\.prediction_error: must be an object"),
+    ],
+)
+def test_bad_prediction_error_names_the_field(section, message):
+    with pytest.raises(ControlSettingsError, match=message):
+        parse_control_settings({"prediction_error": section})

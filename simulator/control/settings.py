@@ -11,6 +11,10 @@ break-even search (US-2.2, #43): the candidate increment and upper bound, and
 the weights of waiting against riding time. Both are saved in the manifest,
 so every run records the values its holds were chosen with.
 
+The optional ``"prediction_error"`` object holds the error multipliers kappa
+(#39). They are always saved, so every run records how accurate its
+strategy's information was; all zero is perfect information.
+
 Headway regulation (#48) needs a fixed target in seconds for each platform.
 Targets are copied and frozen. The component factory checks known platform
 IDs, complete trips and the gap used by the train engine.
@@ -22,12 +26,15 @@ from typing import Any
 
 from simulator.control.break_even import BreakEvenWeights
 from simulator.control.hold_search import HoldSearchSettings
+from simulator.control.prediction_error import PredictionErrorSettings
 from simulator.control.registry import StrategyRegistry
 from simulator.control.strategies import STRATEGIES
 from simulator.control.strategies.headway_regulation import HeadwayRegulationStrategy
 
 DEFAULT_STRATEGY = "no_control"
-CONTROL_FIELDS = frozenset({"strategy", "hold_search", "weights", "target_headways_s"})
+CONTROL_FIELDS = frozenset(
+    {"strategy", "hold_search", "weights", "target_headways_s", "prediction_error"}
+)
 OPERATING_RULES_FIELDS = frozenset({"max_hold_time", "min_safe_gap", "rule_action_map"})
 
 
@@ -43,6 +50,9 @@ class ControlSettings:
     hold_search: HoldSearchSettings = field(default_factory=HoldSearchSettings)
     weights: BreakEvenWeights = field(default_factory=BreakEvenWeights)
     target_headways_s: Mapping[str, float] | None = None
+    prediction_error: PredictionErrorSettings = field(
+        default_factory=PredictionErrorSettings
+    )
 
     def __post_init__(self) -> None:
         """Freeze targets in seconds; raise ControlSettingsError for bad targets."""
@@ -66,6 +76,7 @@ class ControlSettings:
             "strategy": self.strategy,
             "hold_search": self.hold_search.to_dict(),
             "weights": self.weights.to_dict(),
+            "prediction_error": self.prediction_error.to_dict(),
         }
         # Keep the saved format unchanged for other strategies.
         if self.target_headways_s is not None:
@@ -109,6 +120,9 @@ def parse_control_settings(
         hold_search=_parse_section(value, "hold_search", HoldSearchSettings),
         weights=_parse_section(value, "weights", BreakEvenWeights),
         target_headways_s=value.get("target_headways_s"),
+        prediction_error=_parse_section(
+            value, "prediction_error", PredictionErrorSettings
+        ),
     )
 
 
