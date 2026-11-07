@@ -63,8 +63,19 @@ def test_committed_demo_scenario_matches_weekday_preset(dataset, interchange):
         / "scenarios"
         / f"{interchange}.json"
     )
+    network_path = path.parents[1] / "reference_network" / "network.json"
+    network = json.loads(network_path.read_text(encoding="utf-8"))
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    # Anchor the demo to both the declared weekday and actual extracted days.
+    # Otherwise a re-extraction could leave these files silently pointing at
+    # dates that the runtime dataset no longer contains.
+    assert raw["date"] == network["reference_dates"]["weekday"]
+    service_dates = tuple(
+        sorted(date.fromisoformat(day["service_date"]) for day in network["schedules"])
+    )
+    assert date.fromisoformat(raw["date"]) in service_dates
     demo_dataset = replace(
-        dataset, dataset_id="reference-network", service_dates=(date(2026, 10, 5),)
+        dataset, dataset_id="reference-network", service_dates=service_dates
     )
     scenario = load_scenario_file(path, {demo_dataset.dataset_id: demo_dataset})
     assert scenario.interchanges == (interchange,)
@@ -72,7 +83,6 @@ def test_committed_demo_scenario_matches_weekday_preset(dataset, interchange):
     assert scenario == resolve_preset(
         "weekday_morning", demo_dataset, interchanges=(interchange,)
     )
-    raw = json.loads(path.read_text(encoding="utf-8"))
     assert "control" not in raw
     assert "operating_rules" not in raw
 

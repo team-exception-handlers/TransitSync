@@ -470,6 +470,18 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
   full suite: 1,367 passed. Tracked Python lint/format, targeted extended Ruff
   checks and whitespace checks passed.
 
+## Demo date validation against the reference network (#189 review)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `tests/simulator/test_scenario.py` and this record.
+- **Change:** Demo-file tests now read the committed network, assert their date
+  matches its weekday reference and exists in its extracted schedules, and build
+  validation service dates from those actual schedules instead of a fixed date.
+- **Verification:** All 97 scenario tests passed; extended Ruff, formatting and
+  whitespace checks passed. An in-memory file-read mutation changing the weekday
+  reference to 2026-10-06 made all three demo tests fail as expected. The original
+  reads were restored; `network.json` was never modified.
+
 ## Keeping this file up to date
 
 For every feature or fix pull request with AI-generated code:
