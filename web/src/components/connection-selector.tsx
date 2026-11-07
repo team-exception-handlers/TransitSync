@@ -20,11 +20,14 @@ export function ConnectionSelector() {
     <div className="connection-selector segmented-control" role="group" aria-label="Station connection">
       {runs.flatMap((run) => run.connections.map((connection) => {
         const metro = run.platforms.find((item) => item.platform_id === connection.to_platform_id);
+        const isSelected = selected === connection.id;
         return (
           <button key={connection.id} type="button"
-            aria-pressed={selected === connection.id}
+            className={`connection-option${isSelected ? " is-selected" : ""}`}
+            aria-pressed={isSelected}
             onClick={() => select(connection.id)}>
-            {/* Names and line text preserve meaning without relying on color. */}
+            {/* A checkmark glyph plus bold text mark selection; colour is not the only cue. */}
+            <span className="selected-mark" aria-hidden="true">{isSelected ? "✓" : ""}</span>
             <span className="line-swatch rem" aria-hidden="true" />
             <span className={`line-swatch ${metro?.line_id}`} aria-hidden="true" />
             {connection.label}

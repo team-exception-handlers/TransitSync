@@ -37,6 +37,29 @@ describe("ConnectionSelector", () => {
     expect(usePlaybackStore.getState().data).toBe(stationViewData);
     expect(() => usePlaybackStore.getState().setAvailableRuns([second, second])).toThrow("Duplicate connection");
   });
+  it("marks exactly one connection as visually selected", () => {
+    usePlaybackStore.getState().setAvailableRuns(connectionRuns);
+    render(<ConnectionSelector />);
+    const buttons = screen.getAllByRole("button");
+    const selected = buttons.filter((button) => button.classList.contains("is-selected"));
+    expect(selected).toHaveLength(1);
+    expect(selected[0].getAttribute("aria-pressed")).toBe("true");
+    for (const button of buttons) {
+      if (button !== selected[0]) {
+        expect(button.classList.contains("is-selected")).toBe(false);
+      }
+    }
+  });
+  it("keeps the visual selected indicator after a playback time change", () => {
+    usePlaybackStore.getState().setAvailableRuns([stationViewData, second]);
+    usePlaybackStore.getState().loadData(stationViewData);
+    usePlaybackStore.getState().selectConnection("test-connection");
+    render(<ConnectionSelector />);
+    usePlaybackStore.getState().seek(45);
+    const button = screen.getByRole("button", { name: /Test connection/ });
+    expect(button.classList.contains("is-selected")).toBe(true);
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+  });
   it("lists all three documented connections with their metro line and switches data", () => {
     usePlaybackStore.getState().setAvailableRuns(connectionRuns);
     render(<ConnectionSelector />);
