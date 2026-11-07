@@ -381,6 +381,69 @@ distribution. Tests check the requested distribution separately from these
 safety constraints. The runner writes configured delay disruptions and their
 applied status to `manifest.json`; event logs remain byte-reproducible.
 
+### Train capacity and left-behind passengers (#24)
+
+`Train.capacity` is an explicit whole-passenger limit, including seated and
+standing riders. Initial load must be an integer between zero and capacity.
+Python and NumPy integers are accepted and normalized before arithmetic;
+booleans and fractional counts are rejected.
+
+The existing `PlatformQueue` boards compatible destinations in arrival order,
+up to remaining capacity. Skipped destinations and overflow passengers stay in
+their original queue order for later trains; callers must not enqueue them again.
+Tracked passengers remain `WAITING` until they board. A missed-connection record
+does not remove them. Destination alighting frees space before boarding, and
+untracked initial riders continue to occupy capacity.
+
+Capacity research for scenario authors (whole train, not seats; researched
+2026-11-06):
+
+| Rolling stock | Published capacity | Interpretation and source |
+|---|---:|---|
+| REM, four cars | 600 | Theoretical capacity in the operator's [rolling-stock specification](https://rem.info/en/rolling-stock). |
+| REM, four cars | 780 | Maximum comparison figure in the operator's [capacity explanation](https://rem.info/en/news/rem-seating-and-capacity), rather than the theoretical 600. |
+| AZUR, nine cars | 1,104 | W3 loading figure from STM's [technical sheet](https://www.stm.info/sites/default/files/feuillet_azur-web_ang.pdf). Search-indexed sheet; direct retrieval returned 404 during research. Reconfirm the document before using it for calibrated scenarios. |
+| MR-73 | 160 per car | Historical total-capacity entry in [TCRP Report 13, Table A3.5](https://onlinepubs.trb.org/onlinepubs/tcrp/tcrp_rpt_13.pdf). Multiplying by a scenario's six or nine cars gives 960 or 1,440; these are derived historical assumptions, not verified current operating limits. |
+
+Choose and record the actual stock, formation, source, and loading assumption
+when constructing trains. Do not infer stock or formation from a line or GTFS
+trip. No universal capacity default is introduced. Test fixtures deliberately
+use small capacities; they are not estimates of real trains.
+
+REM door throughput follows the aggregate fixed-window budget in
+[Mathematical Foundations, section 4](https://github.com/team-exception-handlers/TransitSync/wiki/Mathematical-Foundations#4-dwell-time-and-boarding-capacity)
+via explicit per-train configuration:
+
+```python
+from simulator.trains.door_throughput import DoorThroughput
+
+# Illustrative only: replace with measured or documented scenario parameters.
+component = TrainComponent(
+    trains,
+    passenger_queue=queue,
+    rem_door_throughput={"rem-train-id": DoorThroughput(0.2, 2)},
+)
+```
+
+Each configured train gets `floor(rate * scheduled_dwell_seconds * doors)`
+boardings per stop, additionally bounded by remaining vehicle capacity. Repeated
+arrivals share the budget; passengers who cannot board retain their queue order
+and `WAITING` state. Each new visit starts a fresh budget. Unknown train IDs and
+invalid rates or door counts are rejected. The run manifest records the settings.
+
+Following section 4's scheduled-dwell formula, holds and dispatch waits allow
+later arrivals to use an unspent budget but do not enlarge or reset it. Scheduled
+REM dwell remains unchanged. This is an aggregate stop budget, not continuous
+per-passenger door-service timing. Metro and other unlisted trains keep their
+existing boarding behaviour. No REM identity or measured rate is inferred:
+scenario builders must supply this configuration for REM runs; unconfigured
+trains enforce vehicle capacity only.
+
+The [LLL prototype PR #186](https://github.com/team-exception-handlers/TransitSync/pull/186)
+supplies the original stateful checks. The #24 tests extend its independent FIFO
+reference model to tracked passengers, different destinations and later trains.
+Existing scheduler integration tests cover full departures and later recovery.
+
 ### Dwell time model
 
 `simulator.trains.dwell.DwellModel` computes demand-dependent **Metro** dwell in
