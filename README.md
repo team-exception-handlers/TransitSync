@@ -509,9 +509,10 @@ The existing controller observations read the same queue and live train loads.
 
 A compatible passenger left waiting when a train departs gets a `MissedConnection`
 record. A passenger reaching the platform later gets a miss for the first compatible
-departure since their feeder alighting. Trains that left before the transfer began
-are excluded. A missed passenger stays waiting and can board a later train. These
-records identify missed services; they do not mark the passenger journey completed.
+departure since their feeder alighting. Each passenger's transfer gets at most one
+miss, even if more full trains leave them behind. Trains that left before the
+transfer began are excluded. A missed passenger stays waiting and can board a later
+train; the record does not mark their journey completed.
 
 For passengers already onboard at run start, supply `initial_onboard`, mapping
 train IDs to passenger ID sequences. Each listed passenger must be `ON_BOARD`,
