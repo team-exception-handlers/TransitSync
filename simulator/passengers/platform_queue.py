@@ -145,21 +145,34 @@ class PlatformQueue:
         """Return passengers still waiting, including incompatible destinations."""
         return len(self._waiting[platform_id])
 
-    def board(self, platform_id: str, train: Train) -> list[str]:
+    def board(
+        self, platform_id: str, train: Train, *, max_boarding: int | None = None
+    ) -> list[str]:
         """Board compatible passengers FIFO up to capacity; return their IDs.
 
         A passenger for another destination keeps their place without blocking
         compatible passengers behind them. TrainComponent calls this only while
         doors are open and emits the corresponding Boarding events.
+        Optional max_boarding is the remaining whole-passenger door budget.
+        A zero budget preserves the entire queue without inspecting destinations.
         """
-        if train.available_capacity == 0:
+        if max_boarding is not None and (
+            isinstance(max_boarding, bool)
+            or not isinstance(max_boarding, int)
+            or max_boarding < 0
+        ):
+            raise ValueError("max_boarding must be a non-negative integer")
+        limit = train.available_capacity
+        if max_boarding is not None:
+            limit = min(limit, max_boarding)
+        if limit == 0:
             return []
         boarded, remaining = [], deque()
         waiting = self._waiting[platform_id]
         destinations = {
             stop.station_id for stop in train.schedule[train.current_stop_index + 1 :]
         }
-        while waiting and len(boarded) < train.available_capacity:
+        while waiting and len(boarded) < limit:
             passenger_id = waiting.popleft()
             if (
                 self.passengers is None

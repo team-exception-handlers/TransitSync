@@ -18,7 +18,8 @@ All event times, dwell durations and separation gaps are simulation seconds.
 
 import math
 from collections import defaultdict, deque
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from types import MappingProxyType
 from typing import Any
 
 from simulator.control.decision import DecisionPipeline
@@ -38,6 +39,7 @@ from simulator.engine.events import (
 )
 from simulator.passengers.platform_queue import PlatformQueue
 from simulator.trains.disruption import DelayInjection
+from simulator.trains.door_throughput import DoorThroughput
 from simulator.trains.suspension import LineSuspension, dispatch_ready_s
 from simulator.trains.train import ScheduledStop, Train
 
@@ -56,6 +58,7 @@ class TrainComponent:
         delay_injections: Sequence[DelayInjection] = (),
         passenger_queue: PlatformQueue | None = None,
         decision: DecisionPipeline | None = None,
+        rem_door_throughput: Mapping[str, DoorThroughput] | None = None,
     ) -> None:
         """Bind fresh vehicles, a passenger queue and a departure decision policy.
 
@@ -63,6 +66,8 @@ class TrainComponent:
         seconds; suspensions and delay injections use the same simulation clock.
         A queue with passenger snapshots also validates initial onboard manifests.
         Queue-owned identities share the same vehicle capacity as aggregate load.
+        rem_door_throughput explicitly identifies REM train IDs and their door
+        rates. Unlisted vehicles retain capacity-only boarding; no line inference.
         Raises ValueError for invalid configuration, duplicate train identities
         or inconsistent passenger manifests before any event is scheduled.
         """
@@ -123,7 +128,25 @@ class TrainComponent:
             visits.sort(key=self._visit_sort_key)
             self._arrival_cursor[platform] = 0
             self._departure_cursor[platform] = 0
+        self._bind_rem_throughput(rem_door_throughput)
         self._bind_passengers(passenger_queue)
+
+    def _bind_rem_throughput(
+        self, rem_door_throughput: Mapping[str, DoorThroughput] | None
+    ) -> None:
+        """Validate explicit REM identities before installing passenger manifests."""
+        if rem_door_throughput is not None and not isinstance(
+            rem_door_throughput, Mapping
+        ):
+            raise ValueError("rem_door_throughput must map train IDs to DoorThroughput")
+        self.rem_door_throughput = MappingProxyType(dict(rem_door_throughput or {}))
+        if any(
+            key not in self.trains or not isinstance(value, DoorThroughput)
+            for key, value in self.rem_door_throughput.items()
+        ):
+            raise ValueError(
+                "rem_door_throughput requires known train IDs and DoorThroughput values"
+            )
 
     def _bind_passengers(self, queue: PlatformQueue | None) -> None:
         """Attach one passenger owner after all train identities are known."""
@@ -271,6 +294,19 @@ class TrainComponent:
             )
         return tuple(entries)
 
+    def boarding_manifest_entries(self) -> tuple[dict[str, object], ...]:
+        """Record explicit REM parameters and fixed-window semantics for replay."""
+        return tuple(
+            {
+                "train_id": train_id,
+                "passengers_per_second_per_door": config.passengers_per_second_per_door,
+                "doors": config.doors,
+                "window": "scheduled_dwell",
+                "rounding": "floor",
+            }
+            for train_id, config in sorted(self.rem_door_throughput.items())
+        )
+
     def decision_records(self) -> tuple[dict[str, Any], ...]:
         """Return the strategy's audit records for ``decisions.jsonl`` (#44)."""
         return self.decision.decision_records()
@@ -349,7 +385,15 @@ class TrainComponent:
             return
         for visit in self._at_platform[platform]:
             train = self.trains[visit[0]]
-            passenger_ids = self.passenger_queue.board(platform, train)
+            config = self.rem_door_throughput.get(train.id)
+            remaining = None
+            if config is not None:
+                stop = self._stop(visit)
+                total = config.budget(stop.departure_s - stop.arrival_s)
+                remaining = max(0, total - self._boarded[visit])
+            passenger_ids = self.passenger_queue.board(
+                platform, train, max_boarding=remaining
+            )
             self._boarded[visit] += len(passenger_ids)
             for passenger_id in passenger_ids:
                 scheduler.schedule(
