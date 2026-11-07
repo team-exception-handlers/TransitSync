@@ -110,6 +110,18 @@ def test_station_layout_endpoint_rejects_unknown_interchange() -> None:
     assert response.json() == {"detail": "Unknown interchange: unknown"}
 
 
+def test_catalog_identifies_placeholder_layouts_and_replacement_location() -> None:
+    """Keep future real-layout work visible in the source catalog."""
+    catalog = json.loads(
+        (REPOSITORY_ROOT / "config/station_layouts.json").read_text(encoding="utf-8")
+    )
+    notes = " ".join(catalog["maintainer_notes"])
+
+    assert "gare_centrale_bonaventure" in notes
+    assert "edouard_montpetit" in notes
+    assert "Replace their layouts in this file" in notes
+
+
 def test_station_layout_startup_rejects_missing_reference_interchange(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

@@ -119,9 +119,12 @@ The station-layout endpoint returns platforms, their map coordinates, station
 markers, connection records, and transfer corridor paths for
 `gare_centrale_bonaventure`, `mcgill`, or `edouard_montpetit`. The current
 coordinates are schematic: the front end's McGill fixture geometry is reused
-for all three interchanges. Platform metadata comes from the reference network;
-the layout catalog stores only map-specific platform positions and transfer
-geometry. The endpoint does not include passenger or train playback data.
+for all three interchanges. The Gare Centrale–Bonaventure and
+Édouard-Montpetit entries are placeholders; replace their geometry in
+`config/station_layouts.json` when real layouts are prepared. Platform metadata
+comes from the reference network; the layout catalog stores only map-specific
+platform positions and transfer geometry. The endpoint does not include
+passenger or train playback data.
 
 The default allowed browser origin is `http://localhost:5173`. Configure
 additional exact HTTP(S) origins through

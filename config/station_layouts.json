@@ -1,4 +1,7 @@
 {
+  "maintainer_notes": [
+    "gare_centrale_bonaventure and edouard_montpetit currently reuse McGill schematic coordinates as placeholders. Replace their layouts in this file when their real map geometry is prepared."
+  ],
   "layouts": {
     "gare_centrale_bonaventure": {
       "interchange": {

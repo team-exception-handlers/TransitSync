@@ -176,8 +176,12 @@ class LayoutGeometry(StrictModel):
 
 
 class LayoutCatalog(StrictModel):
-    """Committed map geometry, separate from reference-network metadata."""
+    """Committed map geometry and maintainer notes, separate from network data.
 
+    Notes identify placeholder layouts and are not included in API responses.
+    """
+
+    maintainer_notes: list[NonEmptyText] = Field(default_factory=list)
     layouts: dict[NonEmptyText, LayoutGeometry]
 
 
