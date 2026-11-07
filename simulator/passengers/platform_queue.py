@@ -68,7 +68,7 @@ class PlatformQueue:
             defaultdict(list)
         )
         self._connection_start: dict[str, float] = {}
-        self._missed: set[tuple[str, TrainDeparture]] = set()
+        self._missed: set[str] = set()
 
     def bind_trains(self, trains: Mapping[str, Train]) -> None:
         """Validate initial identities against loads; no train loads change.
@@ -152,20 +152,25 @@ class PlatformQueue:
         compatible passengers behind them. TrainComponent calls this only while
         doors are open and emits the corresponding Boarding events.
         """
+        if train.available_capacity == 0:
+            return []
         boarded, remaining = [], deque()
+        waiting = self._waiting[platform_id]
         destinations = {
             stop.station_id for stop in train.schedule[train.current_stop_index + 1 :]
         }
-        for passenger_id in self._waiting[platform_id]:
-            compatible = self.passengers is None or (
-                self.passengers[passenger_id].destination in destinations
-            )
-            if compatible and len(boarded) < train.available_capacity:
+        while waiting and len(boarded) < train.available_capacity:
+            passenger_id = waiting.popleft()
+            if (
+                self.passengers is None
+                or self.passengers[passenger_id].destination in destinations
+            ):
                 boarded.append(passenger_id)
             else:
                 remaining.append(passenger_id)
+        # Restore skipped destinations before the unread tail, preserving FIFO.
+        waiting.extendleft(reversed(remaining))
         train.board(len(boarded))
-        self._waiting[platform_id] = remaining
         for passenger_id in boarded:
             if self.passengers is not None:
                 self._onboard[train.id][passenger_id] = None
@@ -266,13 +271,12 @@ class PlatformQueue:
         destinations: frozenset[str],
         time_s: float,
     ) -> MissedConnection | None:
-        """Emit at most one miss per passenger and actual train visit."""
-        key = (passenger_id, departure)
-        if key in self._missed or (
+        """Record only the first missed service in this passenger's transfer."""
+        if passenger_id in self._missed or (
             self.passengers[passenger_id].destination not in destinations
         ):
             return None
-        self._missed.add(key)
+        self._missed.add(passenger_id)
         return MissedConnection(
             time_s=time_s,
             passenger_id=passenger_id,
