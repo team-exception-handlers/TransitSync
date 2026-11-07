@@ -94,6 +94,11 @@ def test_saved_headway_scenario_round_trips_exactly():
         "target_headways_s": {"P": 300.25},
         "hold_search": {"step_s": 10, "max_hold_s": 90},
         "weights": {"w_wait": 1.5, "w_onboard": 0.75},
+        "prediction_error": {
+            "arrival_kappa": 0.5,
+            "transfer_kappa": 2.0,
+            "load_kappa": 0.0,
+        },
     }
 
 
