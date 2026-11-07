@@ -338,6 +338,22 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
 - **AI fixes:** Corrected oversized targets raising the wrong error, preserved exact readiness at suspension boundaries, and added tests for hold-cause limits. Strengthened fixtures that had missed reused hold values, passenger dependence, skipped later targets and a mismatched engine gap. Closer trains now expose an engine using 90 seconds when configured for 45. Added NumPy target support and JSON-saving tests. Review caught integer rounding during conversion; integer targets now stay exact.
 - **Review:** Targeted mutations confirm tests catch wrong policies, targets, platform history, operating limits and reused train state. Bypassing clearance fails an existing runtime check; it is not counted as an assertion failure. Helper typing and comment edits preserved executable logic and assertions. Documentation was shortened to explain the same results in plain language.
 
+## Capacity stateful testing prototype (#24)
+
+- **Tool:** Codex (OpenAI); **AI contribution:** 50% or more AI-generated.
+- **Files:** `tests/simulator/passengers/test_capacity_stateful.py` and this record.
+- **Change:** Generated a Hypothesis state machine comparing existing train and
+  platform boarding with an independent FIFO model, plus explicit empty,
+  partially occupied and full train cases. No production capacity logic changed.
+- **Verification:** 173 passenger/train tests passed; targeted Ruff lint,
+  extended checks and formatting passed. An in-memory passenger-loss mutation
+  failed the queue-count invariant and shrank to capacity one, two arrivals,
+  and one boarding attempt. The patch was restored and normal tests passed.
+- **Attribution:** Implementation and verification were performed by Codex.
+  They do not establish the student's independent learning. Prototype evidence
+  is prepared for the draft PR description rather than a separate Markdown file.
+  No PR created.
+
 ## Keeping this file up to date
 
 For every feature or fix pull request with AI-generated code:
