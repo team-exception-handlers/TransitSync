@@ -12,7 +12,8 @@ from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import run_scenario
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
-from tests.simulator.control.headway_run_helpers import load, scenario_input
+from simulator.control.strategies.no_control import NoControlStrategy
+from tests.simulator.control.headway_run_helpers import (load, scenario_input, run_selected,)
 
 
 def run_with_observations(output_dir, config, trains):
@@ -119,3 +120,21 @@ def test_configured_target_and_actual_held_departure_reach_strategy(tmp_path):
     departures = [event for event in events if event["event_type"] == "train_departure"]
     assert [event["time_s"] for event in departures] == [100, 190, 310]
     assert [item.service_irregularity for item in observations] == [None, None, 0.0]
+
+def test_shared_factory_applies_irregularity_window(tmp_path, monkeypatch):
+    config = scenario_input("no_control")
+    config["control"]["irregularity_window_size"] = 1
+    observed = []
+    original_evaluate = NoControlStrategy.evaluate
+
+    def record_observation(self, observation):
+        observed.append(observation.service_irregularity)
+        return original_evaluate(self, observation)
+
+    monkeypatch.setattr(NoControlStrategy, "evaluate", record_observation)
+    result = run_selected(tmp_path, config, engine_gap=60, trains=disrupted_trains())
+
+    manifest = json.loads(result.manifest_path.read_text())
+    assert manifest["control"]["irregularity_window_size"] == 1
+    assert observed == [None, None, 0.0, 0.5, 0.0, 0.0, 0.0]
+    
