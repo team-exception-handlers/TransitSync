@@ -18,7 +18,7 @@ describe("StationCanvas", () => {
     } as unknown as CanvasRenderingContext2D);
     usePlaybackStore.getState().loadData(stationViewData);
   });
-  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
 
   it("redraws the recorded passenger position after forward and backward seeks", () => {
     render(<StationCanvas />);
@@ -48,7 +48,45 @@ describe("StationCanvas scaling", () => {
     } as unknown as CanvasRenderingContext2D);
     usePlaybackStore.getState().loadData(stationViewData);
   });
-  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); vi.unstubAllGlobals(); });
+
+  it("observes the canvas after data loads and disconnects when it disappears", () => {
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    let observerCallback: ResizeObserverCallback | undefined;
+    class FakeResizeObserver {
+      constructor(callback: ResizeObserverCallback) {
+        observerCallback = callback;
+      }
+      observe = observe;
+      disconnect = disconnect;
+      unobserve() {}
+    }
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+    usePlaybackStore.setState({ data: null });
+
+    const { container, unmount } = render(<StationCanvas />);
+    expect(screen.queryByRole("img")).toBeNull();
+    expect(observe).not.toHaveBeenCalled();
+
+    act(() => usePlaybackStore.getState().loadData(stationViewData));
+    expect(observe).toHaveBeenCalledExactlyOnceWith(
+      container.querySelector(".station-canvas-wrap"),
+    );
+    act(() => observerCallback?.(
+      [{ contentRect: { width: 400, height: 600 } } as ResizeObserverEntry],
+      {} as ResizeObserver,
+    ));
+    expect(scaleSpy).toHaveBeenCalledWith(0.5, 0.5);
+    expect(screen.getByRole("img").style.width).toBe("400px");
+
+    act(() => usePlaybackStore.setState({ data: null }));
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    act(() => usePlaybackStore.getState().loadData(stationViewData));
+    expect(observe).toHaveBeenCalledTimes(2);
+    unmount();
+    expect(disconnect).toHaveBeenCalledTimes(2);
+  });
 
   it("renders the station layout with its platforms and connections", () => {
     render(<StationCanvas />);

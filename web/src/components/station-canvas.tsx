@@ -51,7 +51,7 @@ export function StationCanvas() {
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, []);
+  }, [data]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
