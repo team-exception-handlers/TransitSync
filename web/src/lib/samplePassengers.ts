@@ -42,21 +42,6 @@ function hashPassengerId(id: string): number {
     return hash >>> 0;
 }
 
-function byHashRank(
-    a: PassengerPosition,
-    b: PassengerPosition,
-): number {
-    const hashA = hashPassengerId(a.passenger_id);
-    const hashB = hashPassengerId(b.passenger_id);
-
-    if (hashA !== hashB) {
-        return hashA - hashB;
-    }
-
-    // Tie-break on the id itself so ordering never depends on array position.
-    return byPassengerId(a, b);
-}
-
 /**
  * Select up to `maxMarkers` passengers to draw out of `passengers`,
  * plus the true (unsampled) count.
@@ -78,9 +63,17 @@ export function samplePassengers(
         };
     }
 
-    const sampled = [...passengers]
-        .sort(byHashRank)
+    const sampled = passengers
+        .map((passenger) => ({
+            passenger,
+            hash: hashPassengerId(passenger.passenger_id),
+        }))
+        .sort((a, b) =>
+            // Tie-break on the id so ordering never depends on array position.
+            a.hash - b.hash || byPassengerId(a.passenger, b.passenger),
+        )
         .slice(0, budget)
+        .map(({ passenger }) => passenger)
         .sort(byPassengerId);
 
     return {
