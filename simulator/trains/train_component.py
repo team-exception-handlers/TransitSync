@@ -353,8 +353,10 @@ class TrainComponent:
             for platform in sorted(self._visits)
         )
 
-    def future_visits(self, now_s: float) -> tuple[FutureVisit, ...]:
-        """Copy all remaining visits for #61, with no mutable train references.
+    def future_visits(
+        self, now_s: float, until_s: float = math.inf
+    ) -> tuple[FutureVisit, ...]:
+        """Copy remaining visits arriving by ``until_s`` (inclusive seconds).
 
         Existing holds remain fixed. Return-trip recovery consumes slack once;
         inbound terminals have an arrival but no decision or departure.
@@ -363,15 +365,19 @@ class TrainComponent:
         error layer, rather than the train owner, perturbs future predictions.
         Completed vehicles contribute no visits; their identities and final
         loads remain in the existing next-stop view for other controllers.
+        The default preserves the complete-route API. A bounded request stops
+        each chronological route at its first arrival outside the window.
         """
         return tuple(
             visit
             for train_id, train in sorted(self.trains.items())
             if train_id not in self._finished
-            for visit in self._future_train_visits(train, now_s)
+            for visit in self._future_train_visits(train, now_s, until_s)
         )
 
-    def _future_train_visits(self, train: Train, now_s: float) -> list[FutureVisit]:
+    def _future_train_visits(
+        self, train: Train, now_s: float, until_s: float
+    ) -> list[FutureVisit]:
         """Project timetable times with current delay and known readiness.
 
         Fixed holds change later-stop lateness immediately in the view, even
@@ -399,6 +405,8 @@ class TrainComponent:
                 visit = self._future_visit(
                     key, delay, recovery if stop_index == 0 else 0.0, now_s
                 )
+                if visit.arrival_s > until_s:
+                    return visits
                 visits.append(visit)
                 if not visit.skips_departure:
                     delay = visit.departure_s - visit.scheduled_departure_s
