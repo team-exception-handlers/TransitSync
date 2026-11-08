@@ -127,6 +127,21 @@ def test_no_transfer_sources_gives_no_incoming_transfers():
     assert first.incoming_transfers == ()
 
 
+def test_legacy_train_source_leaves_service_irregularity_unavailable():
+    class LegacySource:
+        def train_states(self):
+            return ()
+
+        def platform_states(self):
+            return ()
+
+    decision = DepartureDue(
+        time_s=130, train_id="A", station_id="S1", platform_id="P1", scheduled_s=130
+    )
+    observation = ObservationBuilder().build(decision, LegacySource())
+    assert observation.service_irregularity is None
+
+
 def test_snapshot_values_are_plain_immutable_data():
     first = snapshots_at_each_decision((FixedTransfers(),))[0]
     parts = (*first.trains, *first.platforms, *first.incoming_transfers)

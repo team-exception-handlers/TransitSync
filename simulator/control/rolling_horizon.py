@@ -239,7 +239,7 @@ class RollingHorizonPlanner:
         """
         later = [
             v.departure_s
-            for v in observation.future_visits
+            for v in (*observation.future_visits, *observation.headway_visits)
             if v.platform_id == visit.platform_id
             and v.key != visit.key
             and not v.skips_departure

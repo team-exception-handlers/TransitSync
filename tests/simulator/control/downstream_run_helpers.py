@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 from simulator.control.decision import DecisionPipeline
 from simulator.control.interface import DecisionController, HoldAction
+from simulator.control.planning import RollingHorizonSettings
 from simulator.engine.runner import run_scenario
 from simulator.trains.train_component import TrainComponent
 
@@ -19,6 +20,9 @@ class CaptureHold(DecisionController):
     def __init__(self, hold):
         self.hold = hold
         self.observation = None
+        # These engine comparisons cover complete routes over the 1000 s run.
+        # Request that window explicitly when the bounded #196 builder is used.
+        self.planner = SimpleNamespace(settings=RollingHorizonSettings(window_s=1000))
 
     def evaluate(self, observation):
         if observation.train_id == "A" and observation.platform_id == "P1":

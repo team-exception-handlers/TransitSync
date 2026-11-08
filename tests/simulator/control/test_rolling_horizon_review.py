@@ -55,6 +55,19 @@ def test_repeated_platform_without_active_marker_fails_instead_of_guessing():
         policy.plan(seen)
 
 
+def test_headway_reference_supplies_benefit_without_an_extra_decision():
+    seen = snapshot((visit(),))
+    seen = replace(seen, headway_visits=(visit("next", departure=1100),))
+    policy = RollingHorizonPlanner(
+        {"P1": UniformWalk()}, hold_search=HoldSearchSettings(10, 10)
+    )
+    result = policy.plan(seen)
+    assert len(result.decisions) == 1
+    assert result.hold_s == 10
+    # One caught rider * 1000 s * 2 - 10 onboard * 10 s = 1900 pax-s.
+    assert result.net_ps == 1900
+
+
 @pytest.mark.parametrize("count", [7, 15])
 def test_default_grid_handles_large_windows_without_dropping_stations(count):
     seen, walking = independent_stations(count)
