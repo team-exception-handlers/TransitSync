@@ -22,6 +22,7 @@ IDs, complete trips and the gap used by the train engine.
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
+from sys import maxsize
 from typing import Any
 
 from simulator.control.break_even import BreakEvenWeights
@@ -33,6 +34,7 @@ from simulator.control.strategies import STRATEGIES
 from simulator.control.strategies.headway_regulation import HeadwayRegulationStrategy
 
 DEFAULT_STRATEGY = "no_control"
+DEFAULT_IRREGULARITY_WINDOW_SIZE = 5
 CONTROL_FIELDS = frozenset(
     {
         "strategy",
@@ -41,6 +43,7 @@ CONTROL_FIELDS = frozenset(
         "target_headways_s",
         "prediction_error",
         "rolling_horizon",
+        "irregularity_window_size",
     }
 )
 OPERATING_RULES_FIELDS = frozenset({"max_hold_time", "min_safe_gap", "rule_action_map"})
@@ -61,12 +64,19 @@ class ControlSettings:
     prediction_error: PredictionErrorSettings = field(
         default_factory=PredictionErrorSettings
     )
+    irregularity_window_size: int = DEFAULT_IRREGULARITY_WINDOW_SIZE
     rolling_horizon: RollingHorizonSettings = field(
         default_factory=RollingHorizonSettings
     )
 
     def __post_init__(self) -> None:
-        """Freeze targets in seconds; raise ControlSettingsError for bad targets."""
+        """Validate the window length and freeze targets in seconds."""
+        size = self.irregularity_window_size
+        if type(size) is not int or not 0 < size <= maxsize:
+            raise ControlSettingsError(
+                "control.irregularity_window_size: expected a positive integer "
+                f"up to {maxsize}"
+            )
         if self.strategy != HeadwayRegulationStrategy.name:
             if self.target_headways_s is not None:
                 raise ControlSettingsError(
@@ -89,11 +99,12 @@ class ControlSettings:
             "weights": self.weights.to_dict(),
             "prediction_error": self.prediction_error.to_dict(),
         }
-        # Keep the saved format unchanged for other strategies.
         if self.target_headways_s is not None:
             saved["target_headways_s"] = dict(self.target_headways_s)
         if self.strategy == "rolling_horizon":
             saved["rolling_horizon"] = self.rolling_horizon.to_dict()
+        if self.irregularity_window_size != DEFAULT_IRREGULARITY_WINDOW_SIZE:
+            saved["irregularity_window_size"] = self.irregularity_window_size
         return saved
 
 
@@ -138,6 +149,9 @@ def parse_control_settings(
         target_headways_s=value.get("target_headways_s"),
         prediction_error=_parse_section(
             value, "prediction_error", PredictionErrorSettings
+        ),
+        irregularity_window_size=value.get(
+            "irregularity_window_size", DEFAULT_IRREGULARITY_WINDOW_SIZE
         ),
     )
 

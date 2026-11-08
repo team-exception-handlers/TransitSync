@@ -47,11 +47,12 @@ class FutureVisit:
 
 @dataclass(frozen=True, slots=True)
 class RollingHorizonSettings:
-    """Forward window in seconds and a bound on exact search work.
+    """Forward window in seconds and a bound on candidate evaluations.
 
     The assumed 300 s default is a modelling choice, not a safety limit.
-    Exceeding the combination budget raises an error; no station is silently
-    dropped and no approximate optimum is presented as an exact one.
+    Larger grids use bounded approximate search without dropping stations.
+    The planner marks approximate results explicitly; a budget too small to
+    explore every station raises an error before candidate scoring begins.
     """
 
     window_s: float = 300.0

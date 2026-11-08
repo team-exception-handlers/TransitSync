@@ -1,5 +1,5 @@
 # AI contribution: 50% or more AI-generated
-"""Exact coordinated hold search (US-2.6 #61, Mathematical Foundations §8).
+"""Bounded coordinated hold search (US-2.6 #61, Mathematical Foundations §8).
 
 Uses the existing candidate grid and break-even objective at every station in
 the inclusive forward window. Future choices are provisional: only the current
@@ -10,9 +10,9 @@ Task #62 subtracts downstream costs from the joint local objective.
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from itertools import product
 from types import MappingProxyType
 
+from simulator.control.bounded_search import plan_rank, search_grid
 from simulator.control.break_even import BreakEvenWeights, evaluate_hold
 from simulator.control.downstream import evaluate_downstream, project_visits
 from simulator.control.expected_arrivals import TransferEstimate, total_expected_caught
@@ -32,17 +32,18 @@ class PlannedDecision:
 
 @dataclass(frozen=True, slots=True)
 class HorizonAlternative:
-    """Best completion for one current hold, including why it may lose."""
+    """Best evaluated completion for one hold; ``exact`` labels its search."""
 
     hold_s: float
     local_net_ps: float
     downstream_cost_ps: float
     net_ps: float
+    exact: bool = True
 
 
 @dataclass(frozen=True, slots=True)
 class HorizonPlan:
-    """Best joint plan, its passenger-second objective and exact search count."""
+    """Best evaluated plan, objective, work count and explicit search status."""
 
     decisions: tuple[PlannedDecision, ...]
     net_ps: float
@@ -50,6 +51,8 @@ class HorizonPlan:
     local_net_ps: float = 0.0
     downstream_cost_ps: float = 0.0
     alternatives: tuple[HorizonAlternative, ...] = ()
+    exact: bool = True
+    total_combinations: int = 0
 
     @property
     def hold_s(self) -> float:
@@ -59,7 +62,7 @@ class HorizonPlan:
 
 @dataclass(frozen=True, slots=True)
 class RollingHorizonPlanner:
-    """Search the Cartesian product of hold grids without materializing it.
+    """Search full hold grids exactly when small, approximately when larger.
 
     Walking distributions must be supplied from the run's transfer routes,
     keyed by connecting platform. No default walk or headway is invented.
@@ -87,8 +90,8 @@ class RollingHorizonPlanner:
     def plan(self, observation: ObservationSnapshot) -> HorizonPlan:
         """Recompute all choices from this snapshot; never cache future actions.
 
-        Raises ValueError for a missing current visit or an exact search that
-        exceeds its configured budget. Equal scores prefer less total holding,
+        Raises ValueError for a missing current visit or a budget too small
+        to explore every station. Equal scores prefer less total holding,
         then lexicographically shorter holds (current decision first).
         """
         end_s = observation.time_s + self.settings.window_s
@@ -96,54 +99,42 @@ class RollingHorizonPlanner:
         forecast = _forecast_observation(observation, baseline)
         points = self._points(forecast)
         headways = {p.key: self._headway(p, forecast) for p in points}
-        choices, count = self._choices(points)
-        best = None
-        best_rank = None
-        # Retain one best completion per current duration for a bounded audit,
-        # rather than storing the potentially large Cartesian product itself.
-        alternatives = {}
-        for holds in product(*choices):
+        choices = self._choices(points)
+
+        def evaluate(holds):
             decisions = tuple(
                 PlannedDecision(p, h) for p, h in zip(points, holds, strict=True)
             )
-            result = self._evaluate_plan(
-                decisions, observation, headways, baseline, end_s, count
+            return self._evaluate_plan(
+                decisions, observation, headways, baseline, end_s, 0
             )
-            rank = (result.net_ps, -sum(holds), tuple(-h for h in holds))
-            if (
-                holds[0] not in alternatives
-                or result.net_ps > alternatives[holds[0]].net_ps
-            ):
-                alternatives[holds[0]] = HorizonAlternative(
-                    holds[0],
-                    result.local_net_ps,
-                    result.downstream_cost_ps,
-                    result.net_ps,
-                )
-            if best_rank is None or rank > best_rank:
-                best = result
-                best_rank = rank
+
+        states, count, exact, total = search_grid(
+            choices, self.settings.max_combinations, evaluate
+        )
+        _, best = max(states.values(), key=lambda pair: plan_rank(*pair))
         return replace(
-            best, alternatives=tuple(alternatives[h] for h in sorted(alternatives))
+            best,
+            combinations_evaluated=count,
+            exact=exact,
+            total_combinations=total,
+            alternatives=tuple(
+                HorizonAlternative(
+                    h, r.local_net_ps, r.downstream_cost_ps, r.net_ps, exact
+                )
+                for h, (_, r) in sorted(states.items())
+            ),
         )
 
     def _choices(self, points):
-        """Build the joint grid and reject oversized work before scoring.
+        """Build complete station grids; the bounded search controls work.
 
         Every station gets the full grid: even a hold with no local transfer
         benefit can shift a later connection window. Pruning it would miss
         coordinated optima when that later station reaches its own hold cap.
         """
         grid = self.hold_search.candidates()
-        choices = (grid,) * len(points)
-        count = math.prod(len(values) for values in choices)
-        if count > self.settings.max_combinations:
-            raise ValueError(
-                f"rolling horizon needs {count} combinations; exceeds "
-                f"max_combinations={self.settings.max_combinations}; "
-                "reduce window or hold grid"
-            )
-        return choices, count
+        return (grid,) * len(points)
 
     def _evaluate_plan(self, decisions, observation, headways, baseline, end_s, count):
         """Value local holds at projected decision times, then subtract knock-on cost.
@@ -179,16 +170,18 @@ class RollingHorizonPlanner:
         current event remains first regardless of its train ID's sort order.
         Repeated platforms are distinguished by trip and stop indices.
         """
-        current = next(
-            (
-                v
-                for v in observation.future_visits
-                if v.train_id == observation.train_id
-                and v.platform_id == observation.platform_id
-                and v.can_hold
-            ),
-            None,
+        candidates = tuple(
+            v
+            for v in observation.future_visits
+            if v.train_id == observation.train_id
+            and v.platform_id == observation.platform_id
+            and v.can_hold
         )
+        active = tuple(v for v in candidates if v.arrived)
+        # Older callers can supply one unambiguous candidate without a marker.
+        # Repeated platforms require the observed arrival, never tuple order.
+        identified = active or candidates
+        current = identified[0] if len(identified) == 1 else None
         if current is None:
             raise ValueError(
                 "rolling horizon requires the deciding train's future visit"
@@ -246,7 +239,7 @@ class RollingHorizonPlanner:
         """
         later = [
             v.departure_s
-            for v in observation.future_visits
+            for v in (*observation.future_visits, *observation.headway_visits)
             if v.platform_id == visit.platform_id
             and v.key != visit.key
             and not v.skips_departure

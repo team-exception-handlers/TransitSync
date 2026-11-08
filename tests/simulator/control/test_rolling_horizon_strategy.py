@@ -12,6 +12,20 @@ from tests.simulator.control.rolling_helpers import UniformWalk, group, snapshot
 from tests.simulator.control.test_rolling_horizon import planner
 
 
+def test_rolling_and_irregularity_settings_round_trip_together():
+    control = parse_control_settings(
+        {
+            "strategy": "rolling_horizon",
+            "irregularity_window_size": 3,
+            "rolling_horizon": {"window_s": 180, "max_combinations": 250},
+        }
+    )
+    saved = control.to_dict()
+    assert saved["irregularity_window_size"] == 3
+    assert saved["rolling_horizon"] == {"window_s": 180, "max_combinations": 250}
+    assert parse_control_settings(saved) == control
+
+
 def test_only_current_action_is_returned_and_future_is_replanned():
     seen = snapshot(
         (
