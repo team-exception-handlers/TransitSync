@@ -77,7 +77,11 @@ class DecisionPipeline:
             ValueError: the strategy asked to hold another train, or more than
                 once; a hold can only start at that train's own decision point.
         """
-        truth = self._builder.build(decision, trains)
+        truth = self._builder.build(
+            decision,
+            trains,
+            planning=getattr(self.strategy, "requires_future_visits", False),
+        )
         seen = self._error_model.apply(truth) if self._error_model else truth
         actions = self.strategy.evaluate(seen)
         if not actions:

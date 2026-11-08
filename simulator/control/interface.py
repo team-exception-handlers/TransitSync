@@ -14,6 +14,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
+from simulator.control.planning import FutureVisit
+from simulator.control.validation import finite_number
+from simulator.trains.suspension import LineSuspension
+
 
 def _check_text(label: str, value: object) -> None:
     if not isinstance(value, str) or not value.strip():
@@ -106,13 +110,25 @@ class ObservationSnapshot:
     trains: tuple[TrainState, ...]
     platforms: tuple[PlatformState, ...]
     incoming_transfers: tuple[IncomingTransfer, ...]
+    future_visits: tuple[FutureVisit, ...] = ()
+    minimum_gap_s: float = 90.0
+    suspensions: tuple[LineSuspension, ...] = ()
 
     def __post_init__(self) -> None:
         # Frozen only stops reassignment; a list or deque could still be changed
         # in place, so every collection must be an immutable tuple
-        for name in ("trains", "platforms", "incoming_transfers"):
+        for name in (
+            "trains",
+            "platforms",
+            "incoming_transfers",
+            "future_visits",
+            "suspensions",
+        ):
             if not isinstance(getattr(self, name), tuple):
                 raise ValueError(f"ObservationSnapshot.{name} must be a tuple")
+        gap = finite_number("ObservationSnapshot.minimum_gap_s", self.minimum_gap_s)
+        if gap <= 0:
+            raise ValueError("ObservationSnapshot.minimum_gap_s must be > 0")
 
 
 class DecisionController(ABC):

@@ -22,6 +22,7 @@ from simulator.control.interface import (
     ObservationSnapshot,
     TrainState,
 )
+from simulator.control.planning import FutureVisit
 from simulator.control.validation import finite_number
 
 # Published: the Caltrans GTFS-RT "reliable accuracy" band (Master Service
@@ -100,7 +101,30 @@ class PredictionErrorModel:
         """
         trains = tuple(self._train(train, truth.time_s) for train in truth.trains)
         transfers = tuple(self._transfer(group) for group in truth.incoming_transfers)
-        return replace(truth, trains=trains, incoming_transfers=transfers)
+        visits = tuple(
+            self._visit(visit, truth.time_s) for visit in truth.future_visits
+        )
+        return replace(
+            truth, trains=trains, incoming_transfers=transfers, future_visits=visits
+        )
+
+    def _visit(self, visit: FutureVisit, now_s: float) -> FutureVisit:
+        """Forecast future visits through the same horizon error model (#61).
+
+        Shift arrival and departure together to preserve dwell. An arrival
+        already observed is known; extra draws occur only for planning views.
+        """
+        if visit.arrival_s <= now_s:
+            return visit
+        sigma = arrival_sigma_s(visit.arrival_s - now_s)
+        error = (
+            self.settings.arrival_kappa * sigma * float(self._stream.standard_normal())
+        )
+        return replace(
+            visit,
+            arrival_s=visit.arrival_s + error,
+            departure_s=visit.departure_s + error,
+        )
 
     def _train(self, train: TrainState, now_s: float) -> TrainState:
         load = self._count(train.onboard_load, self.settings.load_kappa)
