@@ -114,6 +114,7 @@ def run_selected(
                 trains,
                 minimum_gap_s=engine_gap,
                 suspensions=suspensions,
+                control=settings.control,
                 decision=DecisionPipeline(
                     policy, enforcer=OperatingRulesEnforcer(settings.operating_rules)
                 ),

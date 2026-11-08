@@ -95,6 +95,8 @@ class ObservationSnapshot:
 
     ``scheduled_departure_s`` is this stop's timetable departure in seconds,
     including at a final stop. ``TrainState`` describes each train's next stop.
+    ``service_irregularity`` is the deciding service's rolling normalized
+    headway deviation, or ``None`` until a valid gap has been measured.
     Raises ``ValueError`` if a collection is not a tuple.
     """
 
@@ -106,6 +108,7 @@ class ObservationSnapshot:
     trains: tuple[TrainState, ...]
     platforms: tuple[PlatformState, ...]
     incoming_transfers: tuple[IncomingTransfer, ...]
+    service_irregularity: float | None = None
 
     def __post_init__(self) -> None:
         # Frozen only stops reassignment; a list or deque could still be changed

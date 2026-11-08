@@ -24,6 +24,8 @@ from typing import Any
 
 from simulator.control.decision import DecisionPipeline
 from simulator.control.interface import PlatformState, TrainState
+from simulator.control.irregularity import ServiceIrregularity
+from simulator.control.settings import ControlSettings
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import (
     Alighting,
@@ -59,6 +61,7 @@ class TrainComponent:
         passenger_queue: PlatformQueue | None = None,
         decision: DecisionPipeline | None = None,
         rem_door_throughput: Mapping[str, DoorThroughput] | None = None,
+        control: ControlSettings | None = None,
     ) -> None:
         """Bind fresh vehicles, a passenger queue and a departure decision policy.
 
@@ -68,6 +71,7 @@ class TrainComponent:
         Queue-owned identities share the same vehicle capacity as aggregate load.
         rem_door_throughput explicitly identifies REM train IDs and their door
         rates. Unlisted vehicles retain capacity-only boarding; no line inference.
+        Pass scenario control settings to configure the departure measurement.
         Raises ValueError for invalid configuration, duplicate train identities
         or inconsistent passenger manifests before any event is scheduled.
         """
@@ -109,10 +113,7 @@ class TrainComponent:
         self._at_platform: dict[str, deque[Visit]] = defaultdict(deque)
         self._boarded: dict[Visit, int] = defaultdict(int)
         self._finished: set[str] = set()
-        # Asked at every DepartureDue; no control unless a strategy is given
-        self.decision = decision or DecisionPipeline()
-        self._hold_s: dict[Visit, float] = {}
-        self._unheld_ready_s: dict[Visit, float] = {}
+        self._bind_control(decision, control)
 
         for train in trains:
             if train.id in self.trains:
@@ -130,6 +131,18 @@ class TrainComponent:
             self._departure_cursor[platform] = 0
         self._bind_rem_throughput(rem_door_throughput)
         self._bind_passengers(passenger_queue)
+
+    def _bind_control(
+        self, decision: DecisionPipeline | None, control: ControlSettings | None
+    ) -> None:
+        # Asked at every DepartureDue; no control unless a strategy is given.
+        self.decision = decision or DecisionPipeline()
+        self._hold_s: dict[Visit, float] = {}
+        self._unheld_ready_s: dict[Visit, float] = {}
+        settings = control or ControlSettings()
+        self._irregularity = ServiceIrregularity(
+            settings.irregularity_window_size, settings.target_headways_s
+        )
 
     def _bind_rem_throughput(
         self, rem_door_throughput: Mapping[str, DoorThroughput] | None
@@ -351,6 +364,11 @@ class TrainComponent:
             )
             for platform in sorted(self._visits)
         )
+
+    def service_irregularity(self, train_id: str, platform_id: str) -> float | None:
+        """Read the last measured deviation for the train's line and platform."""
+        train = self.trains.get(train_id)
+        return self._irregularity.value(train.line_id, platform_id) if train else None
 
     def handle(self, event: Event, scheduler: Scheduler) -> None:
         """Process train movement, dispatch restrictions and passenger arrivals."""
@@ -688,6 +706,7 @@ class TrainComponent:
         self._departure_queued.discard(visit)
         self._ready_departures.pop(visit, None)
         self._at_platform[platform].remove(visit)
+        self._irregularity.record_departure(event, train.line_id)
 
         if train.advance_stop():
             next_visit = (train.id, train.current_trip_index, train.current_stop_index)
