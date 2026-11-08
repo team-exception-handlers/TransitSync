@@ -39,7 +39,6 @@ class ServiceIrregularity:
         target_s = self._targets.get(event.platform_id)
         if target_s is None:
             target_s = event.scheduled_s - previous_scheduled_s
-        
         if target_s <= 0:
             return
         deviation = abs(actual_s - target_s) / target_s
