@@ -12,6 +12,7 @@
 import { decisionRecords } from "../data/decisions";
 import { decisionStatus } from "../types/decision";
 import type { HoldDecisionRecord } from "../types/decision";
+import { usePlaybackStore } from "../store/usePlaybackStore";
 
 const STATUS_LABEL: Record<string, string> = {
   applied: "Applied",
@@ -48,11 +49,22 @@ function DecisionRow({ decision }: { decision: HoldDecisionRecord }) {
 }
 
 export function DecisionView() {
+  const data = usePlaybackStore((state) => state.data);
+  const time = usePlaybackStore((state) => state.currentTime_s);
+  const selected = usePlaybackStore((state) => state.selectedConnectionId);
+  const connection = data?.connections.find((item) => item.id === selected);
+  const visibleDecisions = decisionRecords.filter((decision) =>
+    data && decision.time_s <= time && decision.time_s <= data.duration_s &&
+    (decision.platform_id === connection?.from_platform_id ||
+      decision.platform_id === connection?.to_platform_id) &&
+    data.platforms.some((platform) => platform.platform_id === decision.platform_id &&
+      platform.stop_id === decision.station_id),
+  );
   return (
     <section className="panel decision-view" aria-label="Decisions">
       <span className="clock-heading">Decisions</span>
       <ul className="decision-list">
-        {decisionRecords.map((decision) => (
+        {visibleDecisions.map((decision) => (
           <DecisionRow
             key={`${decision.train_id}-${decision.time_s}`}
             decision={decision}

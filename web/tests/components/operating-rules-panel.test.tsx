@@ -30,6 +30,15 @@ describe("OperatingRulesPanel", () => {
     }
   });
 
+  it("clarifies which settings are not enforced by the simulator", () => {
+    render(<OperatingRulesPanel />);
+    expect(screen.getByText("Not enforced yet")).toBeDefined();
+    expect(screen.getByText("headway_violation").closest("li")?.textContent)
+      .toContain("headway checking is not enforced yet");
+    expect(screen.getByText("one_hop_violation").closest("li")?.textContent)
+      .toContain("Always refuses; the configured action is not used yet");
+  });
+
   it("distinguishes clamping rules from refusing rules", () => {
     render(<OperatingRulesPanel />);
 

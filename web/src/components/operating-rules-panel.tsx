@@ -22,7 +22,7 @@ export function OperatingRulesPanel() {
         </div>
         <div>
           <dt>Min safe gap</dt>
-          <dd>{operatingRulesConfig.min_safe_gap}s</dd>
+          <dd><span>{operatingRulesConfig.min_safe_gap}s</span> <small>Not enforced yet</small></dd>
         </div>
       </dl>
 
@@ -40,6 +40,12 @@ export function OperatingRulesPanel() {
               {rule.action}
             </span>
             <small>{rule.description}</small>
+            {rule.name === "headway_violation" && (
+              <small>Configured action only; headway checking is not enforced yet.</small>
+            )}
+            {rule.name === "one_hop_violation" && (
+              <small>Always refuses; the configured action is not used yet.</small>
+            )}
           </li>
         ))}
       </ul>
