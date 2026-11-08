@@ -105,12 +105,16 @@ class PredictionErrorModel:
             self._train(train, truth.time_s, arrival_z) for train in truth.trains
         )
         transfers = tuple(self._transfer(group) for group in truth.incoming_transfers)
-        if not truth.future_visits:
+        if not truth.future_visits and not truth.headway_visits:
             return replace(truth, trains=trains, incoming_transfers=transfers)
-        visits = self._visits(truth, arrival_z)
+        departures: dict[str, float] = {}
+        visits = self._visits(truth.future_visits, truth.time_s, arrival_z, departures)
+        headways = self._visits(
+            truth.headway_visits, truth.time_s, arrival_z, departures
+        )
         # Use the same bounded forecast in both representations of a next stop.
         next_arrivals = {}
-        for visit in visits:
+        for visit in (*visits, *headways):
             if not visit.arrived:
                 next_arrivals.setdefault(
                     (visit.train_id, visit.platform_id), visit.arrival_s
@@ -125,18 +129,25 @@ class PredictionErrorModel:
             for train in trains
         )
         return replace(
-            truth, trains=trains, incoming_transfers=transfers, future_visits=visits
+            truth,
+            trains=trains,
+            incoming_transfers=transfers,
+            future_visits=visits,
+            headway_visits=headways,
         )
 
     def _visits(
-        self, truth: ObservationSnapshot, arrival_z: dict[str, float]
+        self,
+        source: tuple[FutureVisit, ...],
+        now_s: float,
+        arrival_z: dict[str, float],
+        departures: dict[str, float],
     ) -> tuple[FutureVisit, ...]:
         """Project correlated forecasts onto each train's chronological route."""
-        departures: dict[str, float] = {}
         visits = []
-        for visit in truth.future_visits:
-            previous_s = departures.get(visit.train_id, truth.time_s)
-            estimated = self._visit(visit, truth.time_s, arrival_z, previous_s)
+        for visit in source:
+            previous_s = departures.get(visit.train_id, now_s)
+            estimated = self._visit(visit, now_s, arrival_z, previous_s)
             departures[visit.train_id] = estimated.departure_s
             visits.append(estimated)
         return tuple(visits)

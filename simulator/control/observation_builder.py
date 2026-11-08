@@ -61,8 +61,9 @@ class ObservationBuilder:
         """Return what is true at ``decision``, before any prediction error.
 
         ``until_s`` is an inclusive absolute simulation time in seconds. Pass
-        the cutoff to the source so excluded visits are never materialized;
-        it applies only when the controller requests a planning observation.
+        the cutoff to the source so excluded decisions are not materialized.
+        Separate headway references retain only needed later services. Both
+        views apply only when the controller requests a planning observation.
         """
         if planning and not isinstance(trains, PlanningSource):
             raise ValueError("coordinated planning requires a future-visits source")
@@ -70,6 +71,17 @@ class ObservationBuilder:
             group
             for source in self._transfer_sources
             for group in source.incoming_transfers()
+        )
+        irregularity = getattr(trains, "service_irregularity", None)
+        visits = trains.future_visits(decision.time_s, until_s) if planning else ()
+        references = getattr(trains, "headway_visits", None)
+        # Keep later-service metadata separate from the bounded decision view.
+        headways = (
+            references(
+                decision.time_s, until_s, frozenset(v.platform_id for v in visits)
+            )
+            if planning and references is not None and math.isfinite(until_s)
+            else ()
         )
         return ObservationSnapshot(
             time_s=decision.time_s,
@@ -80,9 +92,13 @@ class ObservationBuilder:
             trains=trains.train_states(),
             platforms=trains.platform_states(),
             incoming_transfers=transfers,
-            future_visits=(
-                trains.future_visits(decision.time_s, until_s) if planning else ()
-            ),
+            future_visits=visits,
+            headway_visits=headways,
             minimum_gap_s=getattr(trains, "minimum_gap_s", 90.0),
             suspensions=getattr(trains, "suspensions", ()),
+            service_irregularity=(
+                irregularity(decision.train_id, decision.platform_id)
+                if irregularity is not None
+                else None
+            ),
         )

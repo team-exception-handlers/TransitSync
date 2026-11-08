@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import App from "../../src/App";
+import { stationViewData } from "../../src/data/stationViewData";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
 
 describe("TransitSync application shell", () => {
@@ -101,5 +102,43 @@ describe("TransitSync application shell", () => {
         expect(
             screen.getByRole("button", { name: /McGill/ }).getAttribute("aria-pressed")
         ).toBe("true");
+    });
+
+    it("updates the heading when selecting a second connection within the same run", () => {
+        const run = structuredClone(stationViewData);
+        const first = run.connections[0];
+        const second = { ...first, id: "second-connection", label: "Second connection" };
+        run.connections.push(second);
+        usePlaybackStore.getState().setAvailableRuns([run]);
+        usePlaybackStore.getState().loadData(run);
+        render(<App />);
+
+        expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(first.label);
+        fireEvent.click(screen.getByRole("button", { name: /Second connection/ }));
+
+        expect(usePlaybackStore.getState().data).toBe(run);
+        expect(usePlaybackStore.getState().selectedConnectionId).toBe(second.id);
+        expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(second.label);
+
+        fireEvent.change(screen.getByRole("slider", { name: "Seek simulation time" }),
+            { target: { value: "60" } });
+        expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(second.label);
+        fireEvent.click(screen.getByRole("button", { name: new RegExp(first.label) }));
+        expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(first.label);
+    });
+
+    it("keeps the heading on the selected connection through a playback time change", () => {
+        render(<App />);
+
+        const buttons = screen.getAllByRole("button", { name: /line$/ });
+        fireEvent.click(buttons[buttons.length - 1]);
+        const selectedLabel = screen.getByRole("heading", { level: 1 }).textContent;
+
+        fireEvent.change(
+            screen.getByRole("slider", { name: "Seek simulation time" }),
+            { target: { value: "60" } },
+        );
+
+        expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(selectedLabel);
     });
 });
