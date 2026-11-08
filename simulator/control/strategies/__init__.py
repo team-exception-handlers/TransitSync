@@ -9,10 +9,16 @@ which modules happen to have been imported.
 from simulator.control.registry import StrategyRegistry
 from simulator.control.strategies.headway_regulation import HeadwayRegulationStrategy
 from simulator.control.strategies.no_control import NoControlStrategy
+from simulator.control.strategies.rolling_horizon import RollingHorizonStrategy
 from simulator.control.strategies.schedule_based_holding import (
     ScheduleBasedHoldingStrategy,
 )
 
 STRATEGIES = StrategyRegistry(
-    (NoControlStrategy, ScheduleBasedHoldingStrategy, HeadwayRegulationStrategy)
+    (
+        NoControlStrategy,
+        ScheduleBasedHoldingStrategy,
+        HeadwayRegulationStrategy,
+        RollingHorizonStrategy,
+    )
 )

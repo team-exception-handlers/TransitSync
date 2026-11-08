@@ -26,6 +26,7 @@ from typing import Any
 
 from simulator.control.break_even import BreakEvenWeights
 from simulator.control.hold_search import HoldSearchSettings
+from simulator.control.planning import RollingHorizonSettings
 from simulator.control.prediction_error import PredictionErrorSettings
 from simulator.control.registry import StrategyRegistry
 from simulator.control.strategies import STRATEGIES
@@ -33,7 +34,14 @@ from simulator.control.strategies.headway_regulation import HeadwayRegulationStr
 
 DEFAULT_STRATEGY = "no_control"
 CONTROL_FIELDS = frozenset(
-    {"strategy", "hold_search", "weights", "target_headways_s", "prediction_error"}
+    {
+        "strategy",
+        "hold_search",
+        "weights",
+        "target_headways_s",
+        "prediction_error",
+        "rolling_horizon",
+    }
 )
 OPERATING_RULES_FIELDS = frozenset({"max_hold_time", "min_safe_gap", "rule_action_map"})
 
@@ -52,6 +60,9 @@ class ControlSettings:
     target_headways_s: Mapping[str, float] | None = None
     prediction_error: PredictionErrorSettings = field(
         default_factory=PredictionErrorSettings
+    )
+    rolling_horizon: RollingHorizonSettings = field(
+        default_factory=RollingHorizonSettings
     )
 
     def __post_init__(self) -> None:
@@ -81,6 +92,8 @@ class ControlSettings:
         # Keep the saved format unchanged for other strategies.
         if self.target_headways_s is not None:
             saved["target_headways_s"] = dict(self.target_headways_s)
+        if self.strategy == "rolling_horizon":
+            saved["rolling_horizon"] = self.rolling_horizon.to_dict()
         return saved
 
 
@@ -119,6 +132,9 @@ def parse_control_settings(
         strategy=strategy,
         hold_search=_parse_section(value, "hold_search", HoldSearchSettings),
         weights=_parse_section(value, "weights", BreakEvenWeights),
+        rolling_horizon=_parse_section(
+            value, "rolling_horizon", RollingHorizonSettings
+        ),
         target_headways_s=value.get("target_headways_s"),
         prediction_error=_parse_section(
             value, "prediction_error", PredictionErrorSettings
