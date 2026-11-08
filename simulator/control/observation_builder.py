@@ -46,6 +46,8 @@ class ObservationBuilder:
             for source in self._transfer_sources
             for group in source.incoming_transfers()
         )
+        
+        irregularity = getattr(trains, "service_irregularity", None)
         return ObservationSnapshot(
             time_s=decision.time_s,
             train_id=decision.train_id,
@@ -55,4 +57,9 @@ class ObservationBuilder:
             trains=trains.train_states(),
             platforms=trains.platform_states(),
             incoming_transfers=transfers,
+            service_irregularity=(
+                irregularity(decision.train_id, decision.platform_id)
+                if irregularity is not None
+                else None
+            ),
         )
