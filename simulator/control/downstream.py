@@ -210,6 +210,9 @@ def _waiting_cost(baseline, proposed, observation, weights, end_s):
 
     Full vehicles cannot serve the queue; future boarding and alighting are
     unknown, so use the supplied load/capacity estimates without inventing them.
+    Arrived trains have already boarded everyone they can take. Any observed
+    residual queue needs a later service, even if that train still has seats
+    but has exhausted its door budget or cannot serve those destinations.
     """
     waiting = {p.platform_id: p.waiting_count for p in observation.platforms}
     full = {t.train_id for t in observation.trains if t.onboard_load >= t.capacity}
@@ -221,6 +224,7 @@ def _waiting_cost(baseline, proposed, observation, weights, end_s):
         visit = base.visit
         if (
             visit.skips_departure
+            or visit.arrived
             or visit.platform_id in charged_platforms
             or visit.train_id in full
         ):
