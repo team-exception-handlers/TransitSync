@@ -8,12 +8,16 @@ import pytest
 
 from simulator.control.decision import DecisionPipeline
 from simulator.control.strategies import STRATEGIES
+from simulator.control.strategies.no_control import NoControlStrategy
 from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import run_scenario
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
-from simulator.control.strategies.no_control import NoControlStrategy
-from tests.simulator.control.headway_run_helpers import (load, scenario_input, run_selected,)
+from tests.simulator.control.headway_run_helpers import (
+    load,
+    run_selected,
+    scenario_input,
+)
 
 
 def run_with_observations(output_dir, config, trains):
@@ -121,6 +125,7 @@ def test_configured_target_and_actual_held_departure_reach_strategy(tmp_path):
     assert [event["time_s"] for event in departures] == [100, 190, 310]
     assert [item.service_irregularity for item in observations] == [None, None, 0.0]
 
+
 def test_shared_factory_applies_irregularity_window(tmp_path, monkeypatch):
     config = scenario_input("no_control")
     config["control"]["irregularity_window_size"] = 1
@@ -137,4 +142,3 @@ def test_shared_factory_applies_irregularity_window(tmp_path, monkeypatch):
     manifest = json.loads(result.manifest_path.read_text())
     assert manifest["control"]["irregularity_window_size"] == 1
     assert observed == [None, None, 0.0, 0.5, 0.0, 0.0, 0.0]
-    
