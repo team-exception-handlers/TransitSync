@@ -1,5 +1,5 @@
 // AI contribution: 50% or more AI-generated
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { stationViewData } from "../../src/data/stationViewData";
 import { getNetworkSnapshot } from "../../src/lib/getNetworkSnapshot";
 import type { StationViewData } from "../../src/types/stationView";
@@ -91,6 +91,27 @@ function buildBendFixture(): StationViewData {
 }
 
 describe("getNetworkSnapshot corridor following", () => {
+    it("reuses fixed corridor geometry across frames and prepares a new run separately", () => {
+        const fixture = buildBendFixture();
+        const hypot = vi.spyOn(Math, "hypot");
+        try {
+            const original = getNetworkSnapshot(fixture, 5);
+            expect(hypot).toHaveBeenCalled();
+            hypot.mockClear();
+            expect(getNetworkSnapshot(fixture, 15).passengers[0].position).toEqual({ x: 10, y: 5 });
+            expect(getNetworkSnapshot(fixture, 5)).toEqual(original);
+            expect(hypot).not.toHaveBeenCalled();
+
+            const reverse = buildBendFixture();
+            reverse.passenger_tracks[0].samples[0].position = { x: 10, y: 10 };
+            reverse.passenger_tracks[0].samples[1].position = { x: 0, y: 0 };
+            expect(getNetworkSnapshot(reverse, 5).passengers[0].position).toEqual({ x: 10, y: 5 });
+            expect(hypot).toHaveBeenCalled();
+        } finally {
+            hypot.mockRestore();
+        }
+    });
+
     it("interpolates along the corridor polyline rather than a straight chord across a bend", () => {
         const fixture = buildBendFixture();
 

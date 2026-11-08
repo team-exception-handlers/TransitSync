@@ -6,6 +6,17 @@ import {
 } from "../../src/lib/interpolateAlongCorridor";
 
 describe("interpolateAlongCorridor", () => {
+    it("follows an L-shaped corridor in reverse, including clamped endpoints", () => {
+        const path = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }];
+        const from = path[2];
+        const to = path[0];
+        expect(interpolateAlongCorridor(from, to, 0.25, path)).toEqual({ x: 10, y: 5 });
+        expect(interpolateAlongCorridor(from, to, 0.5, path)).toEqual({ x: 10, y: 0 });
+        expect(interpolateAlongCorridor(from, to, 0.75, path)).toEqual({ x: 5, y: 0 });
+        expect(interpolateAlongCorridor(from, to, -1, path)).toEqual(from);
+        expect(interpolateAlongCorridor(from, to, 2, path)).toEqual(to);
+    });
+
     it("interpolates correctly between two recorded points on a straight segment", () => {
         const path = [
             { x: 0, y: 0 },

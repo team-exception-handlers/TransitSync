@@ -94,6 +94,7 @@ export function projectOntoPolyline(
 /** Converts an arc-length offset back into a coordinate on the polyline. */
 function pointAtDistance(
     path: readonly Point[],
+    segmentLengths: readonly number[],
     targetDistance: number,
 ): Point {
     let cumulative = 0;
@@ -101,7 +102,7 @@ function pointAtDistance(
     for (let index = 0; index < path.length - 1; index += 1) {
         const a = path[index];
         const b = path[index + 1];
-        const segmentLength = distance(a, b);
+        const segmentLength = segmentLengths[index];
         const isLastSegment = index === path.length - 2;
 
         if (
@@ -151,11 +152,22 @@ export function interpolateAlongCorridor(
     fraction: number,
     path: readonly Point[] | undefined,
 ): Point {
-    const clampedFraction = Math.max(0, Math.min(1, fraction));
+    return prepareCorridorInterpolation(from, to, path)(fraction);
+}
 
-    const linear: Point = {
-        x: from.x + (to.x - from.x) * clampedFraction,
-        y: from.y + (to.y - from.y) * clampedFraction,
+/** Precompute fixed sample projections and lengths once, then evaluate playback fractions. */
+export function prepareCorridorInterpolation(
+    from: Point,
+    to: Point,
+    path: readonly Point[] | undefined,
+): (fraction: number) => Point {
+    const linear = (fraction: number): Point => {
+        const clampedFraction = Math.max(0, Math.min(1, fraction));
+
+        return {
+            x: from.x + (to.x - from.x) * clampedFraction,
+            y: from.y + (to.y - from.y) * clampedFraction,
+        };
     };
 
     if (!path || path.length < 2) {
@@ -169,18 +181,20 @@ export function interpolateAlongCorridor(
         !fromProjection ||
         !toProjection ||
         fromProjection.perpendicularDistance > ON_PATH_TOLERANCE_PX ||
-        toProjection.perpendicularDistance > ON_PATH_TOLERANCE_PX ||
-        toProjection.distanceAlongPath <
-            fromProjection.distanceAlongPath
+        toProjection.perpendicularDistance > ON_PATH_TOLERANCE_PX
     ) {
         return linear;
     }
 
-    const targetDistance =
-        fromProjection.distanceAlongPath +
-        (toProjection.distanceAlongPath -
-            fromProjection.distanceAlongPath) *
-            clampedFraction;
+    const segmentLengths = path.slice(1).map((point, index) => distance(path[index], point));
+    return (fraction) => {
+        const clampedFraction = Math.max(0, Math.min(1, fraction));
+        const targetDistance =
+            fromProjection.distanceAlongPath +
+            (toProjection.distanceAlongPath -
+                fromProjection.distanceAlongPath) *
+                clampedFraction;
 
-    return pointAtDistance(path, targetDistance);
+        return pointAtDistance(path, segmentLengths, targetDistance);
+    };
 }

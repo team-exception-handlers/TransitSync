@@ -10,7 +10,33 @@ import type {
     TrainMovementEvent,
 } from "../types/stationView";
 
-import { interpolateAlongCorridor } from "./interpolateAlongCorridor";
+import { prepareCorridorInterpolation } from "./interpolateAlongCorridor";
+
+type PreparedInterpolation = ReturnType<typeof prepareCorridorInterpolation>;
+
+// Loaded runs are treated as immutable. Weak keys let replaced runs be collected.
+const interpolationByRun = new WeakMap<StationViewData, Map<PassengerTrack, (PreparedInterpolation | undefined)[]>>();
+
+function getPreparedInterpolations(data: StationViewData) {
+    const cached = interpolationByRun.get(data);
+    if (cached) return cached;
+
+    const paths = getCorridorPathByConnection(data);
+    const prepared = new Map(data.passenger_tracks.map((track) => [
+        track,
+        track.samples.map((sample, index) => {
+            const next = track.samples[index + 1];
+            if (sample.phase !== "walking" || !next || next.time_s <= sample.time_s) {
+                return undefined;
+            }
+            return prepareCorridorInterpolation(
+                sample.position, next.position, paths.get(track.connection_id),
+            );
+        }),
+    ]));
+    interpolationByRun.set(data, prepared);
+    return prepared;
+}
 
 function clampTime(
     time_s: number,
@@ -29,7 +55,7 @@ function clampTime(
 function getPassengerPosition(
     track: PassengerTrack,
     time_s: number,
-    corridorPath: readonly Point[] | undefined,
+    interpolations: readonly (PreparedInterpolation | undefined)[],
 ): PassengerPosition | null {
     const samples = track.samples;
 
@@ -77,12 +103,7 @@ function getPassengerPosition(
             (time_s - current.time_s) /
             (next.time_s - current.time_s);
 
-        position = interpolateAlongCorridor(
-            current.position,
-            next.position,
-            fraction,
-            corridorPath,
-        );
+        position = interpolations[index]!(fraction);
     }
 
     return {
@@ -190,17 +211,14 @@ export function getNetworkSnapshot(
         data.duration_s,
     );
 
-    const corridorPathByConnection =
-        getCorridorPathByConnection(data);
+    const interpolations = getPreparedInterpolations(data);
 
     const passengers = data.passenger_tracks
         .map((track) =>
             getPassengerPosition(
                 track,
                 time_s,
-                corridorPathByConnection.get(
-                    track.connection_id,
-                ),
+                interpolations.get(track)!,
             ),
         )
         .filter(
