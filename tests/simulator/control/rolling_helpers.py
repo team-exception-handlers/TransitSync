@@ -54,5 +54,13 @@ def snapshot(visits=None, groups=None, *, time=100.0, load=10):
         for v in visits
     )
     return ObservationSnapshot(
-        time, "A", "S-P1", "P1", 100, trains, (), tuple(groups), tuple(visits)
+        time,
+        "A",
+        "S-P1",
+        "P1",
+        100,
+        trains,
+        (),
+        tuple(groups),
+        future_visits=tuple(visits),
     )

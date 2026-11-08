@@ -99,39 +99,99 @@ class PredictionErrorModel:
 
         Other fields (delays, waiting counts, walk times) are copied unchanged.
         """
-        trains = tuple(self._train(train, truth.time_s) for train in truth.trains)
+        # Keep draws local to this snapshot; later decisions get fresh errors.
+        arrival_z: dict[str, float] = {}
+        trains = tuple(
+            self._train(train, truth.time_s, arrival_z) for train in truth.trains
+        )
         transfers = tuple(self._transfer(group) for group in truth.incoming_transfers)
-        visits = tuple(
-            self._visit(visit, truth.time_s) for visit in truth.future_visits
+        if not truth.future_visits and not truth.headway_visits:
+            return replace(truth, trains=trains, incoming_transfers=transfers)
+        departures: dict[str, float] = {}
+        visits = self._visits(truth.future_visits, truth.time_s, arrival_z, departures)
+        headways = self._visits(
+            truth.headway_visits, truth.time_s, arrival_z, departures
+        )
+        # Use the same bounded forecast in both representations of a next stop.
+        next_arrivals = {}
+        for visit in (*visits, *headways):
+            if not visit.arrived:
+                next_arrivals.setdefault(
+                    (visit.train_id, visit.platform_id), visit.arrival_s
+                )
+        trains = tuple(
+            replace(
+                train,
+                predicted_arrival_s=next_arrivals.get(
+                    (train.train_id, train.next_platform_id), train.predicted_arrival_s
+                ),
+            )
+            for train in trains
         )
         return replace(
-            truth, trains=trains, incoming_transfers=transfers, future_visits=visits
+            truth,
+            trains=trains,
+            incoming_transfers=transfers,
+            future_visits=visits,
+            headway_visits=headways,
         )
 
-    def _visit(self, visit: FutureVisit, now_s: float) -> FutureVisit:
+    def _visits(
+        self,
+        source: tuple[FutureVisit, ...],
+        now_s: float,
+        arrival_z: dict[str, float],
+        departures: dict[str, float],
+    ) -> tuple[FutureVisit, ...]:
+        """Project correlated forecasts onto each train's chronological route."""
+        visits = []
+        for visit in source:
+            previous_s = departures.get(visit.train_id, now_s)
+            estimated = self._visit(visit, now_s, arrival_z, previous_s)
+            departures[visit.train_id] = estimated.departure_s
+            visits.append(estimated)
+        return tuple(visits)
+
+    def _visit(
+        self,
+        visit: FutureVisit,
+        now_s: float,
+        arrival_z: dict[str, float],
+        previous_s: float,
+    ) -> FutureVisit:
         """Forecast future visits through the same horizon error model (#61).
 
         Shift arrival and departure together to preserve dwell. An arrival
-        already observed is known; extra draws occur only for planning views.
+        already observed is known. One draw per train retains correlation as
+        sigma grows with the horizon. Bound forecasts by known timing and the
+        preceding departure: extreme negative draws can otherwise invert stops.
         """
-        if visit.arrival_s <= now_s:
+        if visit.arrived or visit.arrival_s <= now_s:
             return visit
+        if visit.train_id not in arrival_z:
+            arrival_z[visit.train_id] = float(self._stream.standard_normal())
         sigma = arrival_sigma_s(visit.arrival_s - now_s)
-        error = (
-            self.settings.arrival_kappa * sigma * float(self._stream.standard_normal())
-        )
+        error = self.settings.arrival_kappa * sigma * arrival_z[visit.train_id]
+        arrival = visit.arrival_s + error
+        if self.settings.arrival_kappa:
+            arrival = max(arrival, now_s, previous_s, visit.earliest_arrival_s)
+        shift = arrival - visit.arrival_s
         return replace(
             visit,
-            arrival_s=visit.arrival_s + error,
-            departure_s=visit.departure_s + error,
+            arrival_s=arrival,
+            departure_s=visit.departure_s + shift,
         )
 
-    def _train(self, train: TrainState, now_s: float) -> TrainState:
+    def _train(
+        self, train: TrainState, now_s: float, arrival_z: dict[str, float]
+    ) -> TrainState:
         load = self._count(train.onboard_load, self.settings.load_kappa)
         if train.predicted_arrival_s is None:
             return replace(train, onboard_load=load)
         sigma = arrival_sigma_s(train.predicted_arrival_s - now_s)
-        error_s = sigma * float(self._stream.standard_normal())
+        z = float(self._stream.standard_normal())
+        arrival_z[train.train_id] = z
+        error_s = sigma * z
         arrival_s = train.predicted_arrival_s + self.settings.arrival_kappa * error_s
         return replace(train, predicted_arrival_s=arrival_s, onboard_load=load)
 

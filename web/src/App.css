@@ -233,6 +233,15 @@ body {
   cursor: pointer;
 }
 .segmented-control button[aria-pressed="true"] { background: #16191d; color: white; }
+/* Selection must not rely on colour alone: bold text, a checkmark glyph and a
+   solid left border all change together with aria-pressed. */
+.connection-option { position: relative; font-weight: 500; border-left: 3px solid transparent; }
+.connection-option[aria-pressed="true"] {
+  font-weight: 700;
+  border-left: 3px solid #4b96dd;
+}
+.selected-mark { width: 12px; display: inline-flex; align-items: center; justify-content: center; font-weight: 700; }
+.connection-option[aria-pressed="false"] .selected-mark { visibility: hidden; }
 button:focus-visible { outline: 3px solid #4b96dd; outline-offset: 3px; }
 button:disabled { cursor: default; opacity: 0.45; }
 .segmented-control button:hover:not(:disabled):not([aria-pressed="true"]) { background: #ecede9; }
@@ -487,3 +496,30 @@ button:disabled { cursor: default; opacity: 0.45; }
   .playback-timeline { flex-basis: 100%; flex-wrap: wrap; gap: 12px; }
   .timeline-container { flex-basis: 100%; }
 }
+
+/* OPERATING RULES PANEL */
+
+.operating-rules-panel { padding: 16px; overflow: auto; }
+.operating-rules-values { display: flex; gap: 16px; margin: 12px 0; }
+.operating-rules-values dt { font-size: 11px; color: #5b6168; }
+.operating-rules-values dd { margin: 2px 0 0; font-family: "IBM Plex Mono", monospace; font-size: 16px; font-weight: 600; }
+.operating-rules-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.operating-rule { padding: 8px 10px; border-radius: 8px; border: 1px solid #d8dbd5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.operating-rule-name { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+.operating-rule-action { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; }
+.operating-rule--clamp .operating-rule-action { background: #fdf0d5; color: #8a5a00; }
+.operating-rule--refuse .operating-rule-action { background: #fbe1e1; color: #a21b1b; }
+.operating-rule small { flex-basis: 100%; color: #5b6168; }
+
+/* DECISION VIEW */
+
+.decision-view { padding: 16px; overflow: auto; }
+.decision-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.decision-row { padding: 8px 10px; border-radius: 8px; border: 1px solid #d8dbd5; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.decision-train { font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600; }
+.decision-status { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; text-transform: uppercase; }
+.decision-row--applied .decision-status { background: #e2f3e4; color: #1d7a2a; }
+.decision-row--clamped .decision-status { background: #fdf0d5; color: #8a5a00; }
+.decision-row--refused .decision-status { background: #fbe1e1; color: #a21b1b; }
+.decision-duration { font-family: "IBM Plex Mono", monospace; font-size: 12px; }
+.decision-reason { flex-basis: 100%; color: #5b6168; }
