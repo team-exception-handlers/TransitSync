@@ -49,7 +49,7 @@ AI-generated in `simulator/control/downstream.py`, `rolling_horizon.py`,
 the added forecast methods in `simulator/trains/train_component.py`,
 `tests/simulator/control/test_downstream.py`, `test_downstream_run.py`,
 `rolling_helpers.py`, `test_rolling_horizon.py`,
-`docs/person-5-coordinated-strategies.md`, `AI_USAGE.md`.
+`AI_USAGE.md`.
 Incremental additions to `simulator/control/interface.py` retain its existing
 Below 50% declaration. Golden arithmetic verifies a +300 local benefit rejected
 because it adds 5000 downstream passenger-seconds. Integration tests compare
@@ -74,7 +74,7 @@ Files: `simulator/control/planning.py`, `rolling_horizon.py`,
 `tests/simulator/control/rolling_helpers.py`, `test_rolling_horizon.py`,
 `test_rolling_horizon_run.py`, `test_planning_observation.py`,
 `tests/simulator/test_scenario.py` (updated registered-strategy choices),
-`docs/person-5-coordinated-strategies.md`, `AI_USAGE.md`.
+`AI_USAGE.md`.
 Verified against the actual issues, parent story, dependency PR and wiki formulas.
 Hand-calculated tests and real-run tests check full-window enumeration, first-only
 application, fresh replanning, unchanged simulator ownership and deterministic
