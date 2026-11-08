@@ -10,6 +10,10 @@ from collections.abc import Collection, Mapping, Sequence
 
 from simulator.control.break_even import BreakEvenWeights
 from simulator.control.hold_search import HoldSearch, HoldSearchSettings
+from simulator.control.interface import DecisionController
+from simulator.control.registry import StrategyRegistry
+from simulator.control.settings import ControlSettings
+from simulator.control.strategies import STRATEGIES
 from simulator.control.strategies.connection_protection import (
     ConnectionProtectionStrategy,
 )
@@ -38,6 +42,51 @@ def build_connection_protection(
     Raise ``ValueError`` for bad inputs, unknown platforms, missing or extra
     headways, or routes to one platform with different walking means or minimums.
     """
+    walking = _prepare_walking(routes, headways_s, platform_ids)
+    searches = {
+        platform: HoldSearch(cdf, weights, settings)
+        for platform, cdf in walking.items()
+    }
+    return ConnectionProtectionStrategy(searches, headways_s)
+
+
+def build_selected_connection_protection(
+    control: ControlSettings,
+    routes: Sequence[TransferRoute],
+    platform_ids: Collection[str],
+    registry: StrategyRegistry = STRATEGIES,
+) -> DecisionController:
+    """Build the saved connection strategy at the component-factory boundary.
+
+    Pass the same routes to passenger generation. Saved headways are seconds;
+    saved weights and hold settings are used unchanged. Return a fresh strategy.
+    Raise ``ValueError`` for another selection or invalid route/headway coverage.
+    """
+    if control.strategy != ConnectionProtectionStrategy.name:
+        raise ValueError("control.strategy: expected connection_protection")
+    walking = _prepare_walking(
+        routes,
+        control.connection_headways_s,
+        platform_ids,
+    )
+    # The registry gets calculation inputs, with no live passenger components.
+    return registry.build(
+        control.strategy,
+        walking_by_platform=walking,
+        weights=control.weights,
+        hold_search=control.hold_search,
+        connection_headways_s=control.connection_headways_s,
+    )
+
+
+def _prepare_walking(
+    routes: Sequence[TransferRoute],
+    headways_s: Mapping[str, float] | None,
+    platform_ids: Collection[str],
+) -> dict[str, ShiftedExponentialCdf]:
+    """Check routes and headway coverage, then prepare each walking model.
+    Walking values come only from the routes, never from control settings.
+    """
     _validate_topology_inputs(routes, platform_ids)
     if not isinstance(headways_s, Mapping):
         raise ValueError("headways_s must be a mapping")
@@ -54,16 +103,10 @@ def build_connection_protection(
             f"extra platforms {sorted(extra, key=repr)!r}"
         )
     # Set up every transfer destination, even when nobody is walking there yet.
-    searches = {
-        platform: HoldSearch(
-            ShiftedExponentialCdf(route.walking_mean_s, route.walking_min_s),
-            weights,
-            settings,
-        )
+    return {
+        platform: ShiftedExponentialCdf(route.walking_mean_s, route.walking_min_s)
         for platform, route in destinations.items()
     }
-    # The strategy checks the headway values and copies both maps.
-    return ConnectionProtectionStrategy(searches, headways_s)
 
 
 def _validate_topology_inputs(

@@ -4,14 +4,27 @@
 Passenger generation and control must use the same walking mean and minimum.
 Check the chosen hold against a separate calculation using the walking model.
 Errors about platforms or walk times must identify the affected routes.
+
+The saved-setting cases change one input at a time.
+A larger waiting weight can make a longer hold worthwhile.
+A smaller service headway can make every hold unprofitable.
+Different walk times can move the best hold away from the upper limit.
+The search grid controls which hold lengths can be chosen.
+Each result includes one audit record with the supplied settings.
+The full-run tests check how these proposals affect actual departures.
 """
 
+import json
 from dataclasses import replace
+from datetime import date
 
 import pytest
 
 from simulator.control.break_even import BreakEvenWeights
-from simulator.control.connection_configuration import build_connection_protection
+from simulator.control.connection_configuration import (
+    build_connection_protection,
+    build_selected_connection_protection,
+)
 from simulator.control.hold_search import HoldSearchSettings
 from simulator.control.interface import (
     HoldAction,
@@ -19,14 +32,44 @@ from simulator.control.interface import (
     ObservationSnapshot,
     TrainState,
 )
+from simulator.control.settings import ControlSettings
 from simulator.passengers import (
     CorridorQueue,
     DemandPeriod,
     DemandProfile,
     TransferRoute,
 )
+from simulator.scenario import DatasetMetadata, load_scenario_json
 
 PLATFORMS = ("rem", "green", "orange")
+
+
+def load_selected(headway, wait_weight, step, bound, *, onboard_weight=1):
+    """Load saved connection settings using local dataset metadata.
+
+    Custom weights and search limits must reach the actual strategy.
+    The route's walking values are supplied separately to passenger generation.
+    """
+    dataset = DatasetMetadata(
+        "test",
+        date(2026, 10, 5),
+        date(2026, 10, 5),
+        {"mcgill": 86400},
+        frozenset({"mcgill"}),
+    )
+    values = {
+        "dataset_id": "test",
+        "date": "2026-10-05",
+        "start_time": "07:00",
+        "interchanges": ["mcgill"],
+        "control": {
+            "strategy": "connection_protection",
+            "connection_headways_s": {"green": headway},
+            "weights": {"w_wait": wait_weight, "w_onboard": onboard_weight},
+            "hold_search": {"step_s": step, "max_hold_s": bound},
+        },
+    }
+    return load_scenario_json(json.dumps(values), {"test": dataset})
 
 
 def transfer_route(**changes):
@@ -66,13 +109,13 @@ def decision_snapshot():
     )
 
 
-def test_route_inputs_choose_an_interior_hold_and_keep_decision_history():
-    """Choose a 50 s hold when the search allows up to 90 s.
+def test_direct_builder_keeps_decision_history():
+    """Keep a hold followed by a no-hold decision in order.
 
     N(h) = 80 * exp(-30/120) * (1 - exp(-h/120)). With H=300 and L=100,
     J(40), J(50), J(60) are 1298.375, 1369.208, 1354.422 passenger-seconds.
     J has one peak, so 50 s wins among 10 s steps. It catches 21.23069312.
-    A later no-hold decision must be logged after the first decision.
+    Adding the second decision must leave the first record unchanged.
     """
     strategy = build_connection_protection(
         [transfer_route()],
@@ -85,29 +128,106 @@ def test_route_inputs_choose_an_interior_hold_and_keep_decision_history():
     reason = "hold 50 s: 21.2 caught, benefit 6369.2 > cost 5000.0 passenger-s"
     assert strategy.evaluate(observation) == (HoldAction("green-1", 50, reason),)
     [record] = strategy.decision_records()
-    assert record["inputs"] == {
-        "load": 100,
-        "headway_s": 300,
-        "transfers": [{"group_id": "group", "group_size": 80, "conn_window_s": 60}],
-    }
-    assert record["walking"] == {
-        "family": "ShiftedExponentialCdf",
-        "mean_s": 150,
-        "min_s": 30,
-    }
-    assert record["weights"] == {"w_wait": 1, "w_onboard": 1}
-    assert record["hold_search"] == {"step_s": 10, "max_hold_s": 90}
-    assert [c["hold_s"] for c in record["candidates"]] == list(range(0, 91, 10))
-    assert record["chosen_hold_s"] == 50
-    assert record["reason"] == reason
-    # Allow rounding because the hand-calculated count has eight decimal places.
-    assert record["candidates"][5]["n_caught"] == pytest.approx(21.23069312, abs=1e-8)
     assert (
         strategy.evaluate(replace(observation, time_s=170, incoming_transfers=())) == ()
     )
     first, second = strategy.decision_records()
     assert first == record
     assert (second["time_s"], second["chosen_hold_s"]) == (170, 0)
+
+
+@pytest.mark.parametrize(
+    "values, reason",
+    [
+        # The reference case wins below the 90 s bound.
+        (
+            (300, 1, 1, 120, 10, 90, 60, 6000),
+            "hold 60 s: 27.9 caught, benefit 8367.6 > cost 6000.0 passenger-s",
+        ),
+        # A larger waiting weight makes the 90 s hold win.
+        (
+            (300, 2, 1, 120, 10, 90, 90, 9000),
+            "hold 90 s: 36.2 caught, benefit 21740.8 > cost 9000.0 passenger-s",
+        ),
+        # With H=150 s, even the best hold costs more than it saves.
+        (
+            (150, 1, 1, 120, 10, 90, 0, 0),
+            "no hold: best was 10 s: 6.0 caught, "
+            "benefit 904.2 <= cost 1000.0 passenger-s",
+        ),
+        # A longer mean walk moves the best hold to 50 s.
+        (
+            (300, 1, 1, 150, 10, 90, 50, 5000),
+            "hold 50 s: 21.2 caught, benefit 6369.2 > cost 5000.0 passenger-s",
+        ),
+        # The shorter grid ends at 45 s, which becomes the winner.
+        (
+            (300, 1, 1, 120, 15, 45, 45, 4500),
+            "hold 45 s: 22.6 caught, benefit 6766.4 > cost 4500.0 passenger-s",
+        ),
+        # With onboard weight 1.5, J(10), J(20), J(30) are 308.422, 426.669,
+        # and 374.741 passenger-seconds. The 20 s hold costs 100*20*1.5=3000.
+        (
+            (300, 1, 1.5, 120, 10, 90, 20, 3000),
+            "hold 20 s: 11.4 caught, benefit 3426.7 > cost 3000.0 passenger-s",
+        ),
+    ],
+)
+def test_saved_configuration_drives_selected_hold(values, reason):
+    """Saved settings must change the chosen hold, not just parse successfully.
+
+    With M=80, s=60 s and L=100, calculate independently:
+    N(h)=80*exp(-30/(mean-30))*(1-exp(-h/(mean-30))).
+    J(h)=N(h)*headway*wait_weight-100*h*onboard_weight.
+    The table gives the best grid values and their hand-calculated costs.
+    Change one input at a time to catch lost headways, weights, routes or limits.
+    """
+    headway, wait_weight, onboard_weight, mean, step, bound, chosen, cost = values
+    scenario = load_selected(
+        headway, wait_weight, step, bound, onboard_weight=onboard_weight
+    )
+    routes = [transfer_route(walking_mean_s=mean)]
+    strategy = build_selected_connection_protection(scenario.control, routes, PLATFORMS)
+    expected = (HoldAction("green-1", chosen, reason),) if chosen else ()
+    assert strategy.evaluate(decision_snapshot()) == expected
+    [record] = strategy.decision_records()
+    assert record["chosen_hold_s"] == chosen
+    assert record["reason"] == reason
+    assert record["candidates"][chosen // step]["cost_ps"] == cost
+    assert record["inputs"] == {
+        "load": 100,
+        "headway_s": headway,
+        "transfers": [{"group_id": "group", "group_size": 80, "conn_window_s": 60}],
+    }
+    assert record["walking"] == {
+        "family": "ShiftedExponentialCdf",
+        "mean_s": mean,
+        "min_s": 30,
+    }
+    assert record["weights"] == {
+        "w_wait": wait_weight,
+        "w_onboard": onboard_weight,
+    }
+    assert record["hold_search"] == {"step_s": step, "max_hold_s": bound}
+    assert [c["hold_s"] for c in record["candidates"]] == list(
+        range(0, bound + 1, step)
+    )
+
+
+def test_selected_builder_rejects_another_strategy():
+    """Do not force connection protection when the saved selection is different."""
+    control = ControlSettings()
+    routes = [transfer_route()]
+    with pytest.raises(ValueError, match="control.strategy.*connection_protection"):
+        build_selected_connection_protection(control, routes, PLATFORMS)
+
+
+def test_selected_builder_rejects_incomplete_headways():
+    """Saved settings still need headways for the actual transfer destinations."""
+    scenario = load_selected(300, 1, 10, 90)
+    routes = [transfer_route(connecting_platform_id="orange")]
+    with pytest.raises(ValueError, match="headways_s.*missing.*orange.*extra.*green"):
+        build_selected_connection_protection(scenario.control, routes, PLATFORMS)
 
 
 @pytest.mark.parametrize(

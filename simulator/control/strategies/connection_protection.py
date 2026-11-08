@@ -9,6 +9,7 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any, ClassVar
 
+from simulator.control.connection_headways import validate_connection_headways
 from simulator.control.decision_audit import DecisionAuditLog
 from simulator.control.hold_search import HoldInputs, HoldSearch
 from simulator.control.interface import (
@@ -16,7 +17,6 @@ from simulator.control.interface import (
     HoldAction,
     ObservationSnapshot,
 )
-from simulator.control.validation import finite_number
 
 
 @dataclass(frozen=True)
@@ -40,26 +40,13 @@ class ConnectionProtectionStrategy(DecisionController):
         """Check and copy the settings, then make the copies read-only."""
         if not isinstance(self.searches, Mapping):
             raise ValueError("searches must be a mapping")
-        if not isinstance(self.headways_s, Mapping):
-            raise ValueError("headways_s must be a mapping")
         searches = dict(self.searches)
-        headways = dict(self.headways_s)
+        headways = validate_connection_headways(self.headways_s)
         if searches.keys() != headways.keys():
             raise ValueError("headways_s must cover the same platforms as searches")
         for platform_id, search in searches.items():
-            if not isinstance(platform_id, str) or not platform_id.strip():
-                raise ValueError("searches platform ID must be a non-empty string")
             if not isinstance(search, HoldSearch):
                 raise ValueError(f"searches[{platform_id!r}] must be a HoldSearch")
-            label = f"headways_s[{platform_id!r}]"
-            try:
-                seconds = finite_number(label, headways[platform_id])
-            except OverflowError as error:
-                raise ValueError(f"{label} must be finite seconds") from error
-            if seconds <= 0:
-                raise ValueError(f"{label} must be > 0 seconds")
-            headways[platform_id] = seconds
-        # Copy first so later changes to the original maps cannot affect this run.
         object.__setattr__(self, "searches", MappingProxyType(searches))
         object.__setattr__(self, "headways_s", MappingProxyType(headways))
 

@@ -22,18 +22,26 @@ so it accepts the winning proposal unchanged. The cap test lowers that
 limit to 20s. CLAMP reduces the requested 60 s hold to the allowed 20s.
 REFUSE rejects the request and applies no hold (0s).
 The decision file keeps the proposal; the event file records the applied hold.
+
+Load connection_protection from saved scenario JSON for every run.
+The factory reads its headways, weights and search limits.
+Walking values come from the same routes used to generate passengers.
+The manifest must keep the selected settings so results can be reproduced.
 """
 
 import json
 import math
-from types import SimpleNamespace
+from datetime import date
 
 import pytest
 
 from simulator.control.break_even import BreakEvenWeights
-from simulator.control.connection_configuration import build_connection_protection
+from simulator.control.connection_configuration import (
+    build_selected_connection_protection,
+)
 from simulator.control.decision import DecisionPipeline
 from simulator.control.observation_builder import ObservationBuilder
+from simulator.control.prediction_error import PredictionErrorModel
 from simulator.control.rules import OperatingRulesEnforcer
 from simulator.control.settings import OperatingRulesConfig
 from simulator.engine.random_streams import StreamManager
@@ -46,6 +54,7 @@ from simulator.passengers import (
     TransferRoute,
 )
 from simulator.passengers.platform_queue import PlatformQueue
+from simulator.scenario import DatasetMetadata, load_scenario_json
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
 
@@ -54,13 +63,12 @@ WALK_MIN_S = 30.0
 HEADWAY_S = 300.0
 
 
-def run(tmp_path, rate_per_min, rules=None):
-    """Run one REM-to-green transfer with seed 42; return events and decisions.
+def build_components(scenario, streams, rate_per_min):
+    """Build fresh components using the saved strategy and passenger demand.
     Use the real train, transfer, strategy and rule-checking components.
     Pass the same routes to passenger generation and the controller.
-    ``rate_per_min`` controls demand; ``rules`` can override the operating limit.
+    ``rate_per_min`` controls demand; saved rules set the operating limit.
     """
-    streams = StreamManager(42)
     route = TransferRoute(
         station_id="mcgill",
         feeder_platform_id="rem",
@@ -73,12 +81,16 @@ def run(tmp_path, rate_per_min, rules=None):
     )
     routes = [route]
     transfers = TransferComponent(routes, streams)
-    headways = {"green": HEADWAY_S}
-    strategy = build_connection_protection(routes, headways, ("rem", "green"))
+    strategy = build_selected_connection_protection(
+        scenario.control, routes, ("rem", "green")
+    )
     pipeline = DecisionPipeline(
         strategy,
         builder=ObservationBuilder([transfers]),
-        enforcer=OperatingRulesEnforcer(rules or OperatingRulesConfig()),
+        enforcer=OperatingRulesEnforcer(scenario.operating_rules),
+        error_model=PredictionErrorModel(
+            scenario.control.prediction_error, streams.get_stream("prediction_errors")
+        ),
     )
     trains = TrainComponent(
         [
@@ -92,11 +104,47 @@ def run(tmp_path, rate_per_min, rules=None):
         ],
         passenger_queue=PlatformQueue(("green",)),
         decision=pipeline,
+        control=scenario.control,
     )
+    return [transfers, trains]
+
+
+def run(tmp_path, rate_per_min, rules=None):
+    """Load saved scenario settings and return events and decisions from a run.
+
+    Use local dataset metadata and seed 42. All time values are seconds.
+    Let callers lower the operating cap without changing the saved search cap.
+    """
+    dataset = DatasetMetadata(
+        "test",
+        date(2026, 10, 5),
+        date(2026, 10, 5),
+        {"mcgill": 86400},
+        frozenset({"mcgill"}),
+    )
+    values = {
+        "dataset_id": "test",
+        "date": "2026-10-05",
+        "start_time": "07:00",
+        "duration_s": 600,
+        "master_seed": 42,
+        "interchanges": ["mcgill"],
+        "control": {
+            "strategy": "connection_protection",
+            "connection_headways_s": {"green": HEADWAY_S},
+            "prediction_error": {
+                "arrival_kappa": 0,
+                "transfer_kappa": 0,
+                "load_kappa": 0,
+            },
+        },
+        "operating_rules": (rules or OperatingRulesConfig()).to_dict(),
+    }
+    scenario = load_scenario_json(json.dumps(values), {"test": dataset})
     result = run_scenario(
-        SimpleNamespace(master_seed=42, duration_s=600),
-        lambda seed: streams,
-        lambda scenario, built: [transfers, trains],
+        scenario,
+        StreamManager,
+        lambda settings, built: build_components(settings, built, rate_per_min),
         tmp_path,
     )
     events = [json.loads(line) for line in result.events_path.read_text().splitlines()]
@@ -140,6 +188,18 @@ def test_high_transfer_volume_issues_a_hold(tmp_path):
     assert green["generated_delay_s"] == 60
     assert green["inherited_delay_s"] == 0
     assert green["disruption_delay_s"] == 0
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    assert manifest["control"] == {
+        "strategy": "connection_protection",
+        "connection_headways_s": {"green": 300},
+        "hold_search": {"step_s": 5, "max_hold_s": 60},
+        "weights": {"w_wait": 2, "w_onboard": 1},
+        "prediction_error": {
+            "arrival_kappa": 0,
+            "transfer_kappa": 0,
+            "load_kappa": 0,
+        },
+    }
 
 
 def test_low_transfer_volume_declines_at_the_same_decision_point(tmp_path):
