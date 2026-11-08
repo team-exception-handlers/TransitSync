@@ -17,7 +17,7 @@ class ServiceIrregularity:
     of departed trains.
 
     The sccore measures deviation from the target. Current scenario settings provide
-    fixed targets for headway regulation and timetable gaps for other strategies. 
+    fixed targets for headway regulation and timetable gaps for other strategies.
     Identical departures can therefore produce different scores. For cross-strategy
     comparisons, evaluate all runs against the same reference and window size.
     """
