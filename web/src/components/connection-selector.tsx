@@ -23,7 +23,7 @@ export function ConnectionSelector() {
         const isSelected = selected === connection.id;
         return (
           <button key={connection.id} type="button"
-            className={`connection-option${isSelected ? " is-selected" : ""}`}
+            className="connection-option"
             aria-pressed={isSelected}
             onClick={() => select(connection.id)}>
             {/* A checkmark glyph plus bold text mark selection; colour is not the only cue. */}
