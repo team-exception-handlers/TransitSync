@@ -4,8 +4,6 @@ import type {
     InterchangeMapping,
     LineId,
     MockInterchangeData,
-    PassengerMovement,   
-    PassengerTrack,
     Platform,
     StationViewData,
 } from "../types/stationView";
@@ -115,11 +113,6 @@ export function buildStationViewData(
         }
     }
 
-    const normalizedPassengerTracks = (mock.passenger_tracks || []).map((track) => ({
-        ...track,
-        samples: [...track.samples].sort((a, b) => a.time_s - b.time_s),
-    }));
-
     const data: StationViewData = {
         schema_version: mock.schema_version,
 
@@ -136,37 +129,11 @@ export function buildStationViewData(
         corridors: mock.corridors,
         connections: mock.connections,
 
-        passenger_tracks: normalizedPassengerTracks,
+        passenger_tracks: mock.passenger_tracks,
         train_events: mock.train_events,
 
-        passengers: derivePassengerMovements(normalizedPassengerTracks)
+        passengers: [],
     };
 
     return parseStationViewData(data);
-}
-
-// Helper function to derive passenger movements
-function derivePassengerMovements(tracks: PassengerTrack[]): PassengerMovement[] {
-    return tracks.map((track) => {
-        const sortedSamples = [...track.samples].sort((a, b) => a.time_s - b.time_s);
-        const startTimeS = sortedSamples[0]?.time_s ?? 0;
-        const endTimeS = sortedSamples[sortedSamples.length - 1]?.time_s ?? startTimeS;
-        
-        // Map path to time and position for animation rendering
-        const path = sortedSamples.map((s) => ({
-            time_s: s.time_s,
-            position: s.position,
-        }));
-        const finalPhase = sortedSamples[sortedSamples.length - 1]?.phase ?? "waiting";
-
-        return {
-            passenger_id: track.passenger_id,
-            group_id: track.group_id,
-            connection_id: track.connection_id,
-            startTimeS,
-            endTimeS,
-            path,
-            status: finalPhase,
-        };
-    });
 }

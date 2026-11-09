@@ -113,4 +113,10 @@ describe("parseStationViewData", () => {
             parseStationViewData(invalidData)
         ).toThrow("Station/stop mismatch");
     });
+
+    it("derives and populates passenger movements upon validation", () => {
+        const result = parseStationViewData(stationViewData);
+        expect(result.passengers).toBeDefined();
+        expect(Array.isArray(result.passengers)).toBe(true);
+    });
 });

@@ -139,9 +139,9 @@ export interface PassengerMovement {
     passenger_id: string;
     group_id: string;
     connection_id: string;
-    startTimeS: number;
-    endTimeS: number;
-    path: PassengerPathPoint[];
+    start_time_s: number;  
+    end_time_s: number;    
+    path: { time_s: number; position: Point }[];
     status: PassengerPhase;
 }
 

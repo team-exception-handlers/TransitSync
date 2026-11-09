@@ -148,7 +148,7 @@ describe("buildStationViewData", () => {
         ).toThrow("Duplicate platform ID");
     });
 
-   it('correctly derives passenger movement start time, end time, path, and status', () => {
+it('correctly derives passenger movement start time, end time, path, and status', () => {
         const mockData = structuredClone(mock);
         mockData.passenger_tracks = [
             {
@@ -167,8 +167,8 @@ describe("buildStationViewData", () => {
 
         expect(result.passengers).toHaveLength(1);
         expect(result.passengers[0].passenger_id).toBe('p1');
-        expect(result.passengers[0].startTimeS).toBe(100);
-        expect(result.passengers[0].endTimeS).toBe(200);
+        expect(result.passengers[0].start_time_s).toBe(100);
+        expect(result.passengers[0].end_time_s).toBe(200);
         expect(result.passengers[0].path).toEqual([
             { time_s: 100, position: { x: 0, y: 0 } },
             { time_s: 150, position: { x: 5, y: 5 } },
@@ -177,7 +177,7 @@ describe("buildStationViewData", () => {
         expect(result.passengers[0].status).toBe('boarded');
     });
 
-    it('handles unsorted sample tracks by correctly deriving sorted start and end bounds', () => {
+    it('rejects unsorted sample tracks with an invalid passenger samples error', () => {
         const mockData = structuredClone(mock);
         mockData.passenger_tracks = [
             {
@@ -191,15 +191,8 @@ describe("buildStationViewData", () => {
             },
         ];
 
-        const result = buildStationViewData(mapping, mockData);
-
-        expect(result.passengers).toHaveLength(1);
-        expect(result.passengers[0].startTimeS).toBe(100);
-        expect(result.passengers[0].endTimeS).toBe(300);
-        expect(result.passengers[0].path).toEqual([
-            { time_s: 100, position: { x: 0, y: 0 } },
-            { time_s: 300, position: { x: 10, y: 10 } },
-        ]);
-        expect(result.passengers[0].status).toBe('missed');
+        expect(() =>
+            buildStationViewData(mapping, mockData)
+        ).toThrow("Invalid passenger samples");
     });
 });
