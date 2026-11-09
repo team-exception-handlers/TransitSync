@@ -183,6 +183,25 @@ def test_audit_is_isolated_between_strategy_instances():
     assert second.decision_records() == ()
 
 
+def test_equal_configuration_does_not_make_runs_equal():
+    """Controllers belong to separate runs even before their histories diverge."""
+    first = ConnectionProtectionStrategy(*configuration())
+    second = ConnectionProtectionStrategy(*configuration())
+    assert first != second
+    first.evaluate(snapshot())
+    assert first != second
+
+
+def test_strategy_dictionary_keys_survive_audit_updates():
+    """Identity hashing keeps per-run entries distinct as decision logs grow."""
+    first = ConnectionProtectionStrategy(*configuration())
+    second = ConnectionProtectionStrategy(*configuration())
+    runs = {first: "first run", second: "second run"}
+    first.evaluate(snapshot())
+    assert runs[first] == "first run"
+    assert runs[second] == "second run"
+
+
 @pytest.mark.parametrize(
     ("searches", "headways", "message"),
     [

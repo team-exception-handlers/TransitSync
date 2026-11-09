@@ -39,6 +39,14 @@ api/passenger_tracks.py, api/time_utils.py, simulator/passengers/transfer_compon
 tests/api/test_simulation_run.py, tests/api/test_main.py,
 tests/simulator/passengers/test_transfer_walk_history.py, README.md, AI_USAGE.md.
 
+PR #201 review follow-up: Codex (OpenAI), 50% or more AI-generated.
+Use identity equality and hashing for each connection-protection controller,
+whose audit history belongs to one run. Two regression tests first reproduced
+equal independent controllers and failed dictionary-key construction, then
+verified distinct instances and stable lookups after audit updates.
+Files: simulator/control/strategies/connection_protection.py and
+tests/simulator/control/test_connection_protection.py.
+
 Coordinated-strategy stack 4/4 â€” Strategy selection and audit integration (#61, #62): Codex (OpenAI), 50% or more AI-generated in new/changed code except incremental interface.py edits, which retain its existing Below 50% header. Register the strategy, parse and save its settings, apply only the current decision, and collect detached audit records through the existing pipeline. Real-run tests cover re-planning, rule clamping and reproducible output.
 Files: simulator/control/strategies/rolling_horizon.py, strategies/__init__.py, registry.py and settings.py; tests/simulator/control/test_rolling_horizon_strategy.py, test_coordinated_run.py, test_rolling_horizon_run.py and tests/simulator/test_scenario.py; AI_USAGE.md.
 PR #199 review fix (Codex, 50% or more AI-generated): derive the integration

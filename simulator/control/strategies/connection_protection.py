@@ -19,13 +19,14 @@ from simulator.control.interface import (
 )
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class ConnectionProtectionStrategy(DecisionController):
     """Choose a hold using the settings for the train's platform.
 
     ``searches`` gives the walking model, cost weights and hold lengths to try.
     ``headways_s`` estimates how long passengers wait if they miss this train.
     Times are in seconds. Each strategy keeps its own settings and decision log.
+    Instances compare by identity because each belongs to a separate run.
     Raise ``ValueError`` for invalid settings or different platforms in the maps.
     """
 
