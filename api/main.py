@@ -1,4 +1,5 @@
-"""FastAPI application with health and station-layout endpoints."""
+# AI contribution: 50% or more AI-generated
+"""FastAPI application with health, station-layout and connection endpoints."""
 
 from typing import Literal
 
@@ -6,6 +7,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from api.connection_data import ConnectionDataResponse, index_connections
 from api.settings import Settings
 from api.station_layout import StationLayoutResponse, load_station_layouts
 
@@ -26,6 +28,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application = FastAPI(title="TransitSync API")
     # Parse static map data once so requests never observe a partial layout.
     station_layouts = load_station_layouts()
+    # A connection ID repeated across interchanges stops startup here, so a
+    # request can never return the wrong station.
+    connections = index_connections(station_layouts)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=app_settings.cors_origins,
@@ -52,6 +57,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 detail=f"Unknown interchange: {interchange_id}",
             )
         return layout
+
+    @application.get(
+        "/connections/{connection_id}",
+        response_model=ConnectionDataResponse,
+        tags=["connections"],
+    )
+    def connection_data(connection_id: str) -> ConnectionDataResponse:
+        """Return one connection with its interchange's stations and platforms."""
+        data = connections.get(connection_id)
+        if data is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown connection: {connection_id}",
+            )
+        return data
 
     return application
 
