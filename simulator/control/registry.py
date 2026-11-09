@@ -66,6 +66,7 @@ class StrategyRegistry:
         hold_search: HoldSearchSettings | None = None,
         weights: BreakEvenWeights | None = None,
         connection_headways_s: Mapping[str, float] | None = None,
+        irregularity_threshold: float | None = None,
     ) -> DecisionController:
         """Build a strategy with its headways or route-specific walking CDFs.
 
@@ -75,6 +76,7 @@ class StrategyRegistry:
         rolling horizon use the supplied walking models and objective weights.
         """
         # Delay this import to avoid a cycle with built-in registration.
+        from simulator.control.strategies.adaptive import AdaptiveStrategy
         from simulator.control.strategies.connection_protection import (
             ConnectionProtectionStrategy,
         )
@@ -87,6 +89,28 @@ class StrategyRegistry:
             raise UnknownStrategyError(
                 f"unknown strategy {name!r}; available: {', '.join(self.names())}"
             )
+        if issubclass(strategy_class, AdaptiveStrategy):
+            if target_headways_s is None or irregularity_threshold is None:
+                raise ValueError(
+                    "target_headways_s and irregularity_threshold required for adaptive"
+                )
+            if walking_by_platform is None or connection_headways_s is None:
+                raise ValueError(
+                    "walking_by_platform and connection_headways_s required "
+                    "for adaptive"
+                )
+            connection = ConnectionProtectionStrategy(
+                _connection_searches(walking_by_platform, weights, hold_search),
+                connection_headways_s,
+            )
+            return strategy_class(
+                connection,
+                HeadwayRegulationStrategy(target_headways_s),
+                irregularity_threshold,
+            )
+
+        if irregularity_threshold is not None:
+            raise ValueError("irregularity_threshold only valid for adaptive")
         if issubclass(strategy_class, ConnectionProtectionStrategy):
             if target_headways_s is not None:
                 raise ValueError("target_headways_s only valid for headway_regulation")
@@ -95,15 +119,10 @@ class StrategyRegistry:
                     "walking_by_platform and connection_headways_s required "
                     "for connection_protection"
                 )
-            searches = {
-                platform: HoldSearch(
-                    cdf,
-                    weights or BreakEvenWeights(),
-                    hold_search or HoldSearchSettings(),
-                )
-                for platform, cdf in walking_by_platform.items()
-            }
-            return strategy_class(searches, connection_headways_s)
+            return strategy_class(
+                _connection_searches(walking_by_platform, weights, hold_search),
+                connection_headways_s,
+            )
         if connection_headways_s is not None:
             raise ValueError(
                 "connection_headways_s only valid for connection_protection"
@@ -129,3 +148,19 @@ class StrategyRegistry:
                 )
             )
         return strategy_class()
+
+
+def _connection_searches(
+    walking_by_platform: Mapping[str, WalkingCdf],
+    weights: BreakEvenWeights | None,
+    hold_search: HoldSearchSettings | None,
+) -> dict[str, HoldSearch]:
+    """Build the same connection hold searches for both strategy selections."""
+    return {
+        platform: HoldSearch(
+            cdf,
+            weights or BreakEvenWeights(),
+            hold_search or HoldSearchSettings(),
+        )
+        for platform, cdf in walking_by_platform.items()
+    }

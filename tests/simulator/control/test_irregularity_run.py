@@ -1,5 +1,4 @@
 # AI contribution: 50% or more AI-generated
-"""Exercise Issue #63 through real departures, snapshots and control decisions."""
 
 import json
 from unittest.mock import Mock
@@ -7,8 +6,11 @@ from unittest.mock import Mock
 import pytest
 
 from simulator.control.decision import DecisionPipeline
+from simulator.control.headway_configuration import validate_headway_configuration
+from simulator.control.rules import OperatingRulesEnforcer
 from simulator.control.strategies import STRATEGIES
 from simulator.control.strategies.no_control import NoControlStrategy
+from simulator.control.walking_cdf import ShiftedExponentialCdf
 from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import run_scenario
 from simulator.trains.train import ScheduledStop, Train
@@ -142,3 +144,68 @@ def test_shared_factory_applies_irregularity_window(tmp_path, monkeypatch):
     manifest = json.loads(result.manifest_path.read_text())
     assert manifest["control"]["irregularity_window_size"] == 1
     assert observed == [None, None, 0.0, 0.5, 0.0, 0.0, 0.0]
+
+
+def test_adaptive_run_switches_recovers_and_writes_reproducible_audit(tmp_path):
+    config = scenario_input("adaptive")
+    config["control"].update(
+        irregularity_threshold=0.25,
+        irregularity_window_size=1,
+        target_headways_s={"P": 60},
+        connection_headways_s={"P": 60},
+    )
+    scenario = load(config)
+
+    def build_components(settings, _streams):
+        trains = disrupted_trains()
+        control = settings.control
+        engine_gap = settings.operating_rules.min_safe_gap
+        validate_headway_configuration(control, trains, {"P"}, engine_gap)
+        strategy = STRATEGIES.build(
+            control.strategy,
+            target_headways_s=control.target_headways_s,
+            connection_headways_s=control.connection_headways_s,
+            walking_by_platform={"P": ShiftedExponentialCdf(120, 30)},
+            irregularity_threshold=control.irregularity_threshold,
+            hold_search=control.hold_search,
+            weights=control.weights,
+        )
+        return [
+            TrainComponent(
+                trains,
+                minimum_gap_s=engine_gap,
+                control=control,
+                decision=DecisionPipeline(
+                    strategy,
+                    enforcer=OperatingRulesEnforcer(settings.operating_rules),
+                ),
+            )
+        ]
+
+    first = run_scenario(scenario, StreamManager, build_components, tmp_path / "first")
+    second = run_scenario(
+        scenario, StreamManager, build_components, tmp_path / "second"
+    )
+    records = [
+        json.loads(line) for line in first.decisions_path.read_text().splitlines()
+    ]
+    switches = [
+        record for record in records if record.get("record_type") == "mode_switch"
+    ]
+    # The 90-second gap triggers regulation at 310. The next 60-second gap
+    # restores connection protection at 370, before that decision is audited.
+    assert [
+        (r["time_s"], r["from_mode"], r["to_mode"], r["service_irregularity"])
+        for r in switches
+    ] == [
+        (310, "connection_protection", "headway_regulation", 0.5),
+        (370, "headway_regulation", "connection_protection", 0.0),
+    ]
+    at_recovery = [record for record in records if record["time_s"] == 370]
+    assert [record.get("record_type") for record in at_recovery] == [
+        "mode_switch",
+        None,
+    ]
+    assert "chosen_hold_s" in at_recovery[1]
+    assert all(record["irregularity_threshold"] == 0.25 for record in switches)
+    assert first.decisions_path.read_bytes() == second.decisions_path.read_bytes()
