@@ -7,9 +7,18 @@ from types import SimpleNamespace
 import pytest
 
 from simulator.control.decision import DecisionPipeline
+from simulator.control.decision_audit import (
+    DECISION_SCHEMA_VERSION,
+    KIND_ESTIMATES,
+    KIND_ROLLING_HORIZON,
+)
 from simulator.control.hold_search import HoldSearchSettings
 from simulator.control.observation_builder import ObservationBuilder
 from simulator.control.planning import RollingHorizonSettings
+from simulator.control.prediction_error import (
+    PredictionErrorModel,
+    PredictionErrorSettings,
+)
 from simulator.control.rolling_horizon import RollingHorizonPlanner
 from simulator.control.rules import OperatingRulesEnforcer
 from simulator.control.settings import OperatingRulesConfig
@@ -53,9 +62,13 @@ def make_transfers(streams, *, walking_mean_s=120, walking_min_s=30):
     return TransferComponent([route], streams), walking_by_platform
 
 
-def run(output, cap=300, *, route_options=None):
+def run(output, cap=300, *, route_options=None, with_errors=False):
     """Run fresh transfers and trains with the selected operating-rule cap."""
     streams = StreamManager(42)
+    error_model = None
+    if with_errors:
+        stream = streams.get_stream("prediction_errors")
+        error_model = PredictionErrorModel(PredictionErrorSettings(), stream)
     transfers, walking_by_platform = make_transfers(streams, **(route_options or {}))
     policy = RollingHorizonStrategy(
         RollingHorizonPlanner(
@@ -68,6 +81,7 @@ def run(output, cap=300, *, route_options=None):
         policy,
         ObservationBuilder([transfers]),
         OperatingRulesEnforcer(OperatingRulesConfig(max_hold_time=cap)),
+        error_model,
     )
     trains = TrainComponent(
         [
@@ -127,6 +141,22 @@ def test_operating_rule_clamp_is_applied_by_pipeline(tmp_path):
         if e["event_type"] == "train_departure" and e["train_id"] == "A"
     )
     assert departure["time_s"] == 115
+
+
+def test_every_record_has_a_kind_when_estimates_are_mixed_in(tmp_path):
+    # #204 review: a reader filtering on kind must not drop planner records
+    _, _, records = run(tmp_path, with_errors=True)
+    kinds = [(r["schema_version"], r["kind"], r["train_id"]) for r in records]
+    assert kinds == [
+        (DECISION_SCHEMA_VERSION, KIND_ROLLING_HORIZON, "feeder"),
+        (DECISION_SCHEMA_VERSION, KIND_ROLLING_HORIZON, "A"),
+        (DECISION_SCHEMA_VERSION, KIND_ROLLING_HORIZON, "A"),
+        (DECISION_SCHEMA_VERSION, KIND_ROLLING_HORIZON, "next"),
+        (DECISION_SCHEMA_VERSION, KIND_ESTIMATES, "feeder"),
+        (DECISION_SCHEMA_VERSION, KIND_ESTIMATES, "A"),
+        (DECISION_SCHEMA_VERSION, KIND_ESTIMATES, "A"),
+        (DECISION_SCHEMA_VERSION, KIND_ESTIMATES, "next"),
+    ]
 
 
 def test_seeded_event_and_decision_files_are_byte_reproducible(tmp_path):

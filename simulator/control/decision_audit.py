@@ -10,14 +10,14 @@ recalculated by hand. One record per decision holds:
 - the chosen hold and the reason
 - every candidate with N(h), benefit, cost and J(h), and why it lost
 
-A run with a prediction error model also gets an ``estimates`` record per
-decision, seen next to true values (US-2.1, #39); ``kind`` tells them apart.
+With a prediction error model, each decision also gets an ``estimates``
+record of seen and true trains and transfers (US-2.1, #39), not the future
+visits a rolling-horizon plan sees. ``kind`` tells records apart. Lines are
+not in time order, so pair on ``time_s``, ``train_id`` and ``platform_id``.
 
-Records go to ``decisions.jsonl`` next to the event log, one compact JSON
-line each. They are not events: a record holds a list of candidates, while
-event fields are flat, and keeping them apart leaves the event schema
-unchanged. Key order is fixed and no wall-clock time or path is written, so
-the file is byte-reproducible like the rest of the run output.
+Records go to ``decisions.jsonl``, one compact JSON line each, kept apart
+from events because a record holds a list of candidates. Key order is fixed
+and no wall-clock time or path is written, so the file is byte-reproducible.
 
 Design pattern: Collecting Parameter. A strategy gets a ``DecisionAuditLog``
 and adds to it; the runner collects from every ``DecisionAuditSource`` once
@@ -41,6 +41,7 @@ DECISIONS_FILE = "decisions.jsonl"
 DECISION_SCHEMA_VERSION = 2
 KIND_HOLD_SEARCH = "hold_search"
 KIND_ESTIMATES = "estimates"
+KIND_ROLLING_HORIZON = "rolling_horizon"
 # The values the prediction error model changes (#39)
 TRAIN_ESTIMATES = ("predicted_arrival_s", "onboard_load")
 TRANSFER_ESTIMATES = ("passenger_count", "group_size")
@@ -146,16 +147,24 @@ def _side_by_side(
     id_field: str,
     fields: tuple[str, ...],
 ) -> list[dict[str, Any]]:
-    """One entry per train or group, paired by position (the error model keeps
-    the order): its ID, then seen and true per field, ``None`` if unknown."""
-    return [
-        {id_field: getattr(true_item, id_field)}
-        | {
-            name: {"seen": getattr(seen_item, name), "true": getattr(true_item, name)}
-            for name in fields
-        }
-        for true_item, seen_item in zip(actual, seen, strict=True)
-    ]
+    """One entry per item: its ID, then seen and true per field or ``None``.
+
+    Raises:
+        ValueError: the lists differ in length or order.
+    """
+    entries = []
+    for true_item, seen_item in zip(actual, seen, strict=True):
+        item_id, seen_id = getattr(true_item, id_field), getattr(seen_item, id_field)
+        if seen_id != item_id:
+            raise ValueError(f"estimates out of order: {item_id!r} vs {seen_id!r}")
+        entry = {id_field: item_id}
+        for name in fields:
+            entry[name] = {
+                "seen": getattr(seen_item, name),
+                "true": getattr(true_item, name),
+            }
+        entries.append(entry)
+    return entries
 
 
 def candidate_outcome(candidate: BreakEvenResult, decision: BreakEvenResult) -> str:

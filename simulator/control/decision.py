@@ -113,7 +113,8 @@ class DecisionPipeline:
         """Return the strategy's audit records (#44), then any estimates (#39).
 
         The ``Hold`` event already records what the rules applied, so the
-        audit only needs the strategy's reasoning and what it saw."""
+        audit only needs the strategy's reasoning and what it saw.
+        """
         own: tuple[dict[str, Any], ...] = ()
         if isinstance(self.strategy, DecisionAuditSource):
             own = tuple(self.strategy.decision_records())

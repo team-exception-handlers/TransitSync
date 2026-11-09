@@ -7,6 +7,7 @@ no next stop, and group g1 has 12 of its 15 passengers still walking.
 """
 
 import json
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -120,6 +121,14 @@ def test_record_puts_each_estimate_next_to_its_true_value():
             "group_size": {"seen": 18, "true": 15},
         }
     ]
+
+
+def test_record_rejects_estimates_in_another_order():
+    # A swap would put B's seen load next to A's true load without an error
+    truth = snapshot()
+    seen = replace(truth, trains=truth.trains[::-1])
+    with pytest.raises(ValueError, match="estimates out of order: 'A' vs 'B'"):
+        estimates_record(truth, seen)
 
 
 def test_run_writes_one_estimates_record_per_decision(tmp_path):
