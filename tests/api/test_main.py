@@ -262,13 +262,17 @@ def test_cors_does_not_allow_unconfigured_origins(
     assert "access-control-allow-origin" not in response.headers
 
 
-def test_cors_allows_get_preflight_with_content_type_header(
+@pytest.mark.parametrize("method", ["GET", "POST"])
+def test_cors_allows_api_preflight_with_content_type_header(
     monkeypatch: pytest.MonkeyPatch,
+    method: str,
 ) -> None:
-    """Allow the current GET API and its required content-type header.
+    """Allow API methods and the JSON request header used by simulation runs.
 
     Browsers preflight this header, so check the method and header allowlists.
-    This protects the API's narrow cross-origin request contract.
+    Other methods remain blocked by the narrow cross-origin request contract.
+    GET and JSON POST are the only cross-origin API methods.
+    JSON POST is needed for the simulation settings body.
     """
     monkeypatch.setenv("TRANSITSYNC_CORS_ORIGINS", "http://localhost:5173")
     client = TestClient(create_app())
@@ -277,21 +281,21 @@ def test_cors_allows_get_preflight_with_content_type_header(
         "/health",
         headers={
             "Origin": "http://localhost:5173",
-            "Access-Control-Request-Method": "GET",
+            "Access-Control-Request-Method": method,
             "Access-Control-Request-Headers": "Content-Type",
         },
     )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-methods"] == "GET"
+    assert response.headers["access-control-allow-methods"] == "GET, POST"
     assert "content-type" in response.headers["access-control-allow-headers"].lower()
 
 
-@pytest.mark.parametrize("method", ["POST", "PUT", "DELETE"])
+@pytest.mark.parametrize("method", ["PUT", "DELETE"])
 def test_cors_rejects_unconfigured_preflight_methods(
     monkeypatch: pytest.MonkeyPatch, method: str
 ) -> None:
-    """Reject preflights for methods not currently exposed by the API.
+    """Reject preflights for methods that remain outside the API allowlist.
 
     A failed preflight prevents browsers from issuing that cross-origin method.
     These failures must remain explicit rather than allowing all HTTP methods.
