@@ -79,7 +79,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         Invalid settings return 422; missing connections return 404.
         """
         try:
-            return SimulationRunResponse.model_validate(simulation_runs.run(settings))
+            return simulation_runs.run(settings)
         except UnknownConnectionError as error:
             raise HTTPException(status_code=404, detail=str(error)) from error
         except (OSError, RunError, ValueError) as error:

@@ -13,19 +13,21 @@ import statistics
 import tempfile
 from collections import OrderedDict, defaultdict
 from collections.abc import Mapping, Sequence
+from concurrent.futures import Future
 from copy import deepcopy
 from dataclasses import replace
 from datetime import date
-from functools import lru_cache
 from pathlib import Path
 from threading import RLock
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from api.network_data import DATASET_ID, dataset_metadata, load_reference_network
 from api.station_layout import Connection, StationLayoutResponse
 from api.station_layout import Platform as LayoutPlatform
-from api.station_view import build_station_view_response
+from api.station_view import SimulationRunResponse, build_station_view_response
+from api.time_utils import scenario_start_clock_s
 from simulator.control.decision import DecisionPipeline
 from simulator.control.prediction_error import (
     PredictionErrorModel,
@@ -36,7 +38,7 @@ from simulator.control.strategies import STRATEGIES
 from simulator.control.walking_cdf import ShiftedExponentialCdf
 from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import Component, run_scenario
-from simulator.network_config import NetworkConfig, load_network
+from simulator.network_config import NetworkConfig
 from simulator.passengers import (
     CorridorQueue,
     DemandPeriod,
@@ -45,9 +47,7 @@ from simulator.passengers import (
     TransferRoute,
 )
 from simulator.passengers.platform_queue import PlatformQueue
-from simulator.scenario import DatasetMetadata, Scenario, load_scenario_file
-from simulator.timetable import Platform as TimetablePlatform
-from simulator.timetable import ScheduledTrip
+from simulator.scenario import Scenario, load_scenario_file
 from simulator.trains.disruption import DelayInjection
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
@@ -55,7 +55,6 @@ from simulator.trains.train_component import TrainComponent
 log = logging.getLogger(__name__)
 
 CONFIG_ROOT = Path(__file__).resolve().parents[1] / "config"
-NETWORK_PATH = CONFIG_ROOT / "reference_network" / "network.json"
 SCENARIO_PATHS = {
     interchange_id: CONFIG_ROOT / "scenarios" / f"{interchange_id}.json"
     for interchange_id in (
@@ -64,7 +63,6 @@ SCENARIO_PATHS = {
         "edouard_montpetit",
     )
 }
-DATASET_ID = "reference-network"
 TRAIN_CAPACITY = 800
 WALKING_MEAN_S = 120.0
 WALKING_MIN_S = 30.0
@@ -77,7 +75,8 @@ class SimulationRunRequest(BaseModel):
     """Validated options for one fixed-duration demo run.
 
     ``max_hold_time`` is in seconds, in five-second increments up to 300.
-    ``error_magnitude`` is the prediction-error kappa shared by all estimates.
+    ``error_magnitude`` is the prediction-error kappa shared by all estimates,
+    bounded from 0 to 3.
     Passenger-flow labels map to fixed passenger-per-minute demand rates.
     Unknown fields are rejected so misspelled controls cannot be ignored.
     """
@@ -96,7 +95,9 @@ class SimulationRunRequest(BaseModel):
         allow_inf_nan=False,
         strict=True,
     )
-    error_magnitude: float = Field(default=1.0, ge=0, allow_inf_nan=False, strict=True)
+    error_magnitude: float = Field(
+        default=1.0, ge=0, le=3, allow_inf_nan=False, strict=True
+    )
     passenger_flow: Literal["Low", "Normal", "High"] = "Normal"
     disruption_enabled: bool = Field(default=False, strict=True)
 
@@ -133,16 +134,17 @@ class SimulationRunService:
         The supplied layouts are validated at app startup and reused for lookups.
         """
         self._station_layouts = station_layouts
-        self._network = _load_reference_network()
-        self._dataset = _dataset_metadata(self._network)
+        self._network = load_reference_network()
+        self._dataset = dataset_metadata(self._network)
         self._cache: OrderedDict[str, dict[str, object]] = OrderedDict()
+        self._in_flight: dict[str, Future[SimulationRunResponse]] = {}
         self._cache_lock = RLock()
 
-    def run(self, request: SimulationRunRequest) -> dict[str, object]:
+    def run(self, request: SimulationRunRequest) -> SimulationRunResponse:
         """Return a cached station-view response or run the selected scenario.
 
-        The full request forms the cache key; returned dictionaries are detached.
-        A lock prevents concurrent requests from duplicating the same simulation.
+        Identical requests share an in-flight future; distinct settings can run
+        concurrently. Cached payloads are reconstructed into typed responses.
         Least-recently-used entries are evicted after the configured cache limit.
         """
         cache_key = request.model_dump_json()
@@ -151,15 +153,33 @@ class SimulationRunService:
             if cached is not None:
                 self._cache.move_to_end(cache_key)
                 log.debug("simulation cache hit: %s", request.connection_id)
-                return deepcopy(cached)
+                return SimulationRunResponse.model_validate(deepcopy(cached))
+            future = self._in_flight.get(cache_key)
+            is_owner = future is None
+            if future is None:
+                future = Future()
+                self._in_flight[cache_key] = future
 
+        if not is_owner:
+            return deepcopy(future.result())
+
+        try:
             response = self._run_uncached(request)
-            self._cache[cache_key] = deepcopy(response)
+        except BaseException as error:
+            with self._cache_lock:
+                self._in_flight.pop(cache_key, None)
+            future.set_exception(error)
+            raise
+
+        with self._cache_lock:
+            self._cache[cache_key] = response.model_dump(mode="json")
             if len(self._cache) > MAX_CACHED_RUNS:
                 self._cache.popitem(last=False)
-            return response
+            self._in_flight.pop(cache_key, None)
+        future.set_result(response)
+        return response
 
-    def _run_uncached(self, request: SimulationRunRequest) -> dict[str, object]:
+    def _run_uncached(self, request: SimulationRunRequest) -> SimulationRunResponse:
         """Run and serialize one validated settings combination.
 
         The event log is consumed before its temporary directory is removed.
@@ -252,53 +272,6 @@ class SimulationRunService:
             operating_rules=replace(
                 scenario.operating_rules, max_hold_time=request.max_hold_time
             ),
-        )
-
-
-def _dataset_metadata(network: NetworkConfig) -> DatasetMetadata:
-    """Describe the dates and interchange coverage in the committed network.
-
-    Service-day horizons are derived from scheduled departures, in seconds;
-    coverage dates and interchange IDs come from the same canonical schedule.
-    """
-    platforms = {platform.platform_id: platform for platform in network.platforms}
-    service_ends = {platform.interchange_id: 0 for platform in network.platforms}
-    for trips in network.schedules.values():
-        for trip in trips:
-            _record_trip_service_end(trip, platforms, service_ends)
-    service_dates = tuple(sorted(network.schedules))
-    return DatasetMetadata(
-        dataset_id=DATASET_ID,
-        coverage_start=min(service_dates),
-        coverage_end=max(service_dates),
-        service_day_end_s_by_interchange=service_ends,
-        interchange_ids=frozenset(service_ends),
-        service_dates=service_dates,
-    )
-
-
-@lru_cache(maxsize=1)
-def _load_reference_network() -> NetworkConfig:
-    """Load immutable committed schedules once per API process.
-
-    The one-entry cache avoids reparsing the same reference feed for each app.
-    """
-    return load_network(NETWORK_PATH)
-
-
-def _record_trip_service_end(
-    trip: ScheduledTrip,
-    platforms: Mapping[str, TimetablePlatform],
-    service_ends: dict[str, int],
-) -> None:
-    """Update each interchange horizon from one trip's scheduled stops.
-
-    Timetable timestamps are absolute seconds after midnight.
-    """
-    for visit in trip.visits:
-        interchange_id = platforms[visit.platform_id].interchange_id
-        service_ends[interchange_id] = max(
-            service_ends[interchange_id], visit.departure_s
         )
 
 
@@ -452,7 +425,7 @@ def _build_trains(network: NetworkConfig, scenario: Scenario) -> list[Train]:
     A stop remains active when its departure is at or after the scenario start.
     Scheduled timestamps are shifted to seconds relative to that start clock.
     """
-    start_clock_s = _clock_seconds(scenario)
+    start_clock_s = scenario_start_clock_s(scenario)
     trains = []
     for trip in network.trips_for_date(scenario.service_date):
         active_visits = [
@@ -478,15 +451,6 @@ def _build_trains(network: NetworkConfig, scenario: Scenario) -> list[Train]:
             )
         )
     return trains
-
-
-def _clock_seconds(scenario: Scenario) -> float:
-    """Return local scenario start time as seconds after midnight.
-
-    Returned clock seconds are distinct from run-relative event timestamps.
-    """
-    start = scenario.start_time
-    return float(start.hour * 3600 + start.minute * 60 + start.second)
 
 
 def _read_json_lines(path: Path) -> list[dict[str, object]]:

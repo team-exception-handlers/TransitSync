@@ -16,6 +16,7 @@ from api.station_layout import (
     Point,
     StationLayoutResponse,
 )
+from api.time_utils import scenario_start_clock_s
 from simulator.control.settings import OperatingRulesConfig
 from simulator.engine.events import EventType
 from simulator.passengers.transfer_component import TransferComponent
@@ -23,7 +24,14 @@ from simulator.scenario import Scenario
 
 RULE_ORDER = ("max_hold_exceeded", "headway_violation", "one_hop_violation")
 RULE_DESCRIPTIONS = {
-    "one_hop_violation": ("Target train for the connection is already system-delayed"),
+    "max_hold_exceeded": (
+        "Requested hold exceeds maximum hold time of {max_hold_time:g}s"
+    ),
+    "headway_violation": (
+        "Hold would leave less than minimum safe gap of "
+        "{min_safe_gap:g}s between trains"
+    ),
+    "one_hop_violation": "Target train for the connection is already system-delayed",
 }
 
 
@@ -135,10 +143,10 @@ def build_station_view_response(
     scenario: Scenario,
     event_records: Sequence[dict[str, object]],
     transfers: TransferComponent,
-) -> dict[str, object]:
+) -> SimulationRunResponse:
     """Adapt static layout and simulator events to the station-view response.
 
-    The returned JSON-ready mapping is validated against the response model.
+    The validated response combines playback records with static map geometry.
     Passenger positions are interpolated along the selected connection corridor.
     """
     platform_by_id = {platform.platform_id: platform for platform in layout.platforms}
@@ -146,7 +154,7 @@ def build_station_view_response(
     response = SimulationRunResponse(
         **layout.model_dump(),
         schema_version=1,
-        start_clock_s=_clock_seconds(scenario),
+        start_clock_s=scenario_start_clock_s(scenario),
         duration_s=float(scenario.duration_s),
         passenger_tracks=build_passenger_tracks(
             event_records,
@@ -161,16 +169,7 @@ def build_station_view_response(
         rules=_rule_records(scenario.operating_rules),
         operating_rules=scenario.operating_rules.to_dict(),
     )
-    return response.model_dump(mode="json")
-
-
-def _clock_seconds(scenario: Scenario) -> float:
-    """Return local scenario start time as seconds after midnight.
-
-    Returned clock seconds are distinct from run-relative event timestamps.
-    """
-    start = scenario.start_time
-    return float(start.hour * 3600 + start.minute * 60 + start.second)
+    return response
 
 
 def _train_events(
@@ -223,24 +222,17 @@ def _decision_records(
 
 
 def _rule_records(rules: OperatingRulesConfig) -> list[dict[str, str]]:
-    """Create the ordered, human-readable rule list used by the station view.
-
-    Stable ordering makes the response deterministic across identical runs.
-    """
+    """Create ordered, human-readable rule descriptions from configured limits."""
     records = []
     for name in RULE_ORDER:
-        action = rules.rule_action_map[name]
-        if name == "max_hold_exceeded":
-            description = (
-                "Requested hold exceeds the maximum hold time of "
-                f"{rules.max_hold_time:g}s"
-            )
-        elif name == "headway_violation":
-            description = (
-                "Hold would leave less than the minimum safe gap of "
-                f"{rules.min_safe_gap:g}s between trains"
-            )
-        else:
-            description = RULE_DESCRIPTIONS[name]
-        records.append({"name": name, "action": action, "description": description})
+        records.append(
+            {
+                "name": name,
+                "action": rules.rule_action_map[name],
+                "description": RULE_DESCRIPTIONS[name].format(
+                    max_hold_time=rules.max_hold_time,
+                    min_safe_gap=rules.min_safe_gap,
+                ),
+            }
+        )
     return records

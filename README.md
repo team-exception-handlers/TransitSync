@@ -142,12 +142,12 @@ The simulation-run endpoint accepts a connection ID and run settings:
 
 `strategy` must be a registered simulator strategy (`no_control`,
 `schedule_based`, `headway_regulation`, or `rolling_horizon`). The maximum hold
-is in seconds, from 5 to 300 in five-second increments. `error_magnitude` is a
-finite, non-negative prediction-error multiplier applied to arrival, transfer,
-and load estimates. Passenger flow levels represent 6, 12, and 24 passengers
-per minute for Low, Normal, and High. When enabled, the disruption delays the
-selected REM feeder by 60 seconds at the first arrival at or after 120 seconds
-of simulation time.
+is in seconds, from 5 to 300 in five-second increments. `error_magnitude`
+defaults to `1.0` and is a finite multiplier from 0 to 3 applied to arrival,
+transfer, and load prediction errors. Passenger flow levels represent 6, 12,
+and 24 passengers per minute for Low, Normal, and High. When enabled, the
+disruption delays the selected REM feeder by 60 seconds at the first arrival
+at or after 120 seconds of simulation time.
 
 Each connection selects its committed one-hour demo scenario. The response
 combines the station layout with `train_events`, map-positioned

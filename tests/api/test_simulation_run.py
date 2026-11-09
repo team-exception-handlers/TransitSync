@@ -4,12 +4,21 @@ Tests use the committed schedules and station layouts; no external service is
 required to execute a complete one-hour simulation.
 """
 
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from threading import Barrier, Lock
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 
+import api.simulation_run as simulation_run
 from api.main import create_app
 from api.simulation_run import SimulationRunRequest, SimulationRunService
 from api.station_layout import load_station_layouts
+from api.station_view import SimulationRunResponse
+from simulator.control.strategies import STRATEGIES
+from simulator.engine.random_streams import StreamManager
 
 RUN_SETTINGS = {
     "connection_id": "mcgill-rem-green",
@@ -86,26 +95,81 @@ def test_run_service_caches_detached_responses(
     run_uncached = service._run_uncached
     run_count = 0
 
-    def count_runs(
-        settings: SimulationRunRequest,
-    ) -> dict[str, object]:
+    def count_runs(settings: SimulationRunRequest) -> SimulationRunResponse:
         nonlocal run_count
         run_count += 1
         return run_uncached(settings)
 
     monkeypatch.setattr(service, "_run_uncached", count_runs)
     first = service.run(request)
-    first_tracks = first["passenger_tracks"]
-    assert isinstance(first_tracks, list)
-    first_tracks.clear()
+    first.passenger_tracks.clear()
 
     second = service.run(request)
 
-    second_tracks = second["passenger_tracks"]
-    assert isinstance(second_tracks, list)
     assert run_count == 1
-    assert second_tracks
-    assert second_tracks is not first_tracks
+    assert second.passenger_tracks
+    assert second.passenger_tracks is not first.passenger_tracks
+
+
+def test_run_service_shares_duplicate_work_without_serializing_other_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Deduplicate matching requests while allowing different runs in parallel.
+
+    Two distinct settings must reach the simulator together, while a duplicate
+    request waits on its own in-flight result rather than starting another run.
+    """
+    layout = load_station_layouts()["mcgill"]
+    response = SimulationRunResponse(
+        **layout.model_dump(),
+        schema_version=1,
+        start_clock_s=0,
+        duration_s=3600,
+        passenger_tracks=[],
+        train_events=[],
+        decisions=[],
+        rules=[],
+        operating_rules={
+            "max_hold_time": 300,
+            "min_safe_gap": 60,
+            "rule_action_map": {
+                "max_hold_exceeded": "CLAMP",
+                "headway_violation": "REFUSE",
+                "one_hop_violation": "REFUSE",
+            },
+        },
+    )
+    service = SimulationRunService({"mcgill": layout})
+    barrier = Barrier(2)
+    count_lock = Lock()
+    run_count = 0
+
+    def run_uncached(_: SimulationRunRequest) -> SimulationRunResponse:
+        nonlocal run_count
+        with count_lock:
+            run_count += 1
+        barrier.wait(timeout=10)
+        return response.model_copy(deep=True)
+
+    monkeypatch.setattr(service, "_run_uncached", run_uncached)
+    no_control = SimulationRunRequest.model_validate(
+        {**RUN_SETTINGS, "strategy": "no_control"}
+    )
+    schedule_based = SimulationRunRequest.model_validate(
+        {**RUN_SETTINGS, "strategy": "schedule_based"}
+    )
+
+    with ThreadPoolExecutor(max_workers=3) as executor:
+        no_control_runs = [
+            executor.submit(service.run, no_control),
+            executor.submit(service.run, no_control),
+        ]
+        schedule_run = executor.submit(service.run, schedule_based)
+        results = [run.result(timeout=15) for run in no_control_runs]
+        results.append(schedule_run.result(timeout=15))
+
+    assert run_count == 2
+    assert all(result.interchange.id == "mcgill" for result in results)
 
 
 def test_run_settings_change_demand_and_apply_selected_feeder_disruption() -> None:
@@ -141,6 +205,33 @@ def test_run_settings_change_demand_and_apply_selected_feeder_disruption() -> No
     ).json()
 
     assert len(high_flow["passenger_tracks"]) > len(low_flow["passenger_tracks"])
+    queued_samples = [
+        sample
+        for track in high_flow["passenger_tracks"]
+        for sample in track["samples"]
+        if sample["phase"] == "queued"
+    ]
+    assert queued_samples
+    corridor_entry = high_flow["corridors"][0]["path"][0]
+    assert all(sample["position"] == corridor_entry for sample in queued_samples)
+    feeder_position = next(
+        platform["position"]
+        for platform in high_flow["platforms"]
+        if platform["platform_id"] == "rem_mcgill_0"
+    )
+    walking_samples = [
+        sample
+        for track in high_flow["passenger_tracks"]
+        for sample in track["samples"]
+        if sample["phase"] == "walking"
+    ]
+    assert all(
+        sample["position"]["y"] == feeder_position["y"] for sample in walking_samples
+    )
+    assert all(
+        feeder_position["x"] <= sample["position"]["x"] <= corridor_entry["x"]
+        for sample in walking_samples
+    )
     uninterrupted_times = {
         (event["train_id"], event["platform_id"], event["event_type"]): event["time_s"]
         for event in uninterrupted["train_events"]
@@ -164,6 +255,7 @@ def test_run_settings_change_demand_and_apply_selected_feeder_disruption() -> No
         {"max_hold_time": 301},
         {"max_hold_time": 121},
         {"error_magnitude": -1},
+        {"error_magnitude": 1000},
     ],
 )
 def test_run_endpoint_rejects_invalid_settings(
@@ -181,6 +273,45 @@ def test_run_endpoint_rejects_invalid_settings(
     response = client.post("/simulation/run", json={**RUN_SETTINGS, **invalid_settings})
 
     assert response.status_code == 422
+
+
+@pytest.mark.parametrize("strategy", STRATEGIES.names())
+def test_every_registered_strategy_builds_through_the_api(
+    monkeypatch: pytest.MonkeyPatch,
+    strategy: str,
+) -> None:
+    """Keep each registry strategy compatible with endpoint settings and wiring.
+
+    The real run is stubbed after component construction to avoid expensive
+    planner work; the normal endpoint integration test covers full simulation.
+    """
+
+    def fake_run_scenario(
+        scenario,
+        _stream_factory,
+        component_factory,
+        output_dir: Path,
+    ) -> SimpleNamespace:
+        component_factory(scenario, StreamManager(42))
+        events_path = output_dir / "events.jsonl"
+        events_path.write_text("", encoding="utf-8")
+        return SimpleNamespace(events_path=events_path)
+
+    monkeypatch.setattr(simulation_run, "run_scenario", fake_run_scenario)
+    client = TestClient(create_app())
+
+    response = client.post(
+        "/simulation/run",
+        json={
+            **RUN_SETTINGS,
+            "strategy": strategy,
+            "passenger_flow": "Low",
+            "error_magnitude": 0,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["interchange"]["id"] == "mcgill"
 
 
 def test_run_endpoint_returns_not_found_for_unknown_connection() -> None:

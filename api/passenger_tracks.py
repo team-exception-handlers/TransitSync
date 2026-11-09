@@ -35,12 +35,18 @@ def build_passenger_tracks(
         passenger_id = record.get("passenger_id")
         if isinstance(passenger_id, str):
             events_by_passenger[passenger_id].append(record)
-    corridor = next(item for item in corridors if item.id == connection.corridor_id)
+    corridor = next(
+        (item for item in corridors if item.id == connection.corridor_id), None
+    )
+    if corridor is None:
+        raise ValueError(f"Unknown corridor: {connection.corridor_id}")
     path_points = _movement_path(
         platforms[connection.from_platform_id],
         platforms[connection.to_platform_id],
         corridor,
     )
+    corridor_entry = corridor.path[0]
+    walk_path = path_points[: path_points.index(corridor_entry) + 1]
     tracks = []
     for passenger_id, walk in sorted(transfers.walk_records().items()):
         passenger_events = events_by_passenger[passenger_id]
@@ -48,10 +54,10 @@ def build_passenger_tracks(
         if alighting is None:
             continue
         samples = _walk_samples(
-            path_points, float(alighting["time_s"]), walk.corridor_arrival_s, duration_s
+            walk_path, float(alighting["time_s"]), walk.corridor_arrival_s, duration_s
         )
         _append_corridor_samples(
-            samples, passenger_id, transfers, path_points[-1], duration_s
+            samples, passenger_id, transfers, corridor_entry, duration_s
         )
         _append_arrival_and_terminal_samples(
             samples, passenger_events, path_points[-1], platforms, duration_s
@@ -108,9 +114,9 @@ def _walk_samples(
 ) -> list[dict[str, object]]:
     """Sample the exact walking interval, clipping unfinished walks at run end.
 
-    The interpolation uses map-path distance as a fraction of the walk time.
+    The interpolation runs from feeder platform to the corridor entrance.
     Degenerate paths stay at their origin, and out-of-run endpoints are clipped.
-    Intermediate samples follow the geometry's ordered corridor points.
+    The simulator does not model a separate in-corridor travel duration.
     """
     if end_s <= start_s:
         return [
@@ -161,23 +167,22 @@ def _append_corridor_samples(
     samples: list[dict[str, object]],
     passenger_id: str,
     transfers: TransferComponent,
-    corridor_end: Point,
+    corridor_entry: Point,
     duration_s: float,
 ) -> None:
     """Record corridor queueing or passage at the simulation horizon.
 
-    Queue delay is distinct from walking time and keeps passengers at the corridor.
+    Queue delay holds the passenger at the corridor entry until passage.
     A passenger whose passage extends past the run remains queued at its end.
     """
     passage = transfers.passages.get(passenger_id)
     if passage is None:
         return
     if passage.arrival_s <= duration_s:
-        # Arrival marks the corridor end; queue delay holds this position.
         phase = "queued" if passage.queue_delay_s > 0 else "walking"
-        _append_sample(samples, passage.arrival_s, corridor_end, phase, duration_s)
+        _append_sample(samples, passage.arrival_s, corridor_entry, phase, duration_s)
     if passage.passage_s > duration_s and passage.arrival_s <= duration_s:
-        _append_sample(samples, duration_s, corridor_end, "queued", duration_s)
+        _append_sample(samples, duration_s, corridor_entry, "queued", duration_s)
 
 
 def _append_arrival_and_terminal_samples(
