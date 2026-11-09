@@ -223,7 +223,7 @@ def test_registry_rejects_ignored_targets(strategy):
 
 def test_unknown_name_still_lists_available_strategies():
     """An unknown name lists the available strategies."""
-    with pytest.raises(UnknownStrategyError, match="available: headway_regulation"):
+    with pytest.raises(UnknownStrategyError, match="available: .*headway_regulation"):
         STRATEGIES.build("headway")
 
 

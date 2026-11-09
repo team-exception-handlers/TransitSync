@@ -7,6 +7,9 @@ which modules happen to have been imported.
 """
 
 from simulator.control.registry import StrategyRegistry
+from simulator.control.strategies.connection_protection import (
+    ConnectionProtectionStrategy,
+)
 from simulator.control.strategies.headway_regulation import HeadwayRegulationStrategy
 from simulator.control.strategies.no_control import NoControlStrategy
 from simulator.control.strategies.rolling_horizon import RollingHorizonStrategy
@@ -20,5 +23,6 @@ STRATEGIES = StrategyRegistry(
         ScheduleBasedHoldingStrategy,
         HeadwayRegulationStrategy,
         RollingHorizonStrategy,
+        ConnectionProtectionStrategy,
     )
 )

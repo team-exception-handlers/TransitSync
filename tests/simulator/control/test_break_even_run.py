@@ -1,8 +1,7 @@
 # AI contribution: 50% or more AI-generated
-"""Break-even holds inside full runs (US-2.2 blackbox test, #32).
+"""Break-even holds inside full runs (US-2.2 blackbox test, #32, #51).
 
-The real connection protection strategy is #51, so a test-only strategy
-calls the search and the audit log the same way it will. Setup at McGill:
+Run the production strategy through the simulator and its hold rules at McGill:
 
 - REM feeder ``rem-1`` arrives at 100 s; its transfer group walks to green
   with F(t) = 1 - exp(-(t - 30) / 90), so nobody walks in under 30 s
@@ -14,19 +13,37 @@ The first second of holding catches about M / 90 passengers, worth
 600 * M / 90 passenger-seconds against a cost of 400, so it only pays when
 M > 60. Demand of 120 per minute over the 100 s before the feeder gives
 M of about 200 (hold); 12 per minute gives about 20 (no hold).
+
+Only green receives transfers in this setup. REM departures should have no
+hold search or decision record. Record green's holds and declined holds alike.
+
+The search tries holds up to 60s. The normal operating limit is 300s,
+so it accepts the winning proposal unchanged. The cap test lowers that
+limit to 20s. CLAMP reduces the requested 60 s hold to the allowed 20s.
+REFUSE rejects the request and applies no hold (0s).
+The decision file keeps the proposal; the event file records the applied hold.
+
+Load connection_protection from saved scenario JSON for every run.
+The factory reads its headways, weights and search limits.
+Walking values come from the same routes used to generate passengers.
+The manifest must keep the selected settings so results can be reproduced.
 """
 
 import json
 import math
-from types import SimpleNamespace
+from datetime import date
+
+import pytest
 
 from simulator.control.break_even import BreakEvenWeights
+from simulator.control.connection_configuration import (
+    build_selected_connection_protection,
+)
 from simulator.control.decision import DecisionPipeline
-from simulator.control.decision_audit import DecisionAuditLog
-from simulator.control.hold_search import HoldInputs, HoldSearch
-from simulator.control.interface import DecisionController, HoldAction
 from simulator.control.observation_builder import ObservationBuilder
-from simulator.control.walking_cdf import ShiftedExponentialCdf
+from simulator.control.prediction_error import PredictionErrorModel
+from simulator.control.rules import OperatingRulesEnforcer
+from simulator.control.settings import OperatingRulesConfig
 from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import run_scenario
 from simulator.passengers import (
@@ -37,6 +54,7 @@ from simulator.passengers import (
     TransferRoute,
 )
 from simulator.passengers.platform_queue import PlatformQueue
+from simulator.scenario import DatasetMetadata, load_scenario_json
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
 
@@ -45,28 +63,12 @@ WALK_MIN_S = 30.0
 HEADWAY_S = 300.0
 
 
-class BreakEvenProbe(DecisionController):
-    """Test stand-in for #51: search, record, then hold if worthwhile."""
-
-    name = "break_even_probe"
-
-    def __init__(self):
-        self.search = HoldSearch(ShiftedExponentialCdf(WALK_MEAN_S, WALK_MIN_S))
-        self.log = DecisionAuditLog()
-
-    def evaluate(self, observation):
-        result = self.search.run(HoldInputs.from_observation(observation, HEADWAY_S))
-        self.log.record(result)
-        if result.chosen is None:
-            return ()
-        return (HoldAction(observation.train_id, result.hold_s, result.reason),)
-
-    def decision_records(self):
-        return self.log.decision_records()
-
-
-def run(tmp_path, rate_per_min):
-    streams = StreamManager(42)
+def build_components(scenario, streams, rate_per_min):
+    """Build fresh components using the saved strategy and passenger demand.
+    Use the real train, transfer, strategy and rule-checking components.
+    Pass the same routes to passenger generation and the controller.
+    ``rate_per_min`` controls demand; saved rules set the operating limit.
+    """
     route = TransferRoute(
         station_id="mcgill",
         feeder_platform_id="rem",
@@ -77,9 +79,18 @@ def run(tmp_path, rate_per_min):
         walking_mean_s=WALK_MEAN_S,
         walking_min_s=WALK_MIN_S,
     )
-    transfers = TransferComponent([route], streams)
+    routes = [route]
+    transfers = TransferComponent(routes, streams)
+    strategy = build_selected_connection_protection(
+        scenario.control, routes, ("rem", "green")
+    )
     pipeline = DecisionPipeline(
-        BreakEvenProbe(), builder=ObservationBuilder([transfers])
+        strategy,
+        builder=ObservationBuilder([transfers]),
+        enforcer=OperatingRulesEnforcer(scenario.operating_rules),
+        error_model=PredictionErrorModel(
+            scenario.control.prediction_error, streams.get_stream("prediction_errors")
+        ),
     )
     trains = TrainComponent(
         [
@@ -93,11 +104,47 @@ def run(tmp_path, rate_per_min):
         ],
         passenger_queue=PlatformQueue(("green",)),
         decision=pipeline,
+        control=scenario.control,
     )
+    return [transfers, trains]
+
+
+def run(tmp_path, rate_per_min, rules=None):
+    """Load saved scenario settings and return events and decisions from a run.
+
+    Use local dataset metadata and seed 42. All time values are seconds.
+    Let callers lower the operating cap without changing the saved search cap.
+    """
+    dataset = DatasetMetadata(
+        "test",
+        date(2026, 10, 5),
+        date(2026, 10, 5),
+        {"mcgill": 86400},
+        frozenset({"mcgill"}),
+    )
+    values = {
+        "dataset_id": "test",
+        "date": "2026-10-05",
+        "start_time": "07:00",
+        "duration_s": 600,
+        "master_seed": 42,
+        "interchanges": ["mcgill"],
+        "control": {
+            "strategy": "connection_protection",
+            "connection_headways_s": {"green": HEADWAY_S},
+            "prediction_error": {
+                "arrival_kappa": 0,
+                "transfer_kappa": 0,
+                "load_kappa": 0,
+            },
+        },
+        "operating_rules": (rules or OperatingRulesConfig()).to_dict(),
+    }
+    scenario = load_scenario_json(json.dumps(values), {"test": dataset})
     result = run_scenario(
-        SimpleNamespace(master_seed=42, duration_s=600),
-        lambda seed: streams,
-        lambda scenario, built: [transfers, trains],
+        scenario,
+        StreamManager,
+        lambda settings, built: build_components(settings, built, rate_per_min),
         tmp_path,
     )
     events = [json.loads(line) for line in result.events_path.read_text().splitlines()]
@@ -108,39 +155,82 @@ def run(tmp_path, rate_per_min):
 
 
 def green_decision(decisions):
+    """Read green's one decision record; fail if it is missing or duplicated."""
     [record] = [r for r in decisions if r["train_id"] == "green-1"]
     return record
 
 
 def holds(events):
+    """Read hold events, including requests that the rules refused."""
     return [e for e in events if e["event_type"] == "hold"]
 
 
 def test_high_transfer_volume_issues_a_hold(tmp_path):
+    """The strategy asks for 60s, so green leaves at 130 + 60 = 190s."""
     events, decisions = run(tmp_path, rate_per_min=120)
     record = green_decision(decisions)
-    assert record["chosen_hold_s"] > 0
+    assert record["chosen_hold_s"] == 60.0
     [hold] = holds(events)
     assert hold["train_id"] == "green-1"
     assert hold["requested_s"] == record["chosen_hold_s"]
     assert hold["reason"] == record["reason"]
+    assert (hold["time_s"], hold["requested_s"], hold["applied_s"]) == (130, 60, 60)
+    ends = [e for e in events if e["event_type"] == "hold_end"]
+    assert [(e["train_id"], e["time_s"]) for e in ends] == [("green-1", 190)]
+    departures = [e for e in events if e["event_type"] == "train_departure"]
+    assert [(e["train_id"], e["time_s"], e["hold_s"]) for e in departures] == [
+        ("rem-1", 130, 0),
+        ("green-1", 190, 60),
+    ]
+    # There are no disruptions here: green's 60s of lateness comes from holding.
+    green = departures[1]
+    assert green["time_s"] - green["scheduled_s"] == 60
+    assert green["generated_delay_s"] == 60
+    assert green["inherited_delay_s"] == 0
+    assert green["disruption_delay_s"] == 0
+    manifest = json.loads((tmp_path / "manifest.json").read_text())
+    assert manifest["control"] == {
+        "strategy": "connection_protection",
+        "connection_headways_s": {"green": 300},
+        "hold_search": {"step_s": 5, "max_hold_s": 60},
+        "weights": {"w_wait": 2, "w_onboard": 1},
+        "prediction_error": {
+            "arrival_kappa": 0,
+            "transfer_kappa": 0,
+            "load_kappa": 0,
+        },
+    }
 
 
 def test_low_transfer_volume_declines_at_the_same_decision_point(tmp_path):
+    """With little transfer demand, both trains leave at 130s without holds."""
     events, decisions = run(tmp_path, rate_per_min=12)
     record = green_decision(decisions)
     assert record["chosen_hold_s"] == 0.0
     assert record["reason"].startswith("no hold: best was")
     assert holds(events) == []
+    departures = [e for e in events if e["event_type"] == "train_departure"]
+    assert sorted((e["train_id"], e["time_s"], e["hold_s"]) for e in departures) == [
+        ("green-1", 130, 0),
+        ("rem-1", 130, 0),
+    ]
 
 
-def test_every_decision_point_is_recorded_including_declines(tmp_path):
-    _, decisions = run(tmp_path, rate_per_min=120)
-    # rem-1 also decides at 130 s; nobody walks to its platform
-    assert sorted(r["train_id"] for r in decisions) == ["green-1", "rem-1"]
+@pytest.mark.parametrize("rate_per_min", [120, 12])
+def test_only_transfer_destination_is_audited_for_holds_and_declines(
+    tmp_path, rate_per_min
+):
+    """Only green receives transfers; REM departures need no search record."""
+    _, decisions = run(tmp_path, rate_per_min)
+    assert [r["train_id"] for r in decisions] == ["green-1"]
 
 
 def test_logged_decision_recalculates_by_hand(tmp_path):
+    """Recalculate each candidate from its logged group size, wait and load.
+
+    Use a separate formula rather than calling the search for expected values.
+    Allow small rounding differences between exp here and expm1 in the model.
+    """
     _, decisions = run(tmp_path, rate_per_min=120)
     record = green_decision(decisions)
     [group] = record["inputs"]["transfers"]
@@ -156,9 +246,52 @@ def test_logged_decision_recalculates_by_hand(tmp_path):
         assert math.isclose(candidate["net_ps"], net, abs_tol=1e-6)
 
 
-def test_decision_log_is_byte_reproducible(tmp_path):
+def test_run_logs_are_byte_reproducible(tmp_path):
+    """The same seed must produce identical event and decision files."""
     run(tmp_path / "first", rate_per_min=120)
     run(tmp_path / "second", rate_per_min=120)
-    first = (tmp_path / "first" / "decisions.jsonl").read_bytes()
-    second = (tmp_path / "second" / "decisions.jsonl").read_bytes()
-    assert first == second
+    for filename in ("decisions.jsonl", "events.jsonl"):
+        first = (tmp_path / "first" / filename).read_bytes()
+        second = (tmp_path / "second" / filename).read_bytes()
+        assert first == second
+
+
+@pytest.mark.parametrize(("rule_action", "applied_s"), [("CLAMP", 20), ("REFUSE", 0)])
+def test_enforcer_changes_applied_hold_without_changing_proposal(
+    tmp_path, rule_action, applied_s
+):
+    """The strategy asks for 60s, but the operating limit is 20s.
+
+    CLAMP applies 20s instead of 60s. REFUSE applies no hold (0s).
+    The decision log keeps the original proposal and reason. Events show what
+    was allowed and when green actually leaves: 130 + applied hold seconds.
+    """
+    rules = OperatingRulesConfig(
+        max_hold_time=20, rule_action_map={"max_hold_exceeded": rule_action}
+    )
+    events, decisions = run(tmp_path, rate_per_min=120, rules=rules)
+    [record] = decisions
+    assert record["chosen_hold_s"] == 60
+    assert record["hold_search"]["max_hold_s"] == 60
+    assert record["reason"].startswith("hold 60 s:")
+    [hold] = holds(events)
+    assert (
+        hold["train_id"],
+        hold["time_s"],
+        hold["requested_s"],
+        hold["applied_s"],
+    ) == ("green-1", 130, 60, applied_s)
+    if rule_action == "CLAMP":
+        assert hold["reason"] == record["reason"] + " (clamped to max_hold_time 20 s)"
+    else:
+        assert hold["reason"] == f"refused: over max hold 20 s ({record['reason']})"
+    green = [
+        e
+        for e in events
+        if e["event_type"] == "train_departure" and e["train_id"] == "green-1"
+    ]
+    assert [(e["time_s"], e["hold_s"]) for e in green] == [(130 + applied_s, applied_s)]
+    ends = [e for e in events if e["event_type"] == "hold_end"]
+    assert [(e["train_id"], e["time_s"]) for e in ends] == (
+        [("green-1", 150)] if applied_s else []
+    )

@@ -1,3 +1,4 @@
+# AI contribution: 50% or more AI-generated
 """Run committed demo scenarios and cache their map-ready API responses.
 
 The API selects scenario files by connection ID, applies validated request
@@ -28,6 +29,9 @@ from api.station_layout import Connection, StationLayoutResponse
 from api.station_layout import Platform as LayoutPlatform
 from api.station_view import SimulationRunResponse, build_station_view_response
 from api.time_utils import scenario_start_clock_s
+from simulator.control.connection_configuration import (
+    build_selected_connection_protection,
+)
 from simulator.control.decision import DecisionPipeline
 from simulator.control.prediction_error import (
     PredictionErrorModel,
@@ -187,7 +191,9 @@ class SimulationRunService:
         A failed run never enters the response cache.
         """
         layout, connection = self._select_connection(request.connection_id)
-        scenario = self._load_scenario(request, layout.interchange.id)
+        scenario = self._load_scenario(
+            request, layout.interchange.id, connection.to_platform_id
+        )
         run_state: dict[str, TransferComponent] = {}
 
         def build_components(
@@ -235,11 +241,15 @@ class SimulationRunService:
         raise UnknownConnectionError(f"Unknown connection: {connection_id}")
 
     def _load_scenario(
-        self, request: SimulationRunRequest, interchange_id: str
+        self,
+        request: SimulationRunRequest,
+        interchange_id: str,
+        connecting_platform_id: str,
     ) -> Scenario:
         """Load the committed one-hour scenario and apply validated run settings.
 
         Headway targets are derived only for the headway-regulation strategy.
+        Connection protection uses the selected destination's median service gap.
         The maximum hold is set in both control search and operating safeguards.
         Prediction-error kappa is shared across arrival, transfer, and load inputs.
         Returned scenario state is replaced rather than mutating the committed data.
@@ -247,15 +257,22 @@ class SimulationRunService:
         scenario = load_scenario_file(
             SCENARIO_PATHS[interchange_id], {DATASET_ID: self._dataset}
         )
-        targets = (
+        headways = (
             _headway_targets(self._network, scenario.service_date)
-            if request.strategy == "headway_regulation"
-            else None
+            if request.strategy in {"headway_regulation", "connection_protection"}
+            else {}
         )
         control = replace(
             scenario.control,
             strategy=request.strategy,
-            target_headways_s=targets,
+            target_headways_s=(
+                headways if request.strategy == "headway_regulation" else None
+            ),
+            connection_headways_s=(
+                {connecting_platform_id: headways[connecting_platform_id]}
+                if request.strategy == "connection_protection"
+                else None
+            ),
             hold_search=replace(
                 scenario.control.hold_search,
                 max_hold_s=request.max_hold_time,
@@ -313,26 +330,26 @@ def _build_components(
     platform_by_id = {platform.platform_id: platform for platform in layout.platforms}
     feeder = platform_by_id[connection.from_platform_id]
     connecting = platform_by_id[connection.to_platform_id]
-    transfers = _build_transfer(scenario, request, feeder, connecting, streams)
+    route = _build_transfer_route(scenario, request, feeder, connecting)
+    transfers = TransferComponent([route], streams)
     trains = _build_train_component(
-        scenario, network, connection, request, transfers, connecting, streams
+        scenario, network, connection, request, transfers, route, streams
     )
     return transfers, trains
 
 
-def _build_transfer(
+def _build_transfer_route(
     scenario: Scenario,
     request: SimulationRunRequest,
     feeder: LayoutPlatform,
     connecting: LayoutPlatform,
-    streams: StreamManager,
-) -> TransferComponent:
-    """Build a seeded REM-to-metro transfer route using the requested flow.
+) -> TransferRoute:
+    """Configure the REM-to-metro route shared by passengers and the strategy.
 
     The demand profile spans the scenario horizon and uses passengers per minute.
     One destination is assigned to the selected connecting station.
     """
-    route = TransferRoute(
+    return TransferRoute(
         station_id=feeder.stop_id,
         feeder_platform_id=feeder.platform_id,
         connecting_platform_id=connecting.platform_id,
@@ -350,7 +367,6 @@ def _build_transfer(
         walking_mean_s=WALKING_MEAN_S,
         walking_min_s=WALKING_MIN_S,
     )
-    return TransferComponent([route], streams)
 
 
 def _build_train_component(
@@ -359,7 +375,7 @@ def _build_train_component(
     connection: Connection,
     request: SimulationRunRequest,
     transfers: TransferComponent,
-    connecting: LayoutPlatform,
+    route: TransferRoute,
     streams: StreamManager,
 ) -> TrainComponent:
     """Build trains with a registered Strategy and configured run safeguards.
@@ -368,18 +384,24 @@ def _build_train_component(
     The platform queue and walking estimate both use the connection's metro side.
     """
     trains = _build_trains(network, scenario)
-    strategy = STRATEGIES.build(
-        scenario.control.strategy,
-        target_headways_s=scenario.control.target_headways_s,
-        walking_by_platform={
-            connecting.platform_id: ShiftedExponentialCdf(
-                mean_s=WALKING_MEAN_S, min_s=WALKING_MIN_S
-            )
-        },
-        rolling_horizon=scenario.control.rolling_horizon,
-        hold_search=scenario.control.hold_search,
-        weights=scenario.control.weights,
-    )
+    if scenario.control.strategy == "connection_protection":
+        # Validate coverage and derive walking CDFs from the passenger route.
+        strategy = build_selected_connection_protection(
+            scenario.control, [route], [p.platform_id for p in network.platforms]
+        )
+    else:
+        strategy = STRATEGIES.build(
+            scenario.control.strategy,
+            target_headways_s=scenario.control.target_headways_s,
+            walking_by_platform={
+                route.connecting_platform_id: ShiftedExponentialCdf(
+                    mean_s=route.walking_mean_s, min_s=route.walking_min_s
+                )
+            },
+            rolling_horizon=scenario.control.rolling_horizon,
+            hold_search=scenario.control.hold_search,
+            weights=scenario.control.weights,
+        )
     decision = DecisionPipeline(
         strategy,
         enforcer=OperatingRulesEnforcer(scenario.operating_rules),
@@ -393,7 +415,7 @@ def _build_train_component(
         minimum_gap_s=scenario.operating_rules.min_safe_gap,
         delay_injections=_delay_injections(connection, request),
         passenger_queue=PlatformQueue(
-            (connecting.platform_id,), passengers=transfers.passengers
+            (route.connecting_platform_id,), passengers=transfers.passengers
         ),
         decision=decision,
         control=scenario.control,
