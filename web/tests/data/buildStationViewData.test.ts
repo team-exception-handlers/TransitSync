@@ -148,17 +148,17 @@ describe("buildStationViewData", () => {
         ).toThrow("Duplicate platform ID");
     });
 
-it('correctly derives passenger movement start time, end time, path, and status', () => {
+it("correctly derives passenger movement start time, end time, path, and status", () => {
         const mockData = structuredClone(mock);
         mockData.passenger_tracks = [
             {
-                passenger_id: 'p1',
-                group_id: 'g1',
-                connection_id: mockData.connections[0]?.id || 'c1',
+                passenger_id: "p1",
+                group_id: "g1",
+                connection_id: mockData.connections[0]!.id,
                 samples: [
-                    { time_s: 100, position: { x: 0, y: 0 }, phase: 'walking' },
-                    { time_s: 150, position: { x: 5, y: 5 }, phase: 'waiting' },
-                    { time_s: 200, position: { x: 10, y: 10 }, phase: 'boarded' },
+                    { time_s: 100, position: { x: 0, y: 0 }, phase: "walking" },
+                    { time_s: 150, position: { x: 5, y: 5 }, phase: "waiting" },
+                    { time_s: 200, position: { x: 10, y: 10 }, phase: "boarded" },
                 ],
             },
         ];
@@ -166,27 +166,27 @@ it('correctly derives passenger movement start time, end time, path, and status'
         const result = buildStationViewData(mapping, mockData);
 
         expect(result.passengers).toHaveLength(1);
-        expect(result.passengers[0].passenger_id).toBe('p1');
+        expect(result.passengers[0].passenger_id).toBe("p1");
         expect(result.passengers[0].start_time_s).toBe(100);
         expect(result.passengers[0].end_time_s).toBe(200);
         expect(result.passengers[0].path).toEqual([
-            { time_s: 100, position: { x: 0, y: 0 } },
-            { time_s: 150, position: { x: 5, y: 5 } },
-            { time_s: 200, position: { x: 10, y: 10 } },
+            { time_s: 100, position: { x: 0, y: 0 }, phase: "walking" },
+            { time_s: 150, position: { x: 5, y: 5 }, phase: "waiting" },
+            { time_s: 200, position: { x: 10, y: 10 }, phase: "boarded" },
         ]);
-        expect(result.passengers[0].status).toBe('boarded');
+        expect(result.passengers[0].status).toBe("boarded");
     });
 
-    it('rejects unsorted sample tracks with an invalid passenger samples error', () => {
+    it("rejects unsorted sample tracks with an invalid passenger samples error", () => {
         const mockData = structuredClone(mock);
         mockData.passenger_tracks = [
             {
-                passenger_id: 'p2',
-                group_id: 'g1',
-                connection_id: mockData.connections[0]?.id || 'c1',
+                passenger_id: "p2",
+                group_id: "g1",
+                connection_id: mockData.connections[0]!.id,
                 samples: [
-                    { time_s: 300, position: { x: 10, y: 10 }, phase: 'missed' },
-                    { time_s: 100, position: { x: 0, y: 0 }, phase: 'walking' },
+                    { time_s: 300, position: { x: 10, y: 10 }, phase: "missed" },
+                    { time_s: 100, position: { x: 0, y: 0 }, phase: "walking" },
                 ],
             },
         ];
@@ -196,3 +196,4 @@ it('correctly derives passenger movement start time, end time, path, and status'
         ).toThrow("Invalid passenger samples");
     });
 });
+

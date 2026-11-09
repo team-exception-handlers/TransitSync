@@ -133,6 +133,7 @@ export interface NetworkSnapshot {
 export interface PassengerPathPoint {
     time_s: number;
     position: Point;
+    phase: PassengerPhase; // Added back so network snapshot interpolation works correctly
 }
 
 export interface PassengerMovement {
@@ -141,7 +142,7 @@ export interface PassengerMovement {
     connection_id: string;
     start_time_s: number;  
     end_time_s: number;    
-    path: { time_s: number; position: Point }[];
+    path: PassengerPathPoint[]; // Uses path point with phase included
     status: PassengerPhase;
 }
 

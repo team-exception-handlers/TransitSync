@@ -14,12 +14,13 @@ export function derivePassengerMovements(tracks: PassengerTrack[]): PassengerMov
         return [{
             passenger_id: track.passenger_id,
             group_id: track.group_id,
-            connection_id: track.connection_id!, // Non-null assertion
+            connection_id: track.connection_id,
             start_time_s: first.time_s,
             end_time_s: last.time_s,
             path: track.samples.map((s) => ({
                 time_s: s.time_s,
                 position: s.position,
+                phase: s.phase,
             })),
             status: last.phase,
         }];

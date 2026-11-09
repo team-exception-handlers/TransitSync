@@ -142,3 +142,4 @@ describe("TransitSync application shell", () => {
         expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(selectedLabel);
     });
 });
+
