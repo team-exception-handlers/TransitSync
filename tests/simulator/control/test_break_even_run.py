@@ -40,6 +40,7 @@ from simulator.control.connection_configuration import (
     build_selected_connection_protection,
 )
 from simulator.control.decision import DecisionPipeline
+from simulator.control.decision_audit import KIND_HOLD_SEARCH
 from simulator.control.observation_builder import ObservationBuilder
 from simulator.control.prediction_error import PredictionErrorModel
 from simulator.control.rules import OperatingRulesEnforcer
@@ -148,9 +149,11 @@ def run(tmp_path, rate_per_min, rules=None):
         tmp_path,
     )
     events = [json.loads(line) for line in result.events_path.read_text().splitlines()]
-    decisions = [
+    records = [
         json.loads(line) for line in result.decisions_path.read_text().splitlines()
     ]
+    # The error model also writes an estimates record per decision (#39)
+    decisions = [r for r in records if r["kind"] == KIND_HOLD_SEARCH]
     return events, decisions
 
 

@@ -116,7 +116,7 @@ describe("TransitSync application shell", () => {
         expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(first.label);
         fireEvent.click(screen.getByRole("button", { name: /Second connection/ }));
 
-        expect(usePlaybackStore.getState().data).toBe(run);
+        expect(usePlaybackStore.getState().data).toStrictEqual(run);
         expect(usePlaybackStore.getState().selectedConnectionId).toBe(second.id);
         expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(second.label);
 
@@ -142,3 +142,4 @@ describe("TransitSync application shell", () => {
         expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(selectedLabel);
     });
 });
+

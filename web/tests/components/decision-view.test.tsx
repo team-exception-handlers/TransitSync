@@ -1,11 +1,12 @@
 // AI contribution: 50% or more AI-generated
 // @vitest-environment jsdom
-/** Refused and clamped decisions are marked distinctly from applied ones. */
+/** Refused and clamped decisions are marked distinctly from applied ones, and
+ * each decision shows what the strategy saw next to the true value. */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { DecisionView } from "../../src/components/decision-view";
-import { decisionRecords } from "../../src/data/decisions";
-import { decisionStatus } from "../../src/types/decision";
+import { decisionRecords, estimateRecords } from "../../src/data/decisions";
+import { decisionStatus, estimatesFor } from "../../src/types/decision";
 import { stationViewData } from "../../src/data/stationViewData";
 import { connectionRuns } from "../../src/data/connection-runs";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
@@ -95,6 +96,38 @@ describe("DecisionView", () => {
 
     expect(row?.textContent).toContain(`requested ${clamped!.requested_s}s`);
     expect(row?.textContent).toContain(`applied ${clamped!.applied_s}s`);
+  });
+
+  it("shows what the strategy saw next to the true value, with the gap", () => {
+    render(<DecisionView />);
+    const row = screen.getByText("T-101").closest("li") as HTMLElement;
+    const cellsOf = (label: string) =>
+      within(within(row).getByText(label).closest("tr") as HTMLElement)
+        .getAllByRole("cell")
+        .map((cell) => cell.textContent);
+
+    // Seen 181 s against a true 165 s: the strategy thinks REM-12 is 16 s later
+    expect(cellsOf("REM-12 arrival")).toEqual(["REM-12 arrival", "181 s", "165 s", "+16 s"]);
+    expect(cellsOf("G-12 still walking")).toEqual(["G-12 still walking", "38", "42", "-4"]);
+  });
+
+  it("skips a value with nothing to predict but keeps the train's other values", () => {
+    render(<DecisionView />);
+    const row = screen.getByText("T-317").closest("li") as HTMLElement;
+
+    // REM-09 has no next stop, so only its load is compared
+    expect(within(row).queryByText("REM-09 arrival")).toBeNull();
+    expect(within(row).getByText("REM-09 load")).toBeDefined();
+  });
+
+  it("matches estimates to a decision by time, train and platform only", () => {
+    for (const record of estimateRecords) {
+      const decision = decisionRecords.find((item) => item.time_s === record.time_s);
+      expect(decision && estimatesFor(decision, estimateRecords)).toBe(record);
+    }
+    // One second off is a different decision, so no comparison is shown
+    const shifted = { ...decisionRecords[0], time_s: decisionRecords[0].time_s + 1 };
+    expect(estimatesFor(shifted, estimateRecords)).toBeUndefined();
   });
 
   it("shows the requested duration alongside the applied one for a refused decision", () => {

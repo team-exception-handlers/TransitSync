@@ -7,11 +7,12 @@ The strategy sees estimates with prediction error (section 7), while the rule
 check still uses the true snapshot, since safety rules are the simulator's.
 """
 
+import copy
 import math
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from simulator.control.decision_audit import DecisionAuditSource
+from simulator.control.decision_audit import DecisionAuditSource, estimates_record
 from simulator.control.interface import (
     DecisionController,
     HoldAction,
@@ -69,6 +70,7 @@ class DecisionPipeline:
         self._builder = builder or ObservationBuilder()
         self._enforcer = enforcer or PassThroughEnforcer()
         self._error_model = error_model
+        self._estimates: list[dict[str, Any]] = []
 
     def decide(
         self, decision: DepartureDue, trains: TrainSource
@@ -93,7 +95,11 @@ class DecisionPipeline:
             planning=planning,
             until_s=until_s,
         )
-        seen = self._error_model.apply(truth) if self._error_model else truth
+        seen = truth
+        if self._error_model:
+            seen = self._error_model.apply(truth)
+            # Recorded before the strategy runs, so declines are audited too
+            self._estimates.append(estimates_record(truth, seen))
         actions = self.strategy.evaluate(seen)
         if not actions:
             return None
@@ -104,11 +110,13 @@ class DecisionPipeline:
         return self._enforcer.validate(actions[0], truth)
 
     def decision_records(self) -> tuple[dict[str, Any], ...]:
-        """Return the strategy's audit records (#44); none if it keeps none.
+        """Return the strategy's audit records (#44), then any estimates (#39).
 
         The ``Hold`` event already records what the rules applied, so the
-        audit only needs the strategy's own reasoning.
+        audit only needs the strategy's reasoning and what it saw.
         """
+        own: tuple[dict[str, Any], ...] = ()
         if isinstance(self.strategy, DecisionAuditSource):
-            return tuple(self.strategy.decision_records())
-        return ()
+            own = tuple(self.strategy.decision_records())
+        # Copies, so a caller cannot change what is written to the audit log
+        return own + tuple(copy.deepcopy(self._estimates))
