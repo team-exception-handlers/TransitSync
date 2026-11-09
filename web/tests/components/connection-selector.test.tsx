@@ -28,7 +28,7 @@ describe("ConnectionSelector", () => {
     render(<ConnectionSelector />);
     fireEvent.click(screen.getByRole("button", { name: /Test connection/ }));
     expect(usePlaybackStore.getState().data).toStrictEqual(parsedSecond);
-    expect(usePlaybackStore.getState().data).toStrictEqual(parsedSecond);
+    expect(usePlaybackStore.getState().currentTime_s).toBe(0);
     expect(screen.getByRole("button", { name: /Test connection/ }).getAttribute("aria-pressed")).toBe("true");
   });
   it("does not reset the already active connection", () => {
