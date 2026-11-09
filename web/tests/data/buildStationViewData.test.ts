@@ -147,4 +147,52 @@ describe("buildStationViewData", () => {
             buildStationViewData(invalidMapping, mock)
         ).toThrow("Duplicate platform ID");
     });
+
+   it('correctly derives passenger movement start time, end time, path, and status', () => {
+        const mockData = structuredClone(mock);
+        mockData.passenger_tracks = [
+            {
+                passenger_id: 'p1',
+                group_id: 'g1',
+                connection_id: mockData.connections[0]?.id || 'c1',
+                samples: [
+                    { time_s: 100, position: { x: 0, y: 0 }, phase: 'walking' },
+                    { time_s: 150, position: { x: 5, y: 5 }, phase: 'waiting' },
+                    { time_s: 200, position: { x: 10, y: 10 }, phase: 'boarded' },
+                ],
+            },
+        ];
+
+        const result = buildStationViewData(mapping, mockData);
+
+        expect(result.passengers).toHaveLength(1);
+        expect(result.passengers[0].passenger_id).toBe('p1');
+        expect(result.passengers[0].startTimeS).toBe(100);
+        expect(result.passengers[0].endTimeS).toBe(200);
+        expect(result.passengers[0].path).toEqual(['walking', 'waiting', 'boarded']);
+        expect(result.passengers[0].status).toBe('boarded');
+    });
+
+    it('handles unsorted sample tracks by correctly deriving sorted start and end bounds', () => {
+        const mockData = structuredClone(mock);
+        mockData.passenger_tracks = [
+            {
+                passenger_id: 'p2',
+                group_id: 'g1',
+                connection_id: mockData.connections[0]?.id || 'c1',
+                samples: [
+                    { time_s: 100, position: { x: 0, y: 0 }, phase: 'walking' },
+                    { time_s: 300, position: { x: 10, y: 10 }, phase: 'missed' },
+                ],
+            },
+        ];
+
+        const result = buildStationViewData(mapping, mockData);
+
+        expect(result.passengers).toHaveLength(1);
+        expect(result.passengers[0].startTimeS).toBe(100);
+        expect(result.passengers[0].endTimeS).toBe(300);
+        expect(result.passengers[0].status).toBe('missed');
+    });
+
 });

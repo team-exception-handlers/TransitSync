@@ -109,13 +109,6 @@ export interface MockInterchangeData {
     train_events: TrainMovementEvent[];
 }
 
-
-export interface StationViewData
-    extends Omit<MockInterchangeData, "platform_layouts"> {
-    platforms: Platform[];
-}
-
-
 export interface PassengerPosition {
     passenger_id: string;
     group_id: string;
@@ -135,4 +128,20 @@ export interface NetworkSnapshot {
     time_s: number;
     passengers: PassengerPosition[];
     trains_at_platforms: TrainAtPlatform[];
+}
+
+export interface PassengerMovement {
+    passenger_id: string;
+    group_id: string;
+    connection_id: string;
+    startTimeS: number;
+    endTimeS: number;
+    path: string[];
+    status: PassengerPhase;
+}
+
+export interface StationViewData
+    extends Omit<MockInterchangeData, "platform_layouts"> {
+    platforms: Platform[];
+    passengers: PassengerMovement[]; // Derived movement data included
 }
