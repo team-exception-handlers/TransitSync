@@ -130,13 +130,18 @@ export interface NetworkSnapshot {
     trains_at_platforms: TrainAtPlatform[];
 }
 
+export interface PassengerPathPoint {
+    time_s: number;
+    position: Point;
+}
+
 export interface PassengerMovement {
     passenger_id: string;
     group_id: string;
     connection_id: string;
     startTimeS: number;
     endTimeS: number;
-    path: string[];
+    path: PassengerPathPoint[];
     status: PassengerPhase;
 }
 

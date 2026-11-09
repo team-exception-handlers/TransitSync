@@ -115,6 +115,11 @@ export function buildStationViewData(
         }
     }
 
+    const normalizedPassengerTracks = (mock.passenger_tracks || []).map((track) => ({
+        ...track,
+        samples: [...track.samples].sort((a, b) => a.time_s - b.time_s),
+    }));
+
     const data: StationViewData = {
         schema_version: mock.schema_version,
 
@@ -131,10 +136,10 @@ export function buildStationViewData(
         corridors: mock.corridors,
         connections: mock.connections,
 
-        passenger_tracks: mock.passenger_tracks,
+        passenger_tracks: normalizedPassengerTracks,
         train_events: mock.train_events,
 
-        passengers: derivePassengerMovements(mock.passenger_tracks),
+        passengers: derivePassengerMovements(normalizedPassengerTracks)
     };
 
     return parseStationViewData(data);
@@ -147,8 +152,11 @@ function derivePassengerMovements(tracks: PassengerTrack[]): PassengerMovement[]
         const startTimeS = sortedSamples[0]?.time_s ?? 0;
         const endTimeS = sortedSamples[sortedSamples.length - 1]?.time_s ?? startTimeS;
         
-        // Derive path from unique phases or sample progression
-        const path = sortedSamples.map((s) => s.phase);
+        // Map path to time and position for animation rendering
+        const path = sortedSamples.map((s) => ({
+            time_s: s.time_s,
+            position: s.position,
+        }));
         const finalPhase = sortedSamples[sortedSamples.length - 1]?.phase ?? "waiting";
 
         return {

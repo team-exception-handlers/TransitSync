@@ -169,7 +169,11 @@ describe("buildStationViewData", () => {
         expect(result.passengers[0].passenger_id).toBe('p1');
         expect(result.passengers[0].startTimeS).toBe(100);
         expect(result.passengers[0].endTimeS).toBe(200);
-        expect(result.passengers[0].path).toEqual(['walking', 'waiting', 'boarded']);
+        expect(result.passengers[0].path).toEqual([
+            { time_s: 100, position: { x: 0, y: 0 } },
+            { time_s: 150, position: { x: 5, y: 5 } },
+            { time_s: 200, position: { x: 10, y: 10 } },
+        ]);
         expect(result.passengers[0].status).toBe('boarded');
     });
 
@@ -181,8 +185,8 @@ describe("buildStationViewData", () => {
                 group_id: 'g1',
                 connection_id: mockData.connections[0]?.id || 'c1',
                 samples: [
-                    { time_s: 100, position: { x: 0, y: 0 }, phase: 'walking' },
                     { time_s: 300, position: { x: 10, y: 10 }, phase: 'missed' },
+                    { time_s: 100, position: { x: 0, y: 0 }, phase: 'walking' },
                 ],
             },
         ];
@@ -192,7 +196,10 @@ describe("buildStationViewData", () => {
         expect(result.passengers).toHaveLength(1);
         expect(result.passengers[0].startTimeS).toBe(100);
         expect(result.passengers[0].endTimeS).toBe(300);
+        expect(result.passengers[0].path).toEqual([
+            { time_s: 100, position: { x: 0, y: 0 } },
+            { time_s: 300, position: { x: 10, y: 10 } },
+        ]);
         expect(result.passengers[0].status).toBe('missed');
     });
-
 });
