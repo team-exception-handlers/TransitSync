@@ -9,7 +9,11 @@ simulator never imports a strategy class directly.
 import inspect
 from collections.abc import Iterable, Mapping
 
+from simulator.control.break_even import BreakEvenWeights
+from simulator.control.hold_search import HoldSearchSettings
 from simulator.control.interface import DecisionController
+from simulator.control.planning import RollingHorizonSettings
+from simulator.control.walking_cdf import WalkingCdf
 
 
 class UnknownStrategyError(ValueError):
@@ -53,12 +57,20 @@ class StrategyRegistry:
         return name in self._classes
 
     def build(
-        self, name: str, *, target_headways_s: Mapping[str, float] | None = None
+        self,
+        name: str,
+        *,
+        target_headways_s: Mapping[str, float] | None = None,
+        walking_by_platform: Mapping[str, WalkingCdf] | None = None,
+        rolling_horizon: RollingHorizonSettings | None = None,
+        hold_search: HoldSearchSettings | None = None,
+        weights: BreakEvenWeights | None = None,
     ) -> DecisionController:
-        """Build a new strategy with supplied headway targets in seconds.
+        """Build a strategy with its headways or route-specific walking CDFs.
 
         Raise UnknownStrategyError for unknown names, listing valid choices.
         Raise ValueError for missing or bad targets, or targets on other strategies.
+        Rolling horizon additionally accepts search limits and objective weights.
         """
         # Delay this import to avoid a cycle with built-in registration.
         from simulator.control.strategies.headway_regulation import (
@@ -76,4 +88,18 @@ class StrategyRegistry:
             return strategy_class(target_headways_s)
         if target_headways_s is not None:
             raise ValueError("target_headways_s only valid for headway_regulation")
+        from simulator.control.rolling_horizon import RollingHorizonPlanner
+        from simulator.control.strategies.rolling_horizon import RollingHorizonStrategy
+
+        if issubclass(strategy_class, RollingHorizonStrategy):
+            if walking_by_platform is None:
+                raise ValueError("walking_by_platform required for rolling_horizon")
+            return strategy_class(
+                RollingHorizonPlanner(
+                    walking_by_platform,
+                    rolling_horizon or RollingHorizonSettings(),
+                    hold_search or HoldSearchSettings(),
+                    weights or BreakEvenWeights(),
+                )
+            )
         return strategy_class()
