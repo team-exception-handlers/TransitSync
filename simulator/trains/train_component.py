@@ -25,6 +25,7 @@ from typing import Any
 from simulator.control.decision import DecisionPipeline
 from simulator.control.interface import PlatformState, TrainState
 from simulator.control.irregularity import ServiceIrregularity
+from simulator.control.planning import FutureVisit
 from simulator.control.settings import ControlSettings
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import (
@@ -131,6 +132,16 @@ class TrainComponent:
             self._departure_cursor[platform] = 0
         self._bind_rem_throughput(rem_door_throughput)
         self._bind_passengers(passenger_queue)
+        # Last occurrence lets bounded lookahead stop when a platform cannot
+        # recur, without scanning the rest of a full-day timetable each time.
+        self._last_route_visit = {
+            train_id: {
+                stop.platform_id: (train_id, trip_index, stop_index)
+                for trip_index, trip in enumerate(trips)
+                for stop_index, stop in enumerate(trip)
+            }
+            for train_id, trips in self._schedules.items()
+        }
 
     def _bind_control(
         self, decision: DecisionPipeline | None, control: ControlSettings | None
@@ -363,6 +374,162 @@ class TrainComponent:
                 last_departure_s=self._last_departure.get(platform),
             )
             for platform in sorted(self._visits)
+        )
+
+    def future_visits(
+        self, now_s: float, until_s: float = math.inf
+    ) -> tuple[FutureVisit, ...]:
+        """Copy remaining visits arriving by ``until_s`` (inclusive seconds).
+
+        Existing holds remain fixed. Return-trip recovery consumes slack once;
+        inbound terminals have an arrival but no decision or departure.
+        Other strategies never request this potentially larger view.
+        No random stream is consumed while copying these values. The observation
+        error layer, rather than the train owner, perturbs future predictions.
+        Completed vehicles contribute no visits; their identities and final
+        loads remain in the existing next-stop view for other controllers.
+        The default preserves the complete-route API. A bounded request stops
+        each chronological route at its first arrival outside the window.
+        """
+        return tuple(
+            visit
+            for train_id, train in sorted(self.trains.items())
+            if train_id not in self._finished
+            for visit in self._future_train_visits(train, now_s, until_s)
+        )
+
+    def headway_visits(
+        self, now_s: float, until_s: float, platforms: frozenset[str]
+    ) -> tuple[FutureVisit, ...]:
+        """Copy the first later service per train/requested platform, in seconds.
+
+        These immutable references supply headways, not additional decisions.
+        Only relevant platforms are explored, with the same hold/recovery
+        semantics as bounded visits and no random draws or live-state changes.
+        """
+        return tuple(
+            visit
+            for train_id, train in sorted(self.trains.items())
+            if train_id not in self._finished
+            for visit in self._future_train_visits(
+                train,
+                now_s,
+                until_s,
+                {
+                    platform
+                    for platform, key in self._last_route_visit[train_id].items()
+                    if platform in platforms
+                    and key
+                    >= (train_id, train.current_trip_index, train.current_stop_index)
+                },
+            )
+        )
+
+    def _future_train_visits(
+        self,
+        train: Train,
+        now_s: float,
+        until_s: float,
+        references: set[str] | None = None,
+    ) -> list[FutureVisit]:
+        """Project timetable times with current delay and known readiness.
+
+        Fixed holds change later-stop lateness immediately in the view, even
+        before HoldEnd updates the live train. At a trip boundary, only the
+        unused part of layover can absorb a newly proposed hold. Each return
+        starts a distinct trip index even when it reuses the same platform.
+        """
+        visits = []
+        remaining = None if references is None else set(references)
+        if remaining == set():
+            return visits
+        delay = train.current_delay
+        for trip_index in range(
+            train.current_trip_index, len(self._schedules[train.id])
+        ):
+            recovery = 0.0
+            first_stop = (
+                train.current_stop_index
+                if trip_index == train.current_trip_index
+                else 0
+            )
+            if trip_index > train.current_trip_index:
+                recovery = max(0.0, train.layover_slack - max(0.0, delay))
+                delay = max(0.0, delay - train.layover_slack)
+            trip = self._schedules[train.id][trip_index]
+            for stop_index in range(first_stop, len(trip)):
+                key = (train.id, trip_index, stop_index)
+                visit = self._future_visit(
+                    key, delay, recovery if stop_index == 0 else 0.0, now_s
+                )
+                if not self._retain_future_visit(
+                    key, visit, until_s, remaining, visits
+                ):
+                    return visits
+                if not visit.skips_departure:
+                    delay = visit.departure_s - visit.scheduled_departure_s
+        return visits
+
+    def _retain_future_visit(self, key, visit, until_s, remaining, visits):
+        """Retain bounded decisions or first later services, stopping when done."""
+        if remaining is None:
+            if visit.arrival_s > until_s:
+                return False
+            visits.append(visit)
+            return True
+        if visit.arrival_s > until_s and visit.platform_id in remaining:
+            if not visit.skips_departure:
+                visits.append(visit)
+                remaining.remove(visit.platform_id)
+        if key == self._last_route_visit[key[0]][visit.platform_id]:
+            remaining.discard(visit.platform_id)
+        return bool(remaining)
+
+    def _future_visit(
+        self, key: Visit, delay: float, recovery: float, now_s: float
+    ) -> FutureVisit:
+        """Copy known timing bounds; future disturbances stay unobserved.
+
+        An arrival already queued has a known separation wait and any already
+        scheduled injection. Propagating those bounds prevents an optimistic
+        route forecast while preserving the live train's single state owner.
+        Already observed arrivals come from the occupied platform's actual
+        arrival clock; a later departure-delay update cannot rewrite that past.
+        """
+        train = self.trains[key[0]]
+        stop = self._stop(key)
+        arrived = key in self._at_platform[stop.platform_id]
+        arrival = self._ready_arrivals.get(key, stop.arrival_s + delay)
+        arrival += self._arrival_wait.get(key, 0.0)
+        for disruption_id in self._disruptions_by_arrival.get(key, ()):
+            arrival = max(
+                arrival, self._scheduled_disruptions[disruption_id]["arrival_time_s"]
+            )
+        if arrived:
+            arrival = self._last_arrival[stop.platform_id]
+        departure = self._ready_departures.get(
+            key,
+            arrival + stop.departure_s - stop.arrival_s + self._hold_s.get(key, 0.0),
+        )
+        skips = key[2] == len(self._schedules[train.id][key[1]]) - 1 and key[1] < len(
+            train.return_trips
+        )
+        return FutureVisit(
+            train.id,
+            key[1],
+            key[2],
+            stop.station_id,
+            stop.platform_id,
+            arrival,
+            max(now_s, departure) if not skips else arrival,
+            stop.arrival_s,
+            stop.departure_s,
+            key not in self._hold_s and key not in self._ready_departures and not skips,
+            skips,
+            recovery,
+            arrived,
+            self._last_arrival.get(stop.platform_id, -self.minimum_gap_s)
+            + self.minimum_gap_s,
         )
 
     def service_irregularity(self, train_id: str, platform_id: str) -> float | None:

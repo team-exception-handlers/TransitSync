@@ -8,6 +8,7 @@ check still uses the true snapshot, since safety rules are the simulator's.
 """
 
 import copy
+import math
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -18,6 +19,7 @@ from simulator.control.interface import (
     ObservationSnapshot,
 )
 from simulator.control.observation_builder import ObservationBuilder, TrainSource
+from simulator.control.planning import RollingHorizonSettings
 from simulator.control.prediction_error import PredictionErrorModel
 from simulator.control.strategies.no_control import NoControlStrategy
 from simulator.engine.events import DepartureDue
@@ -79,19 +81,37 @@ class DecisionPipeline:
             ValueError: the strategy asked to hold another train, or more than
                 once; a hold can only start at that train's own decision point.
         """
-        truth = self._builder.build(decision, trains)
+        # The stacked rolling strategy owns a planner with these settings;
+        # planning probes without one use the same documented default window.
+        planning = getattr(self.strategy, "requires_future_visits", False)
+        until_s = math.inf
+        if planning:
+            planner = getattr(self.strategy, "planner", None)
+            settings = getattr(planner, "settings", RollingHorizonSettings())
+            until_s = decision.time_s + settings.window_s
+        truth = self._builder.build(
+            decision,
+            trains,
+            planning=planning,
+            until_s=until_s,
+        )
         seen = truth
+        
         if self._error_model:
             seen = self._error_model.apply(truth)
             # Recorded before the strategy runs, so declines are audited too
             self._estimates.append(estimates_record(truth, seen))
+            
         actions = self.strategy.evaluate(seen)
+        
         if not actions:
             return None
+          
         if len(actions) > 1 or actions[0].train_id != decision.train_id:
             raise ValueError(
                 f"{self.strategy.name} may only hold {decision.train_id} once here"
             )
+            
         return self._enforcer.validate(actions[0], truth)
 
     def decision_records(self) -> tuple[dict[str, Any], ...]:

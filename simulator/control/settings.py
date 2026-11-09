@@ -27,6 +27,7 @@ from typing import Any
 
 from simulator.control.break_even import BreakEvenWeights
 from simulator.control.hold_search import HoldSearchSettings
+from simulator.control.planning import RollingHorizonSettings
 from simulator.control.prediction_error import PredictionErrorSettings
 from simulator.control.registry import StrategyRegistry
 from simulator.control.strategies import STRATEGIES
@@ -41,6 +42,7 @@ CONTROL_FIELDS = frozenset(
         "weights",
         "target_headways_s",
         "prediction_error",
+        "rolling_horizon",
         "irregularity_window_size",
     }
 )
@@ -63,6 +65,9 @@ class ControlSettings:
         default_factory=PredictionErrorSettings
     )
     irregularity_window_size: int = DEFAULT_IRREGULARITY_WINDOW_SIZE
+    rolling_horizon: RollingHorizonSettings = field(
+        default_factory=RollingHorizonSettings
+    )
 
     def __post_init__(self) -> None:
         """Validate the window length and freeze targets in seconds."""
@@ -96,6 +101,8 @@ class ControlSettings:
         }
         if self.target_headways_s is not None:
             saved["target_headways_s"] = dict(self.target_headways_s)
+        if self.strategy == "rolling_horizon":
+            saved["rolling_horizon"] = self.rolling_horizon.to_dict()
         if self.irregularity_window_size != DEFAULT_IRREGULARITY_WINDOW_SIZE:
             saved["irregularity_window_size"] = self.irregularity_window_size
         return saved
@@ -136,6 +143,9 @@ def parse_control_settings(
         strategy=strategy,
         hold_search=_parse_section(value, "hold_search", HoldSearchSettings),
         weights=_parse_section(value, "weights", BreakEvenWeights),
+        rolling_horizon=_parse_section(
+            value, "rolling_horizon", RollingHorizonSettings
+        ),
         target_headways_s=value.get("target_headways_s"),
         prediction_error=_parse_section(
             value, "prediction_error", PredictionErrorSettings
