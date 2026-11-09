@@ -41,6 +41,14 @@ class _Walk(NamedTuple):
 
 
 @dataclass(frozen=True, slots=True)
+class PassengerWalk:
+    """Immutable walk timing needed to serialize a passenger's full path."""
+
+    group_id: str
+    corridor_arrival_s: float
+
+
+@dataclass(frozen=True, slots=True)
 class TransferRoute:
     """One feeder platform and connecting platform at an interchange.
 
@@ -98,6 +106,8 @@ class TransferComponent:
     walks and boarding events emitted by the existing platform queue; destination
     alighting and missed connections remain boarding logic's responsibility (#100).
     Feeder demand is external: it is not subtracted from aggregate train loads.
+    A separate immutable walk snapshot survives corridor admission for playback.
+    All sampled and scheduled timestamps are seconds relative to the run start.
     """
 
     def __init__(
@@ -107,6 +117,12 @@ class TransferComponent:
         *,
         id_prefix: str = "passenger",
     ) -> None:
+        """Create seeded transfer state for validated feeder routes.
+
+        ``stream_manager`` supplies passenger and walking randomness. Duplicate
+        station/feeder pairs raise ``ValueError`` before the run starts.
+        Each feeder route owns its demand clock and in-progress walk state.
+        """
         if (
             isinstance(routes, str | bytes)
             or not isinstance(routes, Sequence)
@@ -131,17 +147,24 @@ class TransferComponent:
         self._walking_routes: dict[str, TransferRoute] = {}
         # passenger_id -> walk still in progress
         self._walks: dict[str, _Walk] = {}
+        self._walk_history: dict[str, PassengerWalk] = {}
         self.passengers: dict[str, Passenger] = {}
         self.passages: dict[str, CorridorPassage] = {}
 
     def start(self, scheduler: Scheduler) -> None:
-        """Schedule nothing: without feeder trains there are no passenger pulses."""
+        """Start without scheduling demand before an actual feeder train arrives.
+
+        Passenger groups are generated from each route's arrival-to-arrival rate.
+        The scheduler is used later for alighting, corridor, and platform events.
+        """
 
     def incoming_transfers(self) -> tuple[IncomingTransfer, ...]:
         """Passengers still walking, grouped by transfer group (#38).
 
         Times are when each walk ends at the corridor, before any queueing.
         Every walk in a group shares its feeder arrival time and group size.
+        The result excludes people already admitted to the corridor queue.
+        Earliest and latest arrivals bound the group's predicted platform pulse.
         """
         groups: dict[tuple[str, str], list[_Walk]] = {}
         for walk in self._walks.values():
@@ -159,8 +182,20 @@ class TransferComponent:
             for (group_id, platform_id), walks in sorted(groups.items())
         )
 
+    def walk_records(self) -> Mapping[str, PassengerWalk]:
+        """Return an immutable snapshot of every walk released by this component.
+
+        Unlike ``incoming_transfers``, this history includes completed walks.
+        Each frozen record carries its group ID and scheduled corridor time.
+        """
+        return MappingProxyType(self._walk_history.copy())
+
     def handle(self, event: Event, scheduler: Scheduler) -> None:
-        """Advance groups, walks and platform arrivals through the event queue."""
+        """Advance groups, walks and platform arrivals through the event queue.
+
+        The scheduler timestamps are seconds relative to the scenario start.
+        Unknown passenger events leave this component's state unchanged.
+        """
         if isinstance(event, TrainArrival):
             self._on_train_arrival(event, scheduler)
         elif isinstance(event, CorridorArrival):
@@ -179,6 +214,10 @@ class TransferComponent:
             )
 
     def _on_train_arrival(self, event: TrainArrival, scheduler: Scheduler) -> None:
+        """Generate one passenger pulse from the elapsed demand interval.
+
+        Events for an unconfigured feeder or before demand start are ignored.
+        """
         key = (event.station_id, event.platform_id)
         route = self._routes.get(key)
         if route is None or event.time_s < route.demand_start_s:
@@ -201,6 +240,11 @@ class TransferComponent:
         event: TrainArrival,
         scheduler: Scheduler,
     ) -> None:
+        """Schedule each passenger's alighting and sampled corridor arrival.
+
+        Walk history is retained after completion for end-of-run serialization.
+        Group IDs remain stable across every member of one feeder pulse.
+        """
         group_id = f"{self._id_prefix}-group-{self._next_group:06d}"
         self._next_group += 1
         walks = self._walking_sampler.sample(
@@ -219,6 +263,8 @@ class TransferComponent:
             self._walks[passenger_id] = _Walk(
                 group_id, platform_id, walk_end_s, event.time_s, len(passengers)
             )
+            # Keep completed walks separately; _walks is only in-progress state.
+            self._walk_history[passenger_id] = PassengerWalk(group_id, walk_end_s)
             scheduler.schedule(
                 Alighting(
                     time_s=event.time_s,
@@ -239,6 +285,7 @@ class TransferComponent:
     def _on_corridor_arrival(
         self, event: CorridorArrival, scheduler: Scheduler
     ) -> None:
+        """Move an active walk into the corridor queue without erasing its history."""
         route = self._walking_routes.pop(event.passenger_id, None)
         self._walks.pop(event.passenger_id, None)
         if route is None:

@@ -26,7 +26,7 @@ This is a 1 year software engineering capstone project at Concordia University, 
 
 ## Getting started
 
-The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend provides a health check and a station-layout endpoint, but does not yet expose simulation runs. The frontend is a mock playback interface and does not yet retrieve simulation data from the backend. Simulation runs are started from Python or from the tests.
+The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend provides health, station-layout, and simulation-run endpoints. The frontend still uses its playback fixtures; the run endpoint returns data in the station-view format for future client integration.
 
 ### Requirements
 
@@ -114,7 +114,8 @@ docker compose config         # validate the container configuration
 
 ### API behavior
 
-The backend exposes `GET /health` and `GET /station-layout/{interchange_id}`.
+The backend exposes `GET /health`, `GET /station-layout/{interchange_id}`, and
+`POST /simulation/run`.
 The station-layout endpoint returns platforms, their map coordinates, station
 markers, connection records, and transfer corridor paths for
 `gare_centrale_bonaventure`, `mcgill`, or `edouard_montpetit`. The current
@@ -123,8 +124,37 @@ for all three interchanges. The Gare Centrale–Bonaventure and
 Édouard-Montpetit entries are placeholders; replace their geometry in
 `config/station_layouts.json` when real layouts are prepared. Platform metadata
 comes from the reference network; the layout catalog stores only map-specific
-platform positions and transfer geometry. The endpoint does not include
-passenger or train playback data.
+platform positions and transfer geometry. The station-layout endpoint does
+not include passenger or train playback data.
+
+The simulation-run endpoint accepts a connection ID and run settings:
+
+```json
+{
+  "connection_id": "mcgill-rem-green",
+  "strategy": "schedule_based",
+  "max_hold_time": 120,
+  "error_magnitude": 1,
+  "passenger_flow": "Normal",
+  "disruption_enabled": false
+}
+```
+
+`strategy` must be a registered simulator strategy (`no_control`,
+`schedule_based`, `headway_regulation`, or `rolling_horizon`). The maximum hold
+is in seconds, from 5 to 300 in five-second increments. `error_magnitude` is a
+finite, non-negative prediction-error multiplier applied to arrival, transfer,
+and load estimates. Passenger flow levels represent 6, 12, and 24 passengers
+per minute for Low, Normal, and High. When enabled, the disruption delays the
+selected REM feeder by 60 seconds at the first arrival at or after 120 seconds
+of simulation time.
+
+Each connection selects its committed one-hour demo scenario. The response
+combines the station layout with `train_events`, map-positioned
+`passenger_tracks`, applied `decisions`, the active `rules`, and the
+`operating_rules` configuration. Identical settings are cached in memory per
+API process (the eight most recently used combinations) and returned as detached
+responses, so callers cannot mutate the cached result.
 
 The default allowed browser origin is `http://localhost:5173`. Configure
 additional exact HTTP(S) origins through
