@@ -7,14 +7,19 @@ import { ConnectionSelector } from "../../src/components/connection-selector";
 import { stationViewData } from "../../src/data/stationViewData";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
 import { connectionRuns } from "../../src/data/connection-runs";
+import { parseStationViewData } from "../../src/lib/validateStationView";
 
 describe("ConnectionSelector", () => {
   const second = structuredClone(stationViewData);
   second.connections[0].id = "test-connection";
   second.connections[0].label = "Test connection";
   second.passenger_tracks.forEach((track) => { track.connection_id = "test-connection"; });
+
+  // Re-parse second so its derived 'passengers' match the updated tracks
+  const parsedSecond = parseStationViewData(second);
+
   beforeEach(() => {
-    usePlaybackStore.getState().setAvailableRuns([stationViewData, second]);
+    usePlaybackStore.getState().setAvailableRuns([stationViewData, parsedSecond]);
     usePlaybackStore.getState().loadData(stationViewData);
   });
   afterEach(cleanup);
@@ -22,7 +27,7 @@ describe("ConnectionSelector", () => {
     usePlaybackStore.getState().seek(120);
     render(<ConnectionSelector />);
     fireEvent.click(screen.getByRole("button", { name: /Test connection/ }));
-    expect(usePlaybackStore.getState().data).toBe(second);
+    expect(usePlaybackStore.getState().data).toStrictEqual(parsedSecond);
     expect(usePlaybackStore.getState().currentTime_s).toBe(0);
     expect(screen.getByRole("button", { name: /Test connection/ }).getAttribute("aria-pressed")).toBe("true");
   });
@@ -34,7 +39,7 @@ describe("ConnectionSelector", () => {
   });
   it("rejects unavailable selections without losing the run", () => {
     expect(() => usePlaybackStore.getState().selectConnection("unknown")).toThrow("Unknown connection");
-    expect(usePlaybackStore.getState().data).toBe(stationViewData);
+    expect(usePlaybackStore.getState().data).toStrictEqual(stationViewData);
     expect(() => usePlaybackStore.getState().setAvailableRuns([second, second])).toThrow("Duplicate connection");
   });
   it("marks exactly one connection as pressed and moves it when selection changes", () => {
@@ -73,3 +78,4 @@ describe("ConnectionSelector", () => {
     }
   });
 });
+

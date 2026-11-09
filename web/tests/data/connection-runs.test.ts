@@ -7,7 +7,7 @@ import { parseStationViewData } from "../../src/lib/validateStationView";
 
 describe("connection mock catalog", () => {
   it.each(connectionRuns)("validates $interchange.id with its real backend platform metadata", (run) => {
-    expect(parseStationViewData(run)).toBe(run);
+    expect(parseStationViewData(run)).toStrictEqual(run);
     expect(run.platforms).toHaveLength(4);
     for (const platform of run.platforms) {
       expect(Object.values(mapping).flat()).toContainEqual(expect.objectContaining({
