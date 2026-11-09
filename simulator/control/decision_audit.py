@@ -10,6 +10,9 @@ recalculated by hand. One record per decision holds:
 - the chosen hold and the reason
 - every candidate with N(h), benefit, cost and J(h), and why it lost
 
+A run with a prediction error model also gets an ``estimates`` record per
+decision, seen next to true values (US-2.1, #39); ``kind`` tells them apart.
+
 Records go to ``decisions.jsonl`` next to the event log, one compact JSON
 line each. They are not events: a record holds a list of candidates, while
 event fields are flat, and keeping them apart leaves the event schema
@@ -30,11 +33,17 @@ from typing import Any, Protocol, runtime_checkable
 
 from simulator.control.break_even import BreakEvenResult
 from simulator.control.hold_search import HoldSearchResult
+from simulator.control.interface import ObservationSnapshot
 from simulator.engine.event_log import partial_path
 
 DECISIONS_FILE = "decisions.jsonl"
 # Bump when a record field is added, removed or renamed
-DECISION_SCHEMA_VERSION = 1
+DECISION_SCHEMA_VERSION = 2
+KIND_HOLD_SEARCH = "hold_search"
+KIND_ESTIMATES = "estimates"
+# The values the prediction error model changes (#39)
+TRAIN_ESTIMATES = ("predicted_arrival_s", "onboard_load")
+TRANSFER_ESTIMATES = ("passenger_count", "group_size")
 
 # Why each candidate did or did not become the decision
 OUTCOME_CHOSEN = "chosen"
@@ -82,6 +91,7 @@ def decision_record(result: HoldSearchResult) -> dict[str, Any]:
     decision = next(c for c in result.candidates if c.hold_s == result.hold_s)
     return {
         "schema_version": DECISION_SCHEMA_VERSION,
+        "kind": KIND_HOLD_SEARCH,
         "time_s": inputs.time_s,
         "train_id": inputs.train_id,
         "station_id": inputs.station_id,
@@ -107,6 +117,45 @@ def decision_record(result: HoldSearchResult) -> dict[str, Any]:
             _candidate_record(candidate, decision) for candidate in result.candidates
         ],
     }
+
+
+def estimates_record(
+    truth: ObservationSnapshot, seen: ObservationSnapshot
+) -> dict[str, Any]:
+    """Return what the strategy saw next to the true value for one decision."""
+    return {
+        "schema_version": DECISION_SCHEMA_VERSION,
+        "kind": KIND_ESTIMATES,
+        "time_s": truth.time_s,
+        "train_id": truth.train_id,
+        "station_id": truth.station_id,
+        "platform_id": truth.platform_id,
+        "trains": _side_by_side(truth.trains, seen.trains, "train_id", TRAIN_ESTIMATES),
+        "transfers": _side_by_side(
+            truth.incoming_transfers,
+            seen.incoming_transfers,
+            "group_id",
+            TRANSFER_ESTIMATES,
+        ),
+    }
+
+
+def _side_by_side(
+    actual: Sequence[object],
+    seen: Sequence[object],
+    id_field: str,
+    fields: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    """One entry per train or group, paired by position (the error model keeps
+    the order): its ID, then seen and true per field, ``None`` if unknown."""
+    return [
+        {id_field: getattr(true_item, id_field)}
+        | {
+            name: {"seen": getattr(seen_item, name), "true": getattr(true_item, name)}
+            for name in fields
+        }
+        for true_item, seen_item in zip(actual, seen, strict=True)
+    ]
 
 
 def candidate_outcome(candidate: BreakEvenResult, decision: BreakEvenResult) -> str:
