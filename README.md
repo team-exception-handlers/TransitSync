@@ -141,7 +141,10 @@ The simulation-run endpoint accepts a connection ID and run settings:
 ```
 
 `strategy` must be a registered simulator strategy (`no_control`,
-`schedule_based`, `headway_regulation`, or `rolling_horizon`). The maximum hold
+`schedule_based`, `headway_regulation`, `connection_protection`, or
+`rolling_horizon`). For connection protection, the API derives the destination's
+service headway from its median scheduled gap and shares the passenger route's
+walking parameters with the strategy. The maximum hold
 is in seconds, from 5 to 300 in five-second increments. `error_magnitude`
 defaults to `1.0` and is a finite multiplier from 0 to 3 applied to arrival,
 transfer, and load prediction errors. Passenger flow levels represent 6, 12,
@@ -875,6 +878,9 @@ lengths and requests the one with the greatest positive benefit, or no hold.
 Select `connection_protection` in the scenario's `control` settings and provide
 `connection_headways_s`: the time between services, in seconds, at each platform
 receiving transfers. Walking estimates use the same routes as passenger generation.
+
+The `POST /simulation/run` endpoint also accepts `connection_protection` and
+supplies the selected destination's service headway automatically.
 
 The simulator applies operating limits and may shorten or refuse a requested hold.
 The decision log records evaluated holds, expected passenger counts and reasons,
