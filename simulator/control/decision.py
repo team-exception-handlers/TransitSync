@@ -96,22 +96,17 @@ class DecisionPipeline:
             until_s=until_s,
         )
         seen = truth
-        
         if self._error_model:
             seen = self._error_model.apply(truth)
             # Recorded before the strategy runs, so declines are audited too
             self._estimates.append(estimates_record(truth, seen))
-            
         actions = self.strategy.evaluate(seen)
-        
         if not actions:
             return None
-          
         if len(actions) > 1 or actions[0].train_id != decision.train_id:
             raise ValueError(
                 f"{self.strategy.name} may only hold {decision.train_id} once here"
             )
-            
         return self._enforcer.validate(actions[0], truth)
 
     def decision_records(self) -> tuple[dict[str, Any], ...]:
