@@ -8,6 +8,10 @@ its first decision to a request; future decisions never enter the event queue.
 import copy
 from dataclasses import asdict
 
+from simulator.control.decision_audit import (
+    DECISION_SCHEMA_VERSION,
+    KIND_ROLLING_HORIZON,
+)
 from simulator.control.interface import (
     DecisionController,
     HoldAction,
@@ -41,6 +45,8 @@ class RollingHorizonStrategy(DecisionController):
         reason = f"rolling horizon: {plan.hold_s:g} s, net {plan.net_ps:g} passenger-s"
         self._records.append(
             {
+                "schema_version": DECISION_SCHEMA_VERSION,
+                "kind": KIND_ROLLING_HORIZON,
                 "strategy": self.name,
                 "time_s": observation.time_s,
                 "train_id": observation.train_id,

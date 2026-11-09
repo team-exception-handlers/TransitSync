@@ -10,11 +10,14 @@ recalculated by hand. One record per decision holds:
 - the chosen hold and the reason
 - every candidate with N(h), benefit, cost and J(h), and why it lost
 
-Records go to ``decisions.jsonl`` next to the event log, one compact JSON
-line each. They are not events: a record holds a list of candidates, while
-event fields are flat, and keeping them apart leaves the event schema
-unchanged. Key order is fixed and no wall-clock time or path is written, so
-the file is byte-reproducible like the rest of the run output.
+With a prediction error model, each decision also gets an ``estimates``
+record of seen and true trains and transfers (US-2.1, #39), not the future
+visits a rolling-horizon plan sees. ``kind`` tells records apart. Lines are
+not in time order, so pair on ``time_s``, ``train_id`` and ``platform_id``.
+
+Records go to ``decisions.jsonl``, one compact JSON line each, kept apart
+from events because a record holds a list of candidates. Key order is fixed
+and no wall-clock time or path is written, so the file is byte-reproducible.
 
 Design pattern: Collecting Parameter. A strategy gets a ``DecisionAuditLog``
 and adds to it; the runner collects from every ``DecisionAuditSource`` once
@@ -30,11 +33,18 @@ from typing import Any, Protocol, runtime_checkable
 
 from simulator.control.break_even import BreakEvenResult
 from simulator.control.hold_search import HoldSearchResult
+from simulator.control.interface import ObservationSnapshot
 from simulator.engine.event_log import partial_path
 
 DECISIONS_FILE = "decisions.jsonl"
 # Bump when a record field is added, removed or renamed
-DECISION_SCHEMA_VERSION = 1
+DECISION_SCHEMA_VERSION = 2
+KIND_HOLD_SEARCH = "hold_search"
+KIND_ESTIMATES = "estimates"
+KIND_ROLLING_HORIZON = "rolling_horizon"
+# The values the prediction error model changes (#39)
+TRAIN_ESTIMATES = ("predicted_arrival_s", "onboard_load")
+TRANSFER_ESTIMATES = ("passenger_count", "group_size")
 
 # Why each candidate did or did not become the decision
 OUTCOME_CHOSEN = "chosen"
@@ -82,6 +92,7 @@ def decision_record(result: HoldSearchResult) -> dict[str, Any]:
     decision = next(c for c in result.candidates if c.hold_s == result.hold_s)
     return {
         "schema_version": DECISION_SCHEMA_VERSION,
+        "kind": KIND_HOLD_SEARCH,
         "time_s": inputs.time_s,
         "train_id": inputs.train_id,
         "station_id": inputs.station_id,
@@ -107,6 +118,53 @@ def decision_record(result: HoldSearchResult) -> dict[str, Any]:
             _candidate_record(candidate, decision) for candidate in result.candidates
         ],
     }
+
+
+def estimates_record(
+    truth: ObservationSnapshot, seen: ObservationSnapshot
+) -> dict[str, Any]:
+    """Return what the strategy saw next to the true value for one decision."""
+    return {
+        "schema_version": DECISION_SCHEMA_VERSION,
+        "kind": KIND_ESTIMATES,
+        "time_s": truth.time_s,
+        "train_id": truth.train_id,
+        "station_id": truth.station_id,
+        "platform_id": truth.platform_id,
+        "trains": _side_by_side(truth.trains, seen.trains, "train_id", TRAIN_ESTIMATES),
+        "transfers": _side_by_side(
+            truth.incoming_transfers,
+            seen.incoming_transfers,
+            "group_id",
+            TRANSFER_ESTIMATES,
+        ),
+    }
+
+
+def _side_by_side(
+    actual: Sequence[object],
+    seen: Sequence[object],
+    id_field: str,
+    fields: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    """One entry per item: its ID, then seen and true per field or ``None``.
+
+    Raises:
+        ValueError: the lists differ in length or order.
+    """
+    entries = []
+    for true_item, seen_item in zip(actual, seen, strict=True):
+        item_id, seen_id = getattr(true_item, id_field), getattr(seen_item, id_field)
+        if seen_id != item_id:
+            raise ValueError(f"estimates out of order: {item_id!r} vs {seen_id!r}")
+        entry = {id_field: item_id}
+        for name in fields:
+            entry[name] = {
+                "seen": getattr(seen_item, name),
+                "true": getattr(true_item, name),
+            }
+        entries.append(entry)
+    return entries
 
 
 def candidate_outcome(candidate: BreakEvenResult, decision: BreakEvenResult) -> str:
