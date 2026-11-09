@@ -7,6 +7,7 @@ The strategy sees estimates with prediction error (section 7), while the rule
 check still uses the true snapshot, since safety rules are the simulator's.
 """
 
+import math
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -17,6 +18,7 @@ from simulator.control.interface import (
     ObservationSnapshot,
 )
 from simulator.control.observation_builder import ObservationBuilder, TrainSource
+from simulator.control.planning import RollingHorizonSettings
 from simulator.control.prediction_error import PredictionErrorModel
 from simulator.control.strategies.no_control import NoControlStrategy
 from simulator.engine.events import DepartureDue
@@ -77,7 +79,20 @@ class DecisionPipeline:
             ValueError: the strategy asked to hold another train, or more than
                 once; a hold can only start at that train's own decision point.
         """
-        truth = self._builder.build(decision, trains)
+        # The stacked rolling strategy owns a planner with these settings;
+        # planning probes without one use the same documented default window.
+        planning = getattr(self.strategy, "requires_future_visits", False)
+        until_s = math.inf
+        if planning:
+            planner = getattr(self.strategy, "planner", None)
+            settings = getattr(planner, "settings", RollingHorizonSettings())
+            until_s = decision.time_s + settings.window_s
+        truth = self._builder.build(
+            decision,
+            trains,
+            planning=planning,
+            until_s=until_s,
+        )
         seen = self._error_model.apply(truth) if self._error_model else truth
         actions = self.strategy.evaluate(seen)
         if not actions:

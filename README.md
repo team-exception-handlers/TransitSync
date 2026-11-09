@@ -26,7 +26,7 @@ This is a 1 year software engineering capstone project at Concordia University, 
 
 ## Getting started
 
-The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend provides a health check and a station-layout endpoint, but does not yet expose simulation runs. The frontend is a mock playback interface and does not yet retrieve simulation data from the backend. Simulation runs are started from Python or from the tests.
+The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend provides health, station-layout, and simulation-run endpoints. The frontend still uses its playback fixtures; the run endpoint returns data in the station-view format for future client integration.
 
 ### Requirements
 
@@ -114,7 +114,8 @@ docker compose config         # validate the container configuration
 
 ### API behavior
 
-The backend exposes `GET /health` and `GET /station-layout/{interchange_id}`.
+The backend exposes `GET /health`, `GET /station-layout/{interchange_id}`, and
+`POST /simulation/run`.
 The station-layout endpoint returns platforms, their map coordinates, station
 markers, connection records, and transfer corridor paths for
 `gare_centrale_bonaventure`, `mcgill`, or `edouard_montpetit`. The current
@@ -123,8 +124,40 @@ for all three interchanges. The Gare Centrale–Bonaventure and
 Édouard-Montpetit entries are placeholders; replace their geometry in
 `config/station_layouts.json` when real layouts are prepared. Platform metadata
 comes from the reference network; the layout catalog stores only map-specific
-platform positions and transfer geometry. The endpoint does not include
-passenger or train playback data.
+platform positions and transfer geometry. The station-layout endpoint does
+not include passenger or train playback data.
+
+The simulation-run endpoint accepts a connection ID and run settings:
+
+```json
+{
+  "connection_id": "mcgill-rem-green",
+  "strategy": "schedule_based",
+  "max_hold_time": 120,
+  "error_magnitude": 1,
+  "passenger_flow": "Normal",
+  "disruption_enabled": false
+}
+```
+
+`strategy` must be a registered simulator strategy (`no_control`,
+`schedule_based`, `headway_regulation`, `connection_protection`, or
+`rolling_horizon`). For connection protection, the API derives the destination's
+service headway from its median scheduled gap and shares the passenger route's
+walking parameters with the strategy. The maximum hold
+is in seconds, from 5 to 300 in five-second increments. `error_magnitude`
+defaults to `1.0` and is a finite multiplier from 0 to 3 applied to arrival,
+transfer, and load prediction errors. Passenger flow levels represent 6, 12,
+and 24 passengers per minute for Low, Normal, and High. When enabled, the
+disruption delays the selected REM feeder by 60 seconds at the first arrival
+at or after 120 seconds of simulation time.
+
+Each connection selects its committed one-hour demo scenario. The response
+combines the station layout with `train_events`, map-positioned
+`passenger_tracks`, applied `decisions`, the active `rules`, and the
+`operating_rules` configuration. Identical settings are cached in memory per
+API process (the eight most recently used combinations) and returned as detached
+responses, so callers cannot mutate the cached result.
 
 The default allowed browser origin is `http://localhost:5173`. Configure
 additional exact HTTP(S) origins through
@@ -835,6 +868,24 @@ They check exact departures and holds, repeatable output files, separate platfor
 histories, hold limits and departure restrictions after a hold ends. The example
 uses fixed inputs, seed 7, a 1000-second run, a 90-second minimum gap and a
 300-second maximum hold.
+
+### Connection protection
+
+Connection protection compares the estimated waiting time saved for transferring
+passengers with the extra delay to passengers on board. It checks candidate hold
+lengths and requests the one with the greatest positive benefit, or no hold.
+
+Select `connection_protection` in the scenario's `control` settings and provide
+`connection_headways_s`: the time between services, in seconds, at each platform
+receiving transfers. Walking estimates use the same routes as passenger generation.
+
+The `POST /simulation/run` endpoint also accepts `connection_protection` and
+supplies the selected destination's service headway automatically.
+
+The simulator applies operating limits and may shorten or refuse a requested hold.
+The decision log records evaluated holds, expected passenger counts and reasons,
+including decisions not to hold. Saved control settings are retained in the run
+manifest for reproducibility.
 
 ## Team
 
