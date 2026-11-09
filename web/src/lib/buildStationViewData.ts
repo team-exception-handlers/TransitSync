@@ -131,6 +131,8 @@ export function buildStationViewData(
 
         passenger_tracks: mock.passenger_tracks,
         train_events: mock.train_events,
+
+        passengers: [],
     };
 
     return parseStationViewData(data);

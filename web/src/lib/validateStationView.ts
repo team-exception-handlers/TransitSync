@@ -6,6 +6,8 @@ import type {
     StationViewData,
 } from "../types/stationView";
 
+import { derivePassengerMovements } from "./passengerMovements";
+
 const VALID_PHASES = new Set<PassengerPhase>([
     "walking",
     "queued",
@@ -240,5 +242,9 @@ export function parseStationViewData(
         }
     }
 
-    return data;
+    // Return the validated data with passengers automatically derived
+    return {
+        ...data,
+        passengers: derivePassengerMovements(data.passenger_tracks),
+    };
 }
