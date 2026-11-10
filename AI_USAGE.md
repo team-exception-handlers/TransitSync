@@ -211,6 +211,14 @@ Codex (OpenAI), 50% or more AI-generated. New or substantially changed code:
 component and playback tests. Exact original Figma SVG assets are stored under
 `web/public/playback/`; no new external library was added.
 
+Connection data retrieval (#78): Claude Code (Anthropic), 50% or more
+AI-generated. New or substantially changed code: `api/connection_data.py`,
+`api/main.py`, `api/simulation_run.py`, `tests/api/test_connection_data.py`,
+`tests/api/test_simulation_run.py`. Tests check all three connections against
+hand-written platform IDs, unknown IDs and duplicate IDs at startup, and that
+the simulation-run service shares the same connection index; no new external
+library was added.
+
 Development examples:
 
 - Station layout API (#74): Task: serve the static station/connection map data.

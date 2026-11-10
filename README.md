@@ -26,7 +26,7 @@ This is a 1 year software engineering capstone project at Concordia University, 
 
 ## Getting started
 
-The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend provides health, station-layout, and simulation-run endpoints. The frontend still uses its playback fixtures; the run endpoint returns data in the station-view format for future client integration.
+The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend provides health, station-layout, connection, and simulation-run endpoints. The frontend still uses its playback fixtures; the run endpoint returns data in the station-view format for future client integration.
 
 ### Requirements
 
@@ -40,7 +40,7 @@ the first build.
 ### Build and run with Docker (recommended)
 
 ```powershell
-git clone https://github.com/Gur-Lal/TransitSync.git
+git clone https://github.com/team-exception-handlers/TransitSync.git
 cd TransitSync
 docker compose up --build
 ```
@@ -114,8 +114,11 @@ docker compose config         # validate the container configuration
 
 ### API behavior
 
-The backend exposes `GET /health`, `GET /station-layout/{interchange_id}`, and
-`POST /simulation/run`.
+The backend exposes `GET /health`, `GET /station-layout/{interchange_id}`,
+`GET /connections/{connection_id}`, and `POST /simulation/run`. The connection
+endpoint takes `gare_centrale_bonaventure-rem-orange`, `mcgill-rem-green` or
+`edouard_montpetit-rem-blue` and returns that connection with its interchange's
+full station layout; any other ID returns a 404 error.
 The station-layout endpoint returns platforms, their map coordinates, station
 markers, connection records, and transfer corridor paths for
 `gare_centrale_bonaventure`, `mcgill`, or `edouard_montpetit`. The current
@@ -222,7 +225,8 @@ when applying them to a different timetable. Set the enclosing scenario's
 
 | Path | Contents |
 |---|---|
-| `api/main.py` | FastAPI application factory, health, and station-layout endpoints |
+| `api/main.py` | FastAPI application factory, health, station-layout, and connection endpoints |
+| `api/connection_data.py` | Lookup from connection ID to its station data |
 | `api/settings.py` | Environment-backed API settings and CORS origin validation |
 | `api/station_layout.py` | Validated map geometry and platform mapping |
 | `config/station_layouts.json` | Map-ready station layouts for the three interchanges |

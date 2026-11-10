@@ -338,6 +338,18 @@ def test_run_endpoint_returns_not_found_for_unknown_connection() -> None:
     assert response.json() == {"detail": "Unknown connection: unknown"}
 
 
+def test_run_service_rejects_connection_id_shared_by_two_interchanges() -> None:
+    """Refuse a catalog where one connection ID belongs to two interchanges.
+
+    The service shares the connection-data index, so a repeated ID fails at
+    construction instead of silently resolving to whichever layout comes first.
+    """
+    mcgill = load_station_layouts()["mcgill"]
+
+    with pytest.raises(ValueError, match="duplicate connection ID: 'mcgill-rem-green'"):
+        SimulationRunService({"mcgill": mcgill, "mcgill-copy": mcgill})
+
+
 def test_adaptive_connection_mode_receives_incoming_transfers(monkeypatch):
     """Exercise the real API factory and observe its connection delegate."""
     transfer_counts = []
