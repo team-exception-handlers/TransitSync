@@ -24,6 +24,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from api.connection_data import index_connections
 from api.network_data import DATASET_ID, dataset_metadata, load_reference_network
 from api.station_layout import Connection, StationLayoutResponse
 from api.station_layout import Platform as LayoutPlatform
@@ -156,9 +157,11 @@ class SimulationRunService:
     def __init__(self, station_layouts: Mapping[str, StationLayoutResponse]) -> None:
         """Load fixed network data and prepare a bounded per-app result cache.
 
-        The supplied layouts are validated at app startup and reused for lookups.
+        The supplied layouts are validated at app startup. Connection lookups use
+        the same index as the connection-data route, so both agree on which
+        layout owns a connection; a repeated connection ID raises ValueError.
         """
-        self._station_layouts = station_layouts
+        self._connections = index_connections(station_layouts)
         self._network = load_reference_network()
         self._dataset = dataset_metadata(self._network)
         self._cache: OrderedDict[str, dict[str, object]] = OrderedDict()
@@ -255,11 +258,10 @@ class SimulationRunService:
         Returns the containing layout and connection; raises
         ``UnknownConnectionError`` when no configured interchange matches.
         """
-        for layout in self._station_layouts.values():
-            for connection in layout.connections:
-                if connection.id == connection_id:
-                    return layout, connection
-        raise UnknownConnectionError(f"Unknown connection: {connection_id}")
+        data = self._connections.get(connection_id)
+        if data is None:
+            raise UnknownConnectionError(f"Unknown connection: {connection_id}")
+        return data.station_layout, data.connection
 
     def _load_scenario(
         self,
