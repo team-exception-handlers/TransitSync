@@ -7,16 +7,19 @@ The strategy sees estimates with prediction error (section 7), while the rule
 check still uses the true snapshot, since safety rules are the simulator's.
 """
 
+import copy
+import math
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from simulator.control.decision_audit import DecisionAuditSource
+from simulator.control.decision_audit import DecisionAuditSource, estimates_record
 from simulator.control.interface import (
     DecisionController,
     HoldAction,
     ObservationSnapshot,
 )
 from simulator.control.observation_builder import ObservationBuilder, TrainSource
+from simulator.control.planning import RollingHorizonSettings
 from simulator.control.prediction_error import PredictionErrorModel
 from simulator.control.strategies.no_control import NoControlStrategy
 from simulator.engine.events import DepartureDue
@@ -67,6 +70,7 @@ class DecisionPipeline:
         self._builder = builder or ObservationBuilder()
         self._enforcer = enforcer or PassThroughEnforcer()
         self._error_model = error_model
+        self._estimates: list[dict[str, Any]] = []
 
     def decide(
         self, decision: DepartureDue, trains: TrainSource
@@ -77,8 +81,25 @@ class DecisionPipeline:
             ValueError: the strategy asked to hold another train, or more than
                 once; a hold can only start at that train's own decision point.
         """
-        truth = self._builder.build(decision, trains)
-        seen = self._error_model.apply(truth) if self._error_model else truth
+        # The stacked rolling strategy owns a planner with these settings;
+        # planning probes without one use the same documented default window.
+        planning = getattr(self.strategy, "requires_future_visits", False)
+        until_s = math.inf
+        if planning:
+            planner = getattr(self.strategy, "planner", None)
+            settings = getattr(planner, "settings", RollingHorizonSettings())
+            until_s = decision.time_s + settings.window_s
+        truth = self._builder.build(
+            decision,
+            trains,
+            planning=planning,
+            until_s=until_s,
+        )
+        seen = truth
+        if self._error_model:
+            seen = self._error_model.apply(truth)
+            # Recorded before the strategy runs, so declines are audited too
+            self._estimates.append(estimates_record(truth, seen))
         actions = self.strategy.evaluate(seen)
         if not actions:
             return None
@@ -89,11 +110,13 @@ class DecisionPipeline:
         return self._enforcer.validate(actions[0], truth)
 
     def decision_records(self) -> tuple[dict[str, Any], ...]:
-        """Return the strategy's audit records (#44); none if it keeps none.
+        """Return the strategy's audit records (#44), then any estimates (#39).
 
         The ``Hold`` event already records what the rules applied, so the
-        audit only needs the strategy's own reasoning.
+        audit only needs the strategy's reasoning and what it saw.
         """
+        own: tuple[dict[str, Any], ...] = ()
         if isinstance(self.strategy, DecisionAuditSource):
-            return tuple(self.strategy.decision_records())
-        return ()
+            own = tuple(self.strategy.decision_records())
+        # Copies, so a caller cannot change what is written to the audit log
+        return own + tuple(copy.deepcopy(self._estimates))

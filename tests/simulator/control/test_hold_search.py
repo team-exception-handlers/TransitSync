@@ -18,7 +18,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from simulator.control.break_even import BreakEvenWeights
-from simulator.control.expected_arrivals import TransferEstimate
+from simulator.control.expected_arrivals import TransferEstimate, total_expected_caught
 from simulator.control.hold_search import (
     MAX_CANDIDATES,
     HoldInputs,
@@ -174,14 +174,14 @@ def test_same_inputs_give_the_same_result():
 
 
 def observation(trains):
-    transfer = IncomingTransfer("g1", "green", 40, 120.0, 400.0, 90.0, 80)
+    transfer = IncomingTransfer("g1", "green", 40, 120.0, 400.0, 100.0, 60)
     elsewhere = IncomingTransfer("g2", "rem", 50, 130.0, 400.0, 95.0, 70)
     return ObservationSnapshot(
-        time_s=150.0,
+        time_s=220.0,
         train_id="green_1",
         station_id="mcgill",
         platform_id="green",
-        scheduled_departure_s=150.0,
+        scheduled_departure_s=190.0,
         trains=trains,
         platforms=(),
         incoming_transfers=(transfer, elsewhere),
@@ -189,12 +189,29 @@ def observation(trains):
 
 
 def test_inputs_are_read_from_the_observation():
+    class LateDecisionCdf:
+        """Give the share of passengers who finish walking by each time in seconds."""
+
+        def cdf(self, t_s):
+            return {90.0: 0.25, 120.0: 0.75, 150.0: 0.875}[t_s]
+
     train = TrainState("green_1", "green", None, None, None, 0.0, 420, 800)
     other = TrainState("rem_1", "rem", None, None, None, 0.0, 10, 780)
     built = HoldInputs.from_observation(observation((other, train)), headway_s=240.0)
     assert built == HoldInputs(
-        150.0, "green_1", "mcgill", "green", 420, 240.0, (GROUP,)
+        220.0,
+        "green_1",
+        "mcgill",
+        "green",
+        420,
+        240.0,
+        (TransferEstimate("g1", 60, 120.0),),
     )
+    # At the decision, 120 s have passed since the feeder arrived (220 - 100).
+    # Another 30 s catches 60 * (0.875 - 0.75) = 7.5 more passengers.
+    # Using the schedule instead gives 90 s and wrongly counts 30 passengers.
+    # These values have no rounding error, so we can check the exact result.
+    assert total_expected_caught(built.transfers, 30.0, LateDecisionCdf()) == 7.5
 
 
 def test_inputs_need_the_deciding_train_in_the_observation():

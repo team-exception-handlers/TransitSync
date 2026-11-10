@@ -176,6 +176,32 @@ def test_explicit_toronto_timezone_matches_default(dataset):
     assert load(dataset, timezone="America/Toronto") == load(dataset)
 
 
+def test_connection_settings_round_trip_through_a_scenario_file(dataset, tmp_path):
+    """Save and reload the exact connection settings, including non-default values.
+
+    Walking parameters belong to the transfer routes, not the control JSON.
+    Existing default round-trip tests protect older saved scenarios.
+    """
+    control = {
+        "strategy": "connection_protection",
+        "connection_headways_s": {"green": 300.25},
+        "hold_search": {"step_s": 10, "max_hold_s": 90},
+        "weights": {"w_wait": 1.5, "w_onboard": 0.75},
+        "prediction_error": {
+            "arrival_kappa": 0.5,
+            "transfer_kappa": 2,
+            "load_kappa": 0,
+        },
+    }
+    scenario = load(dataset, control=control)
+    saved = scenario.to_dict()
+    assert saved["control"] == control
+    path = tmp_path / "connection.json"
+    path.write_text(json.dumps(saved), encoding="utf-8")
+    restored = load_scenario_file(path, {dataset.dataset_id: dataset})
+    assert restored.to_dict() == saved
+
+
 @pytest.mark.parametrize(
     ("field", "value"),
     [
@@ -491,7 +517,8 @@ def test_invalid_control_settings_name_the_field(dataset, control, message):
 def test_unknown_strategy_error_lists_choices(dataset):
     with pytest.raises(
         ScenarioValidationError,
-        match="choose headway_regulation, no_control, schedule_based",
+        match="choose adaptive, connection_protection, headway_regulation, "
+        "no_control, rolling_horizon, schedule_based",
     ):
         load(dataset, control={"strategy": "schedule"})
 

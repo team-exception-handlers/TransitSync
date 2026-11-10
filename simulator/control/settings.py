@@ -18,18 +18,32 @@ strategy's information was; all zero is perfect information.
 Headway regulation (#48) needs a fixed target in seconds for each platform.
 Targets are copied and frozen. The component factory checks known platform
 IDs, complete trips and the gap used by the train engine.
+
+Connection protection (#51) has its own service headways in seconds.
+They estimate the wait avoided when a passenger catches the current train.
+These values stay fixed for the run and are separate from target-gap settings.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
 from sys import maxsize
+from types import MappingProxyType
 from typing import Any
 
 from simulator.control.break_even import BreakEvenWeights
+from simulator.control.connection_headways import validate_connection_headways
 from simulator.control.hold_search import HoldSearchSettings
+from simulator.control.planning import RollingHorizonSettings
 from simulator.control.prediction_error import PredictionErrorSettings
 from simulator.control.registry import StrategyRegistry
 from simulator.control.strategies import STRATEGIES
+from simulator.control.strategies.adaptive import (
+    AdaptiveStrategy,
+    validate_irregularity_threshold,
+)
+from simulator.control.strategies.connection_protection import (
+    ConnectionProtectionStrategy,
+)
 from simulator.control.strategies.headway_regulation import HeadwayRegulationStrategy
 
 DEFAULT_STRATEGY = "no_control"
@@ -41,10 +55,19 @@ CONTROL_FIELDS = frozenset(
         "weights",
         "target_headways_s",
         "prediction_error",
+        "rolling_horizon",
         "irregularity_window_size",
+        "irregularity_threshold",
+        "connection_headways_s",
     }
 )
 OPERATING_RULES_FIELDS = frozenset({"max_hold_time", "min_safe_gap", "rule_action_map"})
+TARGET_HEADWAY_STRATEGIES = frozenset(
+    {HeadwayRegulationStrategy.name, AdaptiveStrategy.name}
+)
+CONNECTION_HEADWAY_STRATEGIES = frozenset(
+    {ConnectionProtectionStrategy.name, AdaptiveStrategy.name}
+)
 
 
 class ControlSettingsError(ValueError):
@@ -63,19 +86,27 @@ class ControlSettings:
         default_factory=PredictionErrorSettings
     )
     irregularity_window_size: int = DEFAULT_IRREGULARITY_WINDOW_SIZE
+    rolling_horizon: RollingHorizonSettings = field(
+        default_factory=RollingHorizonSettings
+    )
+    connection_headways_s: Mapping[str, float] | None = None
+    irregularity_threshold: float | None = None
 
     def __post_init__(self) -> None:
-        """Validate the window length and freeze targets in seconds."""
+        """Validate the window length and freeze headways in seconds."""
         size = self.irregularity_window_size
         if type(size) is not int or not 0 < size <= maxsize:
             raise ControlSettingsError(
                 "control.irregularity_window_size: expected a positive integer "
                 f"up to {maxsize}"
             )
-        if self.strategy != HeadwayRegulationStrategy.name:
+        self._check_irregularity_threshold()
+        self._check_connection_headways()
+        if self.strategy not in TARGET_HEADWAY_STRATEGIES:
             if self.target_headways_s is not None:
                 raise ControlSettingsError(
-                    "control.target_headways_s: only valid for headway_regulation"
+                    "control.target_headways_s: "
+                    "only valid for headway_regulation or adaptive"
                 )
             return
         if self.target_headways_s is None:
@@ -85,6 +116,28 @@ class ControlSettings:
         except ValueError as error:
             raise ControlSettingsError(f"control.target_headways_s: {error}") from error
         object.__setattr__(self, "target_headways_s", targets.target_headways_s)
+
+    def _check_connection_headways(self) -> None:
+        """Require connection headways for strategies that protect connections.
+
+        Copy the map so caller changes cannot change an already loaded scenario.
+        """
+        if self.strategy not in CONNECTION_HEADWAY_STRATEGIES:
+            if self.connection_headways_s is not None:
+                raise ControlSettingsError(
+                    "control.connection_headways_s: "
+                    "only valid for connection_protection or adaptive"
+                )
+            return
+        if self.connection_headways_s is None:
+            raise ControlSettingsError("control.connection_headways_s: required")
+        try:
+            headways = validate_connection_headways(self.connection_headways_s)
+        except ValueError as error:
+            raise ControlSettingsError(
+                f"control.connection_headways_s: {error}"
+            ) from error
+        object.__setattr__(self, "connection_headways_s", MappingProxyType(headways))
 
     def to_dict(self) -> dict[str, Any]:
         """Return the settings as saved in a scenario file and in the manifest."""
@@ -96,9 +149,33 @@ class ControlSettings:
         }
         if self.target_headways_s is not None:
             saved["target_headways_s"] = dict(self.target_headways_s)
+        if self.strategy == "rolling_horizon":
+            saved["rolling_horizon"] = self.rolling_horizon.to_dict()
         if self.irregularity_window_size != DEFAULT_IRREGULARITY_WINDOW_SIZE:
             saved["irregularity_window_size"] = self.irregularity_window_size
+        if self.connection_headways_s is not None:
+            saved["connection_headways_s"] = dict(self.connection_headways_s)
+        if self.irregularity_threshold is not None:
+            saved["irregularity_threshold"] = self.irregularity_threshold
         return saved
+
+    def _check_irregularity_threshold(self) -> None:
+        """Require a threshold for adaptive mode and validate its range."""
+        if self.strategy != AdaptiveStrategy.name:
+            if self.irregularity_threshold is not None:
+                raise ControlSettingsError(
+                    "control.irregularity_threshold: only valid for adaptive"
+                )
+            return
+
+        if self.irregularity_threshold is None:
+            raise ControlSettingsError("control.irregularity_threshold: required")
+
+        try:
+            threshold = validate_irregularity_threshold(self.irregularity_threshold)
+        except ValueError as error:
+            raise ControlSettingsError(str(error)) from error
+        object.__setattr__(self, "irregularity_threshold", threshold)
 
 
 def parse_control_settings(
@@ -128,14 +205,30 @@ def parse_control_settings(
         raise ControlSettingsError(
             f"control.strategy: unknown strategy {strategy!r}; choose {choices}"
         )
-    if "target_headways_s" in value and strategy != HeadwayRegulationStrategy.name:
+    # Check presence too, since an explicitly supplied null still belongs to the field.
+    if (
+        "connection_headways_s" in value
+        and strategy not in CONNECTION_HEADWAY_STRATEGIES
+    ):
         raise ControlSettingsError(
-            "control.target_headways_s: only valid for headway_regulation"
+            "control.connection_headways_s: "
+            "only valid for connection_protection or adaptive"
+        )
+    if "target_headways_s" in value and strategy not in TARGET_HEADWAY_STRATEGIES:
+        raise ControlSettingsError(
+            "control.target_headways_s: only valid for headway_regulation or adaptive"
+        )
+    if "irregularity_threshold" in value and strategy != AdaptiveStrategy.name:
+        raise ControlSettingsError(
+            "control.irregularity_threshold: only valid for adaptive"
         )
     return ControlSettings(
         strategy=strategy,
         hold_search=_parse_section(value, "hold_search", HoldSearchSettings),
         weights=_parse_section(value, "weights", BreakEvenWeights),
+        rolling_horizon=_parse_section(
+            value, "rolling_horizon", RollingHorizonSettings
+        ),
         target_headways_s=value.get("target_headways_s"),
         prediction_error=_parse_section(
             value, "prediction_error", PredictionErrorSettings
@@ -143,6 +236,8 @@ def parse_control_settings(
         irregularity_window_size=value.get(
             "irregularity_window_size", DEFAULT_IRREGULARITY_WINDOW_SIZE
         ),
+        connection_headways_s=value.get("connection_headways_s"),
+        irregularity_threshold=value.get("irregularity_threshold"),
     )
 
 
