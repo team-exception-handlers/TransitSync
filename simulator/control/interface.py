@@ -14,6 +14,10 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import ClassVar
 
+from simulator.control.planning import FutureVisit
+from simulator.control.validation import finite_number
+from simulator.trains.suspension import LineSuspension
+
 
 def _check_text(label: str, value: object) -> None:
     if not isinstance(value, str) or not value.strip():
@@ -95,6 +99,8 @@ class ObservationSnapshot:
 
     ``scheduled_departure_s`` is this stop's timetable departure in seconds,
     including at a final stop. ``TrainState`` describes each train's next stop.
+    ``service_irregularity`` is the deciding service's rolling normalized
+    headway deviation, or ``None`` until a valid gap has been measured.
     Raises ``ValueError`` if a collection is not a tuple.
     """
 
@@ -106,13 +112,28 @@ class ObservationSnapshot:
     trains: tuple[TrainState, ...]
     platforms: tuple[PlatformState, ...]
     incoming_transfers: tuple[IncomingTransfer, ...]
+    service_irregularity: float | None = None
+    future_visits: tuple[FutureVisit, ...] = ()
+    minimum_gap_s: float = 90.0
+    suspensions: tuple[LineSuspension, ...] = ()
+    headway_visits: tuple[FutureVisit, ...] = ()
 
     def __post_init__(self) -> None:
         # Frozen only stops reassignment; a list or deque could still be changed
         # in place, so every collection must be an immutable tuple
-        for name in ("trains", "platforms", "incoming_transfers"):
+        for name in (
+            "trains",
+            "platforms",
+            "incoming_transfers",
+            "future_visits",
+            "suspensions",
+            "headway_visits",
+        ):
             if not isinstance(getattr(self, name), tuple):
                 raise ValueError(f"ObservationSnapshot.{name} must be a tuple")
+        gap = finite_number("ObservationSnapshot.minimum_gap_s", self.minimum_gap_s)
+        if gap <= 0:
+            raise ValueError("ObservationSnapshot.minimum_gap_s must be > 0")
 
 
 class DecisionController(ABC):

@@ -7,6 +7,8 @@ import { ConnectionSelector } from "./components/connection-selector";
 import { connectionRuns } from "./data/connection-runs";
 import { stationViewData } from "./data/stationViewData";
 import { SimulationClock } from "./components/simulation-clock";
+import { OperatingRulesPanel } from "./components/operating-rules-panel";
+import { DecisionView } from "./components/decision-view";
 import { startPlaybackClock } from "./lib/playback-clock";
 import { PlaybackControls } from "./components/playback-controls";
 import { SpeedSelector } from "./components/speed-selector";
@@ -18,6 +20,14 @@ export default function App() {
   const data = usePlaybackStore(
     (state) => state.data
   );
+  const selectedConnectionId = usePlaybackStore(
+    (state) => state.selectedConnectionId
+  );
+  // The heading must persistently name the connection the user selected, even
+  // when a run bundles more than one connection, not just data?.connections[0].
+  const selectedConnection =
+    data?.connections.find((connection) => connection.id === selectedConnectionId) ??
+    data?.connections[0];
 
   useEffect(() => {
     const store = usePlaybackStore.getState();
@@ -86,7 +96,7 @@ export default function App() {
           >
             <div className="station-heading">
               <span className="clock-heading">Selected connection</span>
-              <h1>{data?.connections[0]?.label ?? "Choose a connection"}</h1>
+              <h1>{selectedConnection?.label ?? "Choose a connection"}</h1>
               <small>Mock playback · synthetic passenger and train data</small>
             </div>
             <StationCanvas />
@@ -98,11 +108,11 @@ export default function App() {
             {/* SIMULATION TIME */}
             <SimulationClock />
 
-            {/* EMPTY SECTION */}
-            <div className="panel" />
+            {/* OPERATING RULES */}
+            <OperatingRulesPanel />
 
-            {/* EMPTY SECTION */}
-            <div className="panel" />
+            {/* DECISIONS */}
+            <DecisionView />
 
           </aside>
 

@@ -23,7 +23,8 @@ Output, written to ``output_dir``:
 - ``summary.json``: counts for the run
 - ``manifest.json``: scenario metadata and configured disruption status
 - ``decisions.jsonl``: one audit record per hold decision (#44), from every
-  component that keeps them; empty when the strategy keeps none
+  component that keeps them, plus what the strategy saw next to the true
+  values when the run has a prediction error model (#39); otherwise empty
 
 The output files always come from the same run. A folder that already holds
 any output file is rejected before the run starts, and a run that fails removes
@@ -97,6 +98,15 @@ class ManifestContributor(Protocol):
 
     def manifest_entries(self) -> Sequence[dict[str, object]]:
         """Return JSON-compatible entries describing configured disruptions."""
+        ...
+
+
+@runtime_checkable
+class BoardingManifestContributor(Protocol):
+    """A component reporting configured boarding-throughput constraints."""
+
+    def boarding_manifest_entries(self) -> Sequence[dict[str, object]]:
+        """Return JSON-compatible per-train fixed-window settings."""
         ...
 
 
@@ -236,6 +246,17 @@ def _manifest_record(
     control = getattr(scenario, "control", None)
     if isinstance(control, ControlSettings):
         manifest["control"] = control.to_dict()
+        # Every kappa = 0: perfect information, reported as an unachievable
+        # upper bound and never as a deployable result (section 7, #39)
+        manifest["upper_bound"] = control.prediction_error.perfect_information
+    boarding = [
+        entry
+        for component in components
+        if isinstance(component, BoardingManifestContributor)
+        for entry in component.boarding_manifest_entries()
+    ]
+    if boarding:
+        manifest["rem_door_throughput"] = boarding
     return manifest
 
 

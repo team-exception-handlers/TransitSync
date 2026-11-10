@@ -7,8 +7,9 @@ the train and transfer components. The views return copies, so the snapshot
 holds no references into simulator state.
 """
 
+import math
 from collections.abc import Sequence
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from simulator.control.interface import (
     IncomingTransfer,
@@ -16,6 +17,7 @@ from simulator.control.interface import (
     PlatformState,
     TrainState,
 )
+from simulator.control.planning import FutureVisit
 from simulator.engine.events import DepartureDue
 
 
@@ -33,18 +35,53 @@ class TransferSource(Protocol):
     def incoming_transfers(self) -> tuple[IncomingTransfer, ...]: ...
 
 
+@runtime_checkable
+class PlanningSource(TrainSource, Protocol):
+    """Optional full-route view required by coordinated strategies (#61)."""
+
+    def future_visits(
+        self, now_s: float, until_s: float = math.inf
+    ) -> tuple[FutureVisit, ...]: ...
+
+
 class ObservationBuilder:
     """Builds snapshots from the trains plus any number of transfer sources."""
 
     def __init__(self, transfer_sources: Sequence[TransferSource] = ()) -> None:
         self._transfer_sources = tuple(transfer_sources)
 
-    def build(self, decision: DepartureDue, trains: TrainSource) -> ObservationSnapshot:
-        """Return what is true at ``decision``, before any prediction error."""
+    def build(
+        self,
+        decision: DepartureDue,
+        trains: TrainSource,
+        *,
+        planning: bool = False,
+        until_s: float = math.inf,
+    ) -> ObservationSnapshot:
+        """Return what is true at ``decision``, before any prediction error.
+
+        ``until_s`` is an inclusive absolute simulation time in seconds. Pass
+        the cutoff to the source so excluded decisions are not materialized.
+        Separate headway references retain only needed later services. Both
+        views apply only when the controller requests a planning observation.
+        """
+        if planning and not isinstance(trains, PlanningSource):
+            raise ValueError("coordinated planning requires a future-visits source")
         transfers = tuple(
             group
             for source in self._transfer_sources
             for group in source.incoming_transfers()
+        )
+        irregularity = getattr(trains, "service_irregularity", None)
+        visits = trains.future_visits(decision.time_s, until_s) if planning else ()
+        references = getattr(trains, "headway_visits", None)
+        # Keep later-service metadata separate from the bounded decision view.
+        headways = (
+            references(
+                decision.time_s, until_s, frozenset(v.platform_id for v in visits)
+            )
+            if planning and references is not None and math.isfinite(until_s)
+            else ()
         )
         return ObservationSnapshot(
             time_s=decision.time_s,
@@ -55,4 +92,13 @@ class ObservationBuilder:
             trains=trains.train_states(),
             platforms=trains.platform_states(),
             incoming_transfers=transfers,
+            future_visits=visits,
+            headway_visits=headways,
+            minimum_gap_s=getattr(trains, "minimum_gap_s", 90.0),
+            suspensions=getattr(trains, "suspensions", ()),
+            service_irregularity=(
+                irregularity(decision.train_id, decision.platform_id)
+                if irregularity is not None
+                else None
+            ),
         )

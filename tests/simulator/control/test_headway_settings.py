@@ -45,6 +45,11 @@ def test_targets_preserve_search_and_weights():
         "target_headways_s": {"P1": 300.25, "P2": 420},
         "hold_search": {"step_s": 10, "max_hold_s": 90},
         "weights": {"w_wait": 1.5, "w_onboard": 0.75},
+        "prediction_error": {
+            "arrival_kappa": 1.0,
+            "transfer_kappa": 1.0,
+            "load_kappa": 1.0,
+        },
     }
 
 
@@ -161,6 +166,11 @@ def test_old_serialization_has_no_headway_only_key(strategy):
         "strategy": strategy,
         "hold_search": {"step_s": 5.0, "max_hold_s": 60.0},
         "weights": {"w_wait": 2.0, "w_onboard": 1.0},
+        "prediction_error": {
+            "arrival_kappa": 1.0,
+            "transfer_kappa": 1.0,
+            "load_kappa": 1.0,
+        },
     }
 
 
@@ -213,7 +223,7 @@ def test_registry_rejects_ignored_targets(strategy):
 
 def test_unknown_name_still_lists_available_strategies():
     """An unknown name lists the available strategies."""
-    with pytest.raises(UnknownStrategyError, match="available: headway_regulation"):
+    with pytest.raises(UnknownStrategyError, match="available: .*headway_regulation"):
         STRATEGIES.build("headway")
 
 

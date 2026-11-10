@@ -5,6 +5,7 @@ import json
 import sys
 from dataclasses import replace
 from datetime import date
+from pathlib import Path
 
 import pytest
 
@@ -44,6 +45,46 @@ def load(dataset, **overrides):
     }
     values.update(overrides)
     return load_scenario_json(json.dumps(values), {dataset.dataset_id: dataset})
+
+
+@pytest.mark.parametrize(
+    "interchange", ["gare_centrale_bonaventure", "mcgill", "edouard_montpetit"]
+)
+def test_committed_demo_scenario_matches_weekday_preset(dataset, interchange):
+    """Load actual demo files; preserve one connection, seed and loader defaults.
+
+    Compare with the preset to check every common setting, including Toronto's
+    resolved start time. Policy fields stay absent so endpoint overrides do not
+    compete with a policy baked into the base file.
+    """
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "config"
+        / "scenarios"
+        / f"{interchange}.json"
+    )
+    network_path = path.parents[1] / "reference_network" / "network.json"
+    network = json.loads(network_path.read_text(encoding="utf-8"))
+    raw = json.loads(path.read_text(encoding="utf-8"))
+    # Anchor the demo to both the declared weekday and actual extracted days.
+    # Otherwise a re-extraction could leave these files silently pointing at
+    # dates that the runtime dataset no longer contains.
+    assert raw["date"] == network["reference_dates"]["weekday"]
+    service_dates = tuple(
+        sorted(date.fromisoformat(day["service_date"]) for day in network["schedules"])
+    )
+    assert date.fromisoformat(raw["date"]) in service_dates
+    demo_dataset = replace(
+        dataset, dataset_id="reference-network", service_dates=service_dates
+    )
+    scenario = load_scenario_file(path, {demo_dataset.dataset_id: demo_dataset})
+    assert scenario.interchanges == (interchange,)
+    assert scenario.master_seed == 42
+    assert scenario == resolve_preset(
+        "weekday_morning", demo_dataset, interchanges=(interchange,)
+    )
+    assert "control" not in raw
+    assert "operating_rules" not in raw
 
 
 @pytest.mark.parametrize(
@@ -110,6 +151,11 @@ def test_defaults_and_saved_settings_round_trip(dataset):
             "strategy": "no_control",
             "hold_search": {"step_s": 5.0, "max_hold_s": 60.0},
             "weights": {"w_wait": 2.0, "w_onboard": 1.0},
+            "prediction_error": {
+                "arrival_kappa": 1.0,
+                "transfer_kappa": 1.0,
+                "load_kappa": 1.0,
+            },
         },
         "operating_rules": {
             "max_hold_time": 300.0,
@@ -128,6 +174,32 @@ def test_defaults_and_saved_settings_round_trip(dataset):
 
 def test_explicit_toronto_timezone_matches_default(dataset):
     assert load(dataset, timezone="America/Toronto") == load(dataset)
+
+
+def test_connection_settings_round_trip_through_a_scenario_file(dataset, tmp_path):
+    """Save and reload the exact connection settings, including non-default values.
+
+    Walking parameters belong to the transfer routes, not the control JSON.
+    Existing default round-trip tests protect older saved scenarios.
+    """
+    control = {
+        "strategy": "connection_protection",
+        "connection_headways_s": {"green": 300.25},
+        "hold_search": {"step_s": 10, "max_hold_s": 90},
+        "weights": {"w_wait": 1.5, "w_onboard": 0.75},
+        "prediction_error": {
+            "arrival_kappa": 0.5,
+            "transfer_kappa": 2,
+            "load_kappa": 0,
+        },
+    }
+    scenario = load(dataset, control=control)
+    saved = scenario.to_dict()
+    assert saved["control"] == control
+    path = tmp_path / "connection.json"
+    path.write_text(json.dumps(saved), encoding="utf-8")
+    restored = load_scenario_file(path, {dataset.dataset_id: dataset})
+    assert restored.to_dict() == saved
 
 
 @pytest.mark.parametrize(
@@ -445,7 +517,8 @@ def test_invalid_control_settings_name_the_field(dataset, control, message):
 def test_unknown_strategy_error_lists_choices(dataset):
     with pytest.raises(
         ScenarioValidationError,
-        match="choose headway_regulation, no_control, schedule_based",
+        match="choose connection_protection, headway_regulation, "
+        "no_control, rolling_horizon, schedule_based",
     ):
         load(dataset, control={"strategy": "schedule"})
 
@@ -460,3 +533,18 @@ def test_manifest_records_strategy_of_the_run(
     assert manifest["control"]["strategy"] == "schedule_based"
     # The search settings are saved too, so each hold can be recalculated (#43)
     assert manifest["control"]["hold_search"] == {"step_s": 5.0, "max_hold_s": 60.0}
+
+
+@pytest.mark.parametrize(
+    ("kappas", "upper_bound"),
+    [({"arrival_kappa": 0, "transfer_kappa": 0, "load_kappa": 0}, True), ({}, False)],
+)
+def test_manifest_labels_perfect_information_as_upper_bound(
+    dataset, tmp_path, build_streams, build_tiny_network, kappas, upper_bound
+):
+    scenario = load(dataset, duration_s=600, control={"prediction_error": kappas})
+    result = run_scenario(scenario, build_streams, build_tiny_network, tmp_path)
+    manifest = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert manifest["upper_bound"] is upper_bound
+    expected = 0.0 if upper_bound else 1.0
+    assert manifest["control"]["prediction_error"]["arrival_kappa"] == expected

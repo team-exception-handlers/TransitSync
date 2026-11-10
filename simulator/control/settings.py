@@ -11,23 +11,51 @@ break-even search (US-2.2, #43): the candidate increment and upper bound, and
 the weights of waiting against riding time. Both are saved in the manifest,
 so every run records the values its holds were chosen with.
 
+The optional ``"prediction_error"`` object holds the error multipliers kappa
+(#39). They are always saved, so every run records how accurate its
+strategy's information was; all zero is perfect information.
+
 Headway regulation (#48) needs a fixed target in seconds for each platform.
 Targets are copied and frozen. The component factory checks known platform
 IDs, complete trips and the gap used by the train engine.
+
+Connection protection (#51) has its own service headways in seconds.
+They estimate the wait avoided when a passenger catches the current train.
+These values stay fixed for the run and are separate from target-gap settings.
 """
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields
+from sys import maxsize
+from types import MappingProxyType
 from typing import Any
 
 from simulator.control.break_even import BreakEvenWeights
+from simulator.control.connection_headways import validate_connection_headways
 from simulator.control.hold_search import HoldSearchSettings
+from simulator.control.planning import RollingHorizonSettings
+from simulator.control.prediction_error import PredictionErrorSettings
 from simulator.control.registry import StrategyRegistry
 from simulator.control.strategies import STRATEGIES
+from simulator.control.strategies.connection_protection import (
+    ConnectionProtectionStrategy,
+)
 from simulator.control.strategies.headway_regulation import HeadwayRegulationStrategy
 
 DEFAULT_STRATEGY = "no_control"
-CONTROL_FIELDS = frozenset({"strategy", "hold_search", "weights", "target_headways_s"})
+DEFAULT_IRREGULARITY_WINDOW_SIZE = 5
+CONTROL_FIELDS = frozenset(
+    {
+        "strategy",
+        "hold_search",
+        "weights",
+        "target_headways_s",
+        "prediction_error",
+        "rolling_horizon",
+        "irregularity_window_size",
+        "connection_headways_s",
+    }
+)
 OPERATING_RULES_FIELDS = frozenset({"max_hold_time", "min_safe_gap", "rule_action_map"})
 
 
@@ -43,9 +71,24 @@ class ControlSettings:
     hold_search: HoldSearchSettings = field(default_factory=HoldSearchSettings)
     weights: BreakEvenWeights = field(default_factory=BreakEvenWeights)
     target_headways_s: Mapping[str, float] | None = None
+    prediction_error: PredictionErrorSettings = field(
+        default_factory=PredictionErrorSettings
+    )
+    irregularity_window_size: int = DEFAULT_IRREGULARITY_WINDOW_SIZE
+    rolling_horizon: RollingHorizonSettings = field(
+        default_factory=RollingHorizonSettings
+    )
+    connection_headways_s: Mapping[str, float] | None = None
 
     def __post_init__(self) -> None:
-        """Freeze targets in seconds; raise ControlSettingsError for bad targets."""
+        """Validate the window length and freeze headways in seconds."""
+        size = self.irregularity_window_size
+        if type(size) is not int or not 0 < size <= maxsize:
+            raise ControlSettingsError(
+                "control.irregularity_window_size: expected a positive integer "
+                f"up to {maxsize}"
+            )
+        self._check_connection_headways()
         if self.strategy != HeadwayRegulationStrategy.name:
             if self.target_headways_s is not None:
                 raise ControlSettingsError(
@@ -60,16 +103,44 @@ class ControlSettings:
             raise ControlSettingsError(f"control.target_headways_s: {error}") from error
         object.__setattr__(self, "target_headways_s", targets.target_headways_s)
 
+    def _check_connection_headways(self) -> None:
+        """Require connection headways only when that strategy is selected.
+
+        Copy the map so caller changes cannot change an already loaded scenario.
+        """
+        if self.strategy != ConnectionProtectionStrategy.name:
+            if self.connection_headways_s is not None:
+                raise ControlSettingsError(
+                    "control.connection_headways_s: "
+                    "only valid for connection_protection"
+                )
+            return
+        if self.connection_headways_s is None:
+            raise ControlSettingsError("control.connection_headways_s: required")
+        try:
+            headways = validate_connection_headways(self.connection_headways_s)
+        except ValueError as error:
+            raise ControlSettingsError(
+                f"control.connection_headways_s: {error}"
+            ) from error
+        object.__setattr__(self, "connection_headways_s", MappingProxyType(headways))
+
     def to_dict(self) -> dict[str, Any]:
         """Return the settings as saved in a scenario file and in the manifest."""
         saved: dict[str, Any] = {
             "strategy": self.strategy,
             "hold_search": self.hold_search.to_dict(),
             "weights": self.weights.to_dict(),
+            "prediction_error": self.prediction_error.to_dict(),
         }
-        # Keep the saved format unchanged for other strategies.
         if self.target_headways_s is not None:
             saved["target_headways_s"] = dict(self.target_headways_s)
+        if self.strategy == "rolling_horizon":
+            saved["rolling_horizon"] = self.rolling_horizon.to_dict()
+        if self.irregularity_window_size != DEFAULT_IRREGULARITY_WINDOW_SIZE:
+            saved["irregularity_window_size"] = self.irregularity_window_size
+        if self.connection_headways_s is not None:
+            saved["connection_headways_s"] = dict(self.connection_headways_s)
         return saved
 
 
@@ -100,6 +171,14 @@ def parse_control_settings(
         raise ControlSettingsError(
             f"control.strategy: unknown strategy {strategy!r}; choose {choices}"
         )
+    if (
+        "connection_headways_s" in value
+        and strategy != ConnectionProtectionStrategy.name
+    ):
+        # Check presence as well as value: supplied null still belongs to this field.
+        raise ControlSettingsError(
+            "control.connection_headways_s: only valid for connection_protection"
+        )
     if "target_headways_s" in value and strategy != HeadwayRegulationStrategy.name:
         raise ControlSettingsError(
             "control.target_headways_s: only valid for headway_regulation"
@@ -108,7 +187,17 @@ def parse_control_settings(
         strategy=strategy,
         hold_search=_parse_section(value, "hold_search", HoldSearchSettings),
         weights=_parse_section(value, "weights", BreakEvenWeights),
+        rolling_horizon=_parse_section(
+            value, "rolling_horizon", RollingHorizonSettings
+        ),
         target_headways_s=value.get("target_headways_s"),
+        prediction_error=_parse_section(
+            value, "prediction_error", PredictionErrorSettings
+        ),
+        irregularity_window_size=value.get(
+            "irregularity_window_size", DEFAULT_IRREGULARITY_WINDOW_SIZE
+        ),
+        connection_headways_s=value.get("connection_headways_s"),
     )
 
 

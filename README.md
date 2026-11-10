@@ -26,34 +26,145 @@ This is a 1 year software engineering capstone project at Concordia University, 
 
 ## Getting started
 
-The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. There is no user interface or command-line program yet; a run is started from Python or from the tests.
+The simulation engine core (event schema, event queue and clock, simulation runner) is in place and covered by tests. The backend provides health, station-layout, and simulation-run endpoints. The frontend still uses its playback fixtures; the run endpoint returns data in the station-view format for future client integration.
 
 ### Requirements
 
-- Python 3.12 or newer (`py --list` shows the installed versions on Windows)
+- Docker Desktop for Windows with Docker Compose
 - Git
 
-### Setup
+Python and Node.js are not required to run the application with Docker. Docker
+downloads the base images and installs the pinned project dependencies during
+the first build.
+
+### Build and run with Docker (recommended)
 
 ```powershell
 git clone https://github.com/Gur-Lal/TransitSync.git
 cd TransitSync
+docker compose up --build
+```
+
+When the services start, open:
+
+- Frontend: <http://localhost:5173>
+- Backend health check: <http://localhost:8000/health>
+- Backend McGill layout: <http://localhost:8000/station-layout/mcgill>
+- Backend API documentation: <http://localhost:8000/docs>
+
+The backend permits the frontend origin `http://localhost:5173` by default.
+To allow additional browser origins, set `TRANSITSYNC_CORS_ORIGINS` to a
+comma-separated list of exact HTTP(S) origins in PowerShell before starting
+Compose:
+
+```powershell
+$env:TRANSITSYNC_CORS_ORIGINS = "http://localhost:5173,http://127.0.0.1:5173"
+docker compose up --build
+```
+
+Press `Ctrl+C` to stop services running in the foreground. To run them in the
+background instead, use `docker compose up --build --detach`; stop and remove
+the containers and network with `docker compose down`.
+
+If Docker Desktop's integrated builder fails with `exec format error`, try a
+separate BuildKit builder:
+
+```powershell
+docker buildx create --name transitsync-builder --driver docker-container
+docker compose build --builder transitsync-builder
+docker compose up --detach
+```
+
+### Local development (optional)
+
+For running the Python tests or developing without containers, install Python
+3.12 or newer and Node.js 22.22.2 or newer. From the repository root, create a
+Python virtual environment and install the development dependencies:
+
+```powershell
 py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements-dev.txt
 ```
 
-On macOS or Linux, the environment is created with `python3.12 -m venv .venv` and activated with `source .venv/bin/activate`.
+On macOS or Linux, create the environment with `python3.12 -m venv .venv` and
+activate it with `source .venv/bin/activate`. In VS Code, select
+`.venv\Scripts\python.exe` through **Python: Select Interpreter** on Windows.
 
-If PowerShell blocks `Activate.ps1`, running `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once allows it. In VS Code, the interpreter is set to `.venv\Scripts\python.exe` through **Python: Select Interpreter**.
+Install the frontend dependencies from the lockfile with `npm ci` in `web/`.
+Run the frontend with `npm run dev` from that directory and the API in a
+separate terminal from the repository root:
+
+```powershell
+$env:TRANSITSYNC_CORS_ORIGINS = "http://localhost:5173"
+python -m uvicorn api.main:app --reload
+```
+
+The `.venv` and `web/node_modules` directories are local development artifacts;
+they are excluded from Docker build contexts.
 
 ### Running the checks
 
 ```powershell
-pytest -v                 # all tests, one line per test
-ruff check .              # lint, including the complexity and function size limits
-ruff format --check .     # formatting
+pytest -v                     # all tests, one line per test
+ruff check .                  # lint, including complexity and function size limits
+ruff format --check .         # formatting
+docker compose config         # validate the container configuration
 ```
+
+### API behavior
+
+The backend exposes `GET /health`, `GET /station-layout/{interchange_id}`, and
+`POST /simulation/run`.
+The station-layout endpoint returns platforms, their map coordinates, station
+markers, connection records, and transfer corridor paths for
+`gare_centrale_bonaventure`, `mcgill`, or `edouard_montpetit`. The current
+coordinates are schematic: the front end's McGill fixture geometry is reused
+for all three interchanges. The Gare Centrale–Bonaventure and
+Édouard-Montpetit entries are placeholders; replace their geometry in
+`config/station_layouts.json` when real layouts are prepared. Platform metadata
+comes from the reference network; the layout catalog stores only map-specific
+platform positions and transfer geometry. The station-layout endpoint does
+not include passenger or train playback data.
+
+The simulation-run endpoint accepts a connection ID and run settings:
+
+```json
+{
+  "connection_id": "mcgill-rem-green",
+  "strategy": "schedule_based",
+  "max_hold_time": 120,
+  "error_magnitude": 1,
+  "passenger_flow": "Normal",
+  "disruption_enabled": false
+}
+```
+
+`strategy` must be a registered simulator strategy (`no_control`,
+`schedule_based`, `headway_regulation`, `connection_protection`, or
+`rolling_horizon`). For connection protection, the API derives the destination's
+service headway from its median scheduled gap and shares the passenger route's
+walking parameters with the strategy. The maximum hold
+is in seconds, from 5 to 300 in five-second increments. `error_magnitude`
+defaults to `1.0` and is a finite multiplier from 0 to 3 applied to arrival,
+transfer, and load prediction errors. Passenger flow levels represent 6, 12,
+and 24 passengers per minute for Low, Normal, and High. When enabled, the
+disruption delays the selected REM feeder by 60 seconds at the first arrival
+at or after 120 seconds of simulation time.
+
+Each connection selects its committed one-hour demo scenario. The response
+combines the station layout with `train_events`, map-positioned
+`passenger_tracks`, applied `decisions`, the active `rules`, and the
+`operating_rules` configuration. Identical settings are cached in memory per
+API process (the eight most recently used combinations) and returned as detached
+responses, so callers cannot mutate the cached result.
+
+The default allowed browser origin is `http://localhost:5173`. Configure
+additional exact HTTP(S) origins through
+the `TRANSITSYNC_CORS_ORIGINS` environment variable; invalid values are rejected
+when the API starts. The API reads settings from its process environment, not
+from committed files. The health endpoint is available at
+<http://localhost:8000/health> when running with Docker.
 
 ### Seeing a simulation run
 
@@ -111,6 +222,10 @@ when applying them to a different timetable. Set the enclosing scenario's
 
 | Path | Contents |
 |---|---|
+| `api/main.py` | FastAPI application factory, health, and station-layout endpoints |
+| `api/settings.py` | Environment-backed API settings and CORS origin validation |
+| `api/station_layout.py` | Validated map geometry and platform mapping |
+| `config/station_layouts.json` | Map-ready station layouts for the three interchanges |
 | `simulator/engine/events.py` | Event types, the versioned record schema and the tie order for events at the same time |
 | `simulator/engine/event_queue.py` | Event queue and simulation clock |
 | `simulator/engine/event_log.py` | Event log, summary and run manifest writers |
@@ -122,6 +237,7 @@ when applying them to a different timetable. Set the enclosing scenario's
 | `simulator/passengers/demand.py` | Time-varying demand profiles and expected passenger counts |
 | `simulator/passengers/generation.py` | Seeded passenger batches and configurable destination assignment |
 | `simulator/passengers/transfer_component.py` | Train-triggered transfer groups, walking times and corridor arrivals |
+| `simulator/passengers/platform_queue.py` | FIFO boarding, destination alighting, onboard identities and missed connections |
 | `tests/` | pytest and Hypothesis tests, mirroring the source tree |
 
 The developer guide on the wiki ("Engine Core Developer Guide") explains how the US-1.1 tasks plug into the runner.
@@ -298,9 +414,77 @@ distribution. Tests check the requested distribution separately from these
 safety constraints. The runner writes configured delay disruptions and their
 applied status to `manifest.json`; event logs remain byte-reproducible.
 
+### Train capacity and left-behind passengers (#24)
+
+`Train.capacity` is an explicit whole-passenger limit, including seated and
+standing riders. Initial load must be an integer between zero and capacity.
+Python and NumPy integers are accepted and normalized before arithmetic;
+booleans and fractional counts are rejected.
+
+The existing `PlatformQueue` boards compatible destinations in arrival order,
+up to remaining capacity. Skipped destinations and overflow passengers stay in
+their original queue order for later trains; callers must not enqueue them again.
+Tracked passengers remain `WAITING` until they board. A missed-connection record
+does not remove them. Destination alighting frees space before boarding, and
+untracked initial riders continue to occupy capacity.
+
+Capacity research for scenario authors (whole train, not seats; researched
+2026-11-06):
+
+| Rolling stock | Published capacity | Interpretation and source |
+|---|---:|---|
+| REM, four cars | 600 | Theoretical capacity in the operator's [rolling-stock specification](https://rem.info/en/rolling-stock). |
+| REM, four cars | 780 | Maximum comparison figure in the operator's [capacity explanation](https://rem.info/en/news/rem-seating-and-capacity), rather than the theoretical 600. |
+| AZUR, nine cars | 1,104 | W3 loading figure from STM's [technical sheet](https://www.stm.info/sites/default/files/feuillet_azur-web_ang.pdf). Search-indexed sheet; direct retrieval returned 404 during research. Reconfirm the document before using it for calibrated scenarios. |
+| MR-73 | 160 per car | Historical total-capacity entry in [TCRP Report 13, Table A3.5](https://onlinepubs.trb.org/onlinepubs/tcrp/tcrp_rpt_13.pdf). Multiplying by a scenario's six or nine cars gives 960 or 1,440; these are derived historical assumptions, not verified current operating limits. |
+
+Choose and record the actual stock, formation, source, and loading assumption
+when constructing trains. Do not infer stock or formation from a line or GTFS
+trip. No universal capacity default is introduced. Test fixtures deliberately
+use small capacities; they are not estimates of real trains.
+
+REM door throughput follows the aggregate fixed-window budget in
+[Mathematical Foundations, section 4](https://github.com/team-exception-handlers/TransitSync/wiki/Mathematical-Foundations#4-dwell-time-and-boarding-capacity)
+via explicit per-train configuration:
+
+```python
+from simulator.trains.door_throughput import DoorThroughput
+
+# Illustrative only: replace with measured or documented scenario parameters.
+component = TrainComponent(
+    trains,
+    passenger_queue=queue,
+    rem_door_throughput={"rem-train-id": DoorThroughput(0.2, 2)},
+)
+```
+
+Each configured train gets `floor(rate * scheduled_dwell_seconds * doors)`
+boardings per stop, additionally bounded by remaining vehicle capacity. Repeated
+arrivals share the budget; passengers who cannot board retain their queue order
+and `WAITING` state. Each new visit starts a fresh budget. Unknown train IDs and
+invalid rates or door counts are rejected. The run manifest records the settings.
+
+Following section 4's scheduled-dwell formula, holds and dispatch waits allow
+later arrivals to use an unspent budget but do not enlarge or reset it. Scheduled
+REM dwell remains unchanged. This is an aggregate stop budget, not continuous
+per-passenger door-service timing. Metro and other unlisted trains keep their
+existing boarding behaviour. No REM identity or measured rate is inferred:
+scenario builders must supply this configuration for REM runs; unconfigured
+trains enforce vehicle capacity only.
+
+The [LLL prototype PR #186](https://github.com/team-exception-handlers/TransitSync/pull/186)
+supplies the original stateful checks. The #24 tests extend its independent FIFO
+reference model to tracked passengers, different destinations and later trains.
+Existing scheduler integration tests cover full departures and later recovery.
+
 ### Dwell time model
 
-`simulator.trains.dwell.DwellModel` computes stop dwell in seconds:
+`simulator.trains.dwell.DwellModel` computes demand-dependent **Metro** dwell in
+seconds, following [Mathematical Foundations, section 4](https://github.com/team-exception-handlers/TransitSync/wiki/Mathematical-Foundations#4-dwell-time-and-boarding-capacity).
+Use it only for Metro trains. **REM dwell stays fixed at the scheduled value**
+because REM doors close on a timer. Setting crowding strength to zero alone is
+not enough for REM: the boarding/alighting terms would still vary its dwell.
+The caller must select the model by network; `DwellModel` has no network identity.
 
 ```python
 from simulator.trains.dwell import DwellModel
@@ -337,9 +521,50 @@ passenger movements, dwell equals the base. A zero coefficient disables its term
 [Task #22](https://github.com/team-exception-handlers/TransitSync/issues/22)
 supplies this standalone calculation and hand-calculated tests in
 [PR #136](https://github.com/team-exception-handlers/TransitSync/pull/136).
-`TrainComponent` still uses scheduled dwell: live passenger counts and dynamic
-departure scheduling require integration with boarding/alighting (#100).
-Crowding penalties are separate work (#23).
+`TrainComponent` uses scheduled dwell, extended by configured holds and dispatch
+constraints. Task #100 records live boarding/alighting counts in departures;
+rescheduling dwell from `DwellModel` coefficients remains separate integration work.
+
+[Task #23](https://github.com/team-exception-handlers/TransitSync/issues/23) adds
+optional crowding in
+[PR #179](https://github.com/team-exception-handlers/TransitSync/pull/179):
+
+```python
+model = DwellModel(20.0, 1.5, 0.75, crowding_strength=2.0)
+assert (
+    model.compute(boarded_count=10, alighted_count=8, onboard_load=50, capacity=100)
+    == 43.625
+)
+```
+
+Let `service = boarding_coefficient * B + alighting_coefficient * A` and
+`r = max(arrival_load, onboard_load) / capacity`. Dwell is
+`base + service + service * crowding_strength * r**crowding_exponent`.
+Supply final `onboard_load` **after alighting and boarding**, excluding passengers
+left behind. The model infers `arrival_load = onboard_load - B + A`, assuming
+alighting precedes boarding. Using the peak of arrival and final load keeps a
+crowding penalty when a train arrives packed and many passengers get off.
+For the example, service is 21 seconds and the extra delay is
+`21 * 2 * 0.5**4 = 2.625` seconds. At full capacity dwell is 83 seconds.
+For example, with base 20, alighting coefficient 1 and strength 1, a train that
+arrives full at capacity 1000 and drops off 500 passengers has 1020 seconds of
+dwell: `20 + 500 + 500 * 1**4`. Using only its final load would give 551.25 seconds.
+
+The default quartic curve gives progressively steeper increases near capacity
+and has no singularity at full load. Set `crowding_exponent` (default `4.0`) to
+any finite value greater than one for sensitivity analysis, such as 2, 3 or 4.
+Strength and exponent are modeling choices requiring calibration, rather than
+measured transit relationships. Strength is dimensionless and non-negative;
+at full load it specifies the extra fraction of passenger service time.
+The default strength of zero preserves the original model and allows omitted
+load/capacity. Enabled crowding requires both: integer load between zero and
+capacity, and positive integer capacity. Supplied load/capacity are validated
+even when crowding is disabled. Passenger counts must be consistent with the
+supplied loads: boarded passengers cannot exceed final load and inferred arrival
+load cannot exceed capacity. Real numeric coefficients, including NumPy scalars,
+are normalized to Python floats. Zero passenger service still returns base dwell.
+Non-finite computed dwell is rejected with `ValueError`.
+Dynamic departure scheduling remains separate integration work.
 
 ### Passenger entity and generation
 
@@ -395,7 +620,7 @@ order when the count crosses one million.
 
 This generator returns batches without scheduling platform arrivals. Task #18
 connects it to train arrivals, walking times and corridor queues as described below.
-Task #100 supplies destination alighting and the remaining boarding rules.
+Task #100 connects those arrivals to destination-aware boarding and alighting.
 
 ### Pulsed transfer arrivals
 
@@ -451,7 +676,12 @@ def build_components(scenario, streams):
         streams,
     )
     return [
-        TrainComponent(trains, passenger_queue=PlatformQueue(("green_mcgill_1",))),
+        TrainComponent(
+            trains,
+            passenger_queue=PlatformQueue(
+                ("green_mcgill_1",), passengers=transfers.passengers
+            ),
+        ),
         transfers,
     ]
 ```
@@ -467,8 +697,8 @@ train loads. Walking uses the existing seeded `WalkingTimeSampler` distribution.
 Use one route per station/feeder-platform pair. Routes sharing a physical corridor
 must share the same `CorridorQueue` instance. Construct fresh components and
 queues for each run. The existing `PlatformQueue` remains the sole boarding owner
-on its platforms; transfer snapshots observe its `Boarding` events. Detailed
-destination alighting, door throughput and missed connections remain task #100.
+on its platforms. With the shared passenger dictionary attached, it tracks
+destinations, boarding, completed journeys and missed connections as described below.
 
 Event schema version 4 adds `CorridorArrival` between alighting and platform
 arrival in the event tie order. The passenger log filter automatically includes
@@ -478,6 +708,51 @@ Run the focused tests on macOS with:
 
 ```sh
 .venv/bin/python -m pytest tests/simulator/passengers/test_transfer_component.py -v
+```
+
+### Boarding, alighting and missed connections
+
+Task #100 extends the existing `PlatformQueue`. Pass the same passenger dictionary
+used by `TransferComponent` through `PlatformQueue(..., passengers=transfers.passengers)`.
+Attach the queue to `TrainComponent`; it does all event handling for the queue,
+so no second boarding component is needed. The example above uses this wiring.
+
+Passengers board in platform arrival order while the train is present, including
+during holds, line suspensions and minimum-gap departure waits. Available seats
+limit boarding. A passenger whose destination is absent from the train's remaining
+trip stays queued and does not block compatible passengers behind them. Arrivals
+at exactly the actual departure time can board because passenger arrivals and
+boarding sort before departure in the event queue.
+
+At each arrival, tracked passengers whose destination matches the station alight
+and become `COMPLETED`. Their seats are freed before waiting passengers board.
+This also works at a terminus before the vehicle starts its return trip. Departure
+records contain final boarding/alighting counts and onboard load for that stop.
+The existing controller observations read the same queue and live train loads.
+
+A compatible passenger left waiting when a train departs gets a `MissedConnection`
+record. A passenger reaching the platform later gets a miss for the first compatible
+departure since their feeder alighting. Each passenger's transfer gets at most one
+miss, even if more full trains leave them behind. Trains that left before the
+transfer began are excluded. A missed passenger stays waiting and can board a later
+train; the record does not mark their journey completed.
+
+For passengers already onboard at run start, supply `initial_onboard`, mapping
+train IDs to passenger ID sequences. Each listed passenger must be `ON_BOARD`,
+have a reachable destination and already be included in that train's initial
+`onboard_load`. All initial `ON_BOARD` passengers must be listed exactly once.
+Untracked aggregate passengers retain their seats. Newly generated feeder
+transfers count as external alightings without subtracting that load again.
+
+Without a passenger dictionary, `PlatformQueue` retains capacity-only FIFO
+boarding for existing callers. Times are simulation seconds. Passenger movements
+use the current door-open window; calibrated door throughput and dynamic dwell
+rescheduling are not introduced by this task. No event schema change is required.
+
+Run the focused macOS checks with:
+
+```sh
+.venv/bin/python -m pytest tests/simulator/passengers/test_boarding.py tests/simulator/passengers/test_boarding_validation.py -v
 ```
 
 ### Network model
@@ -593,6 +868,24 @@ They check exact departures and holds, repeatable output files, separate platfor
 histories, hold limits and departure restrictions after a hold ends. The example
 uses fixed inputs, seed 7, a 1000-second run, a 90-second minimum gap and a
 300-second maximum hold.
+
+### Connection protection
+
+Connection protection compares the estimated waiting time saved for transferring
+passengers with the extra delay to passengers on board. It checks candidate hold
+lengths and requests the one with the greatest positive benefit, or no hold.
+
+Select `connection_protection` in the scenario's `control` settings and provide
+`connection_headways_s`: the time between services, in seconds, at each platform
+receiving transfers. Walking estimates use the same routes as passenger generation.
+
+The `POST /simulation/run` endpoint also accepts `connection_protection` and
+supplies the selected destination's service headway automatically.
+
+The simulator applies operating limits and may shorten or refuse a requested hold.
+The decision log records evaluated holds, expected passenger counts and reasons,
+including decisions not to hold. Saved control settings are retained in the run
+manifest for reproducibility.
 
 ## Team
 

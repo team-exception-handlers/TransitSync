@@ -1,5 +1,5 @@
 # AI contribution: 50% or more AI-generated
-"""Strategy decisions inside full runs (US-2.1 #38, US-2.3 #46)."""
+"""Strategy decisions inside full runs (US-2.1 #38, #39, US-2.3 #46)."""
 
 import json
 from types import SimpleNamespace
@@ -8,6 +8,11 @@ import pytest
 
 from simulator.control.decision import DecisionPipeline, HoldDecision
 from simulator.control.interface import DecisionController, HoldAction
+from simulator.control.prediction_error import (
+    PredictionErrorModel,
+    PredictionErrorSettings,
+)
+from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import run_scenario
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
@@ -106,3 +111,44 @@ def test_held_runs_are_reproducible(tmp_path):
     first = run(tmp_path / "first", DecisionPipeline(HoldEveryTrain()))
     second = run(tmp_path / "second", DecisionPipeline(HoldEveryTrain()))
     assert first == second
+
+
+class SeenBy:
+    """Records the snapshot each side received: strategy (seen) or rules (truth)."""
+
+    name = "seen_by"
+
+    def __init__(self):
+        self.seen, self.truth = [], []
+
+    def evaluate(self, observation):
+        self.seen.append(observation)
+        return (HoldAction(observation.train_id, 30.0, "test hold"),)
+
+    def validate(self, action, observation):
+        self.truth.append(observation)
+        return HoldDecision(action.duration_s, action.duration_s, action.reason)
+
+
+def run_with_error(tmp_path, settings):
+    recorder = SeenBy()
+    stream = StreamManager(7).get_stream("prediction_errors")
+    model = PredictionErrorModel(settings, stream)
+    run(tmp_path, DecisionPipeline(recorder, enforcer=recorder, error_model=model))
+    return recorder
+
+
+def test_strategy_sees_estimates_while_rules_see_truth(tmp_path):
+    # At A's first decision (130 s), B is truly due at P1 at 400 s
+    recorder = run_with_error(tmp_path, PredictionErrorSettings())
+    truth_b = recorder.truth[0].trains[1]
+    seen_b = recorder.seen[0].trains[1]
+    assert truth_b.predicted_arrival_s == 400.0
+    assert seen_b.predicted_arrival_s != 400.0
+    assert seen_b.delay_s == truth_b.delay_s
+
+
+def test_perfect_information_strategy_sees_true_values(tmp_path):
+    recorder = run_with_error(tmp_path, PredictionErrorSettings(0, 0, 0))
+    assert len(recorder.seen) == 3
+    assert recorder.seen == recorder.truth

@@ -1,0 +1,310 @@
+{
+  "maintainer_notes": [
+    "gare_centrale_bonaventure and edouard_montpetit currently reuse McGill schematic coordinates as placeholders. Replace their layouts in this file when their real map geometry is prepared."
+  ],
+  "layouts": {
+    "gare_centrale_bonaventure": {
+      "interchange": {
+        "id": "gare_centrale_bonaventure",
+        "name": "Gare Centrale ↔ Bonaventure"
+      },
+      "map": {
+        "width": 800,
+        "height": 600
+      },
+      "stations": [
+        {
+          "id": "rem_gare_centrale_bonaventure",
+          "name": "Gare Centrale ↔ Bonaventure REM",
+          "position": {
+            "x": 230.0,
+            "y": 180.0
+          }
+        },
+        {
+          "id": "metro_gare_centrale_bonaventure",
+          "name": "Station Bonaventure",
+          "position": {
+            "x": 565.0,
+            "y": 495.0
+          }
+        }
+      ],
+      "corridors": [
+        {
+          "id": "gare_centrale_bonaventure_rem_orange_transfer",
+          "label": "Transfer corridor",
+          "from_platform_id": "rem_gare_centrale_bonaventure_0",
+          "to_platform_id": "orange_gare_centrale_bonaventure_0",
+          "path": [
+            {
+              "x": 365.0,
+              "y": 135.0
+            },
+            {
+              "x": 405.0,
+              "y": 135.0
+            },
+            {
+              "x": 405.0,
+              "y": 310.0
+            },
+            {
+              "x": 735.0,
+              "y": 310.0
+            },
+            {
+              "x": 735.0,
+              "y": 450.0
+            },
+            {
+              "x": 705.0,
+              "y": 450.0
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "id": "gare_centrale_bonaventure-rem-orange",
+          "label": "Gare Centrale ↔ Bonaventure",
+          "from_platform_id": "rem_gare_centrale_bonaventure_0",
+          "to_platform_id": "orange_gare_centrale_bonaventure_0",
+          "corridor_id": "gare_centrale_bonaventure_rem_orange_transfer"
+        }
+      ],
+      "platform_layouts": {
+        "rem_gare_centrale_bonaventure_0": {
+          "station_id": "rem_gare_centrale_bonaventure",
+          "position": {
+            "x": 230.0,
+            "y": 135.0
+          }
+        },
+        "rem_gare_centrale_bonaventure_1": {
+          "station_id": "rem_gare_centrale_bonaventure",
+          "position": {
+            "x": 230.0,
+            "y": 225.0
+          }
+        },
+        "orange_gare_centrale_bonaventure_0": {
+          "station_id": "metro_gare_centrale_bonaventure",
+          "position": {
+            "x": 565.0,
+            "y": 450.0
+          }
+        },
+        "orange_gare_centrale_bonaventure_1": {
+          "station_id": "metro_gare_centrale_bonaventure",
+          "position": {
+            "x": 565.0,
+            "y": 535.0
+          }
+        }
+      }
+    },
+    "mcgill": {
+      "interchange": {
+        "id": "mcgill",
+        "name": "McGill — REM ↔ Green Line"
+      },
+      "map": {
+        "width": 800,
+        "height": 600
+      },
+      "stations": [
+        {
+          "id": "rem_mcgill",
+          "name": "McGill REM",
+          "position": {
+            "x": 230.0,
+            "y": 180.0
+          }
+        },
+        {
+          "id": "metro_mcgill",
+          "name": "McGill Métro",
+          "position": {
+            "x": 565.0,
+            "y": 495.0
+          }
+        }
+      ],
+      "corridors": [
+        {
+          "id": "mcgill_rem_green_transfer",
+          "label": "Transfer corridor",
+          "from_platform_id": "rem_mcgill_0",
+          "to_platform_id": "green_mcgill_0",
+          "path": [
+            {
+              "x": 365.0,
+              "y": 135.0
+            },
+            {
+              "x": 405.0,
+              "y": 135.0
+            },
+            {
+              "x": 405.0,
+              "y": 310.0
+            },
+            {
+              "x": 735.0,
+              "y": 310.0
+            },
+            {
+              "x": 735.0,
+              "y": 450.0
+            },
+            {
+              "x": 705.0,
+              "y": 450.0
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "id": "mcgill-rem-green",
+          "label": "McGill",
+          "from_platform_id": "rem_mcgill_0",
+          "to_platform_id": "green_mcgill_0",
+          "corridor_id": "mcgill_rem_green_transfer"
+        }
+      ],
+      "platform_layouts": {
+        "rem_mcgill_0": {
+          "station_id": "rem_mcgill",
+          "position": {
+            "x": 230.0,
+            "y": 135.0
+          }
+        },
+        "rem_mcgill_1": {
+          "station_id": "rem_mcgill",
+          "position": {
+            "x": 230.0,
+            "y": 225.0
+          }
+        },
+        "green_mcgill_0": {
+          "station_id": "metro_mcgill",
+          "position": {
+            "x": 565.0,
+            "y": 450.0
+          }
+        },
+        "green_mcgill_1": {
+          "station_id": "metro_mcgill",
+          "position": {
+            "x": 565.0,
+            "y": 535.0
+          }
+        }
+      }
+    },
+    "edouard_montpetit": {
+      "interchange": {
+        "id": "edouard_montpetit",
+        "name": "Édouard-Montpetit"
+      },
+      "map": {
+        "width": 800,
+        "height": 600
+      },
+      "stations": [
+        {
+          "id": "rem_edouard_montpetit",
+          "name": "Édouard-Montpetit REM",
+          "position": {
+            "x": 230.0,
+            "y": 180.0
+          }
+        },
+        {
+          "id": "metro_edouard_montpetit",
+          "name": "Station Édouard-Montpetit",
+          "position": {
+            "x": 565.0,
+            "y": 495.0
+          }
+        }
+      ],
+      "corridors": [
+        {
+          "id": "edouard_montpetit_rem_blue_transfer",
+          "label": "Transfer corridor",
+          "from_platform_id": "rem_edouard_montpetit_0",
+          "to_platform_id": "blue_edouard_montpetit_0",
+          "path": [
+            {
+              "x": 365.0,
+              "y": 135.0
+            },
+            {
+              "x": 405.0,
+              "y": 135.0
+            },
+            {
+              "x": 405.0,
+              "y": 310.0
+            },
+            {
+              "x": 735.0,
+              "y": 310.0
+            },
+            {
+              "x": 735.0,
+              "y": 450.0
+            },
+            {
+              "x": 705.0,
+              "y": 450.0
+            }
+          ]
+        }
+      ],
+      "connections": [
+        {
+          "id": "edouard_montpetit-rem-blue",
+          "label": "Édouard-Montpetit",
+          "from_platform_id": "rem_edouard_montpetit_0",
+          "to_platform_id": "blue_edouard_montpetit_0",
+          "corridor_id": "edouard_montpetit_rem_blue_transfer"
+        }
+      ],
+      "platform_layouts": {
+        "rem_edouard_montpetit_0": {
+          "station_id": "rem_edouard_montpetit",
+          "position": {
+            "x": 230.0,
+            "y": 135.0
+          }
+        },
+        "rem_edouard_montpetit_1": {
+          "station_id": "rem_edouard_montpetit",
+          "position": {
+            "x": 230.0,
+            "y": 225.0
+          }
+        },
+        "blue_edouard_montpetit_0": {
+          "station_id": "metro_edouard_montpetit",
+          "position": {
+            "x": 565.0,
+            "y": 450.0
+          }
+        },
+        "blue_edouard_montpetit_1": {
+          "station_id": "metro_edouard_montpetit",
+          "position": {
+            "x": 565.0,
+            "y": 535.0
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,19 +1,35 @@
 # AI contribution: 50% or more AI-generated
 """Connect trains, passenger queues and disruptions to the event engine.
 
-Exceeds 500 lines to coordinate movement, turnarounds, platform clearance,
-holds, disruptions and boarding through shared event state.
+US-1.2 movement and US-1.3 #100 passenger transitions share one platform clock.
+Arrival opens doors; the actual departure closes them after any hold, dispatch
+suspension or minimum-gap wait. Passenger rules are delegated to PlatformQueue.
+Only this component mutates vehicle loads through that queue, avoiding duplicate
+boarding owners. Controllers receive copied states rather than live queues.
+Passengers keep their IDs across transfers, boarding and destination alighting.
+External feeder entries contribute movement counts without changing the load
+of passengers already represented by an aggregate train count.
+
+This file exceeds 500 lines because arrival, hold and departure handlers share
+trip cursors and platform occupancy. Keeping those state transitions together
+preserves one train-state owner; passenger journey rules live in their own module.
+All event times, dwell durations and separation gaps are simulation seconds.
 """
 
 import math
 from collections import defaultdict, deque
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from types import MappingProxyType
 from typing import Any
 
 from simulator.control.decision import DecisionPipeline
 from simulator.control.interface import PlatformState, TrainState
+from simulator.control.irregularity import ServiceIrregularity
+from simulator.control.planning import FutureVisit
+from simulator.control.settings import ControlSettings
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import (
+    Alighting,
     Boarding,
     DepartureClearance,
     DepartureDue,
@@ -26,6 +42,7 @@ from simulator.engine.events import (
 )
 from simulator.passengers.platform_queue import PlatformQueue
 from simulator.trains.disruption import DelayInjection
+from simulator.trains.door_throughput import DoorThroughput
 from simulator.trains.suspension import LineSuspension, dispatch_ready_s
 from simulator.trains.train import ScheduledStop, Train
 
@@ -44,7 +61,21 @@ class TrainComponent:
         delay_injections: Sequence[DelayInjection] = (),
         passenger_queue: PlatformQueue | None = None,
         decision: DecisionPipeline | None = None,
+        rem_door_throughput: Mapping[str, DoorThroughput] | None = None,
+        control: ControlSettings | None = None,
     ) -> None:
+        """Bind fresh vehicles, a passenger queue and a departure decision policy.
+
+        Trains retain identity across return trips. Minimum gap is positive
+        seconds; suspensions and delay injections use the same simulation clock.
+        A queue with passenger snapshots also validates initial onboard manifests.
+        Queue-owned identities share the same vehicle capacity as aggregate load.
+        rem_door_throughput explicitly identifies REM train IDs and their door
+        rates. Unlisted vehicles retain capacity-only boarding; no line inference.
+        Pass scenario control settings to configure the departure measurement.
+        Raises ValueError for invalid configuration, duplicate train identities
+        or inconsistent passenger manifests before any event is scheduled.
+        """
         if (
             isinstance(minimum_gap_s, bool)
             or not isinstance(minimum_gap_s, int | float)
@@ -65,11 +96,6 @@ class TrainComponent:
         ids = [item.disruption_id for item in self.delay_injections]
         if len(ids) != len(set(ids)):
             raise ValueError("Delay injection IDs must be unique")
-        if passenger_queue is not None and not isinstance(
-            passenger_queue, PlatformQueue
-        ):
-            raise ValueError("passenger_queue must be a PlatformQueue")
-        self.passenger_queue = passenger_queue
         self._scheduled_disruptions: dict[str, dict[str, float]] = {}
         self._applied_disruptions: set[str] = set()
         self._disruptions_by_arrival: dict[Visit, list[str]] = defaultdict(list)
@@ -88,10 +114,7 @@ class TrainComponent:
         self._at_platform: dict[str, deque[Visit]] = defaultdict(deque)
         self._boarded: dict[Visit, int] = defaultdict(int)
         self._finished: set[str] = set()
-        # Asked at every DepartureDue; no control unless a strategy is given
-        self.decision = decision or DecisionPipeline()
-        self._hold_s: dict[Visit, float] = {}
-        self._unheld_ready_s: dict[Visit, float] = {}
+        self._bind_control(decision, control)
 
         for train in trains:
             if train.id in self.trains:
@@ -107,26 +130,100 @@ class TrainComponent:
             visits.sort(key=self._visit_sort_key)
             self._arrival_cursor[platform] = 0
             self._departure_cursor[platform] = 0
+        self._bind_rem_throughput(rem_door_throughput)
+        self._bind_passengers(passenger_queue)
+        # Last occurrence lets bounded lookahead stop when a platform cannot
+        # recur, without scanning the rest of a full-day timetable each time.
+        self._last_route_visit = {
+            train_id: {
+                stop.platform_id: (train_id, trip_index, stop_index)
+                for trip_index, trip in enumerate(trips)
+                for stop_index, stop in enumerate(trip)
+            }
+            for train_id, trips in self._schedules.items()
+        }
+
+    def _bind_control(
+        self, decision: DecisionPipeline | None, control: ControlSettings | None
+    ) -> None:
+        # Asked at every DepartureDue; no control unless a strategy is given.
+        self.decision = decision or DecisionPipeline()
+        self._hold_s: dict[Visit, float] = {}
+        self._unheld_ready_s: dict[Visit, float] = {}
+        settings = control or ControlSettings()
+        self._irregularity = ServiceIrregularity(
+            settings.irregularity_window_size, settings.target_headways_s
+        )
+
+    def _bind_rem_throughput(
+        self, rem_door_throughput: Mapping[str, DoorThroughput] | None
+    ) -> None:
+        """Validate explicit REM identities before installing passenger manifests."""
+        if rem_door_throughput is not None and not isinstance(
+            rem_door_throughput, Mapping
+        ):
+            raise ValueError("rem_door_throughput must map train IDs to DoorThroughput")
+        self.rem_door_throughput = MappingProxyType(dict(rem_door_throughput or {}))
+        if any(
+            key not in self.trains or not isinstance(value, DoorThroughput)
+            for key, value in self.rem_door_throughput.items()
+        ):
+            raise ValueError(
+                "rem_door_throughput requires known train IDs and DoorThroughput values"
+            )
+
+    def _bind_passengers(self, queue: PlatformQueue | None) -> None:
+        """Attach one passenger owner after all train identities are known."""
+        if queue is not None and not isinstance(queue, PlatformQueue):
+            raise ValueError("passenger_queue must be a PlatformQueue")
+        self.passenger_queue = queue
+        if queue is not None:
+            queue.bind_trains(self.trains)
 
     def _stop(self, visit: Visit) -> ScheduledStop:
+        """Look up a stop by vehicle, trip and stop index.
+
+        The retained schedules remain valid even when Train.schedule switches
+        to a return trip. Event handling must not confuse those two visits.
+        """
         train_id, trip_index, stop_index = visit
         return self._schedules[train_id][trip_index][stop_index]
 
     def _visit_sort_key(self, visit: Visit) -> tuple[float, str, int, int]:
+        """Order visits by scheduled seconds, then stable identity.
+
+        Equal timetable arrivals must resolve consistently across seeded runs.
+        Actual platform availability is enforced later when arrivals are released.
+        """
         return (self._stop(visit).arrival_s, visit[0], visit[1], visit[2])
 
     def _register_trip_visits(self, train_id: str, trip_index: int) -> None:
+        """Register only the trip whose preceding turnaround has completed.
+
+        Registering return visits earlier could let an inactive trip block the
+        platform ahead of a vehicle that is already ready to arrive.
+        """
         for stop_index, stop in enumerate(self._schedules[train_id][trip_index]):
             self._visits[stop.platform_id].append((train_id, trip_index, stop_index))
             self._arrival_cursor.setdefault(stop.platform_id, 0)
             self._departure_cursor.setdefault(stop.platform_id, 0)
 
     def _next_visit(self, platform: str, cursors: dict[str, int]) -> Visit | None:
+        """Return the next unprocessed visit, or None when service is exhausted.
+
+        Arrival and departure use separate cursors because a dwelling vehicle
+        has already arrived but still owns the platform until it departs.
+        """
         index = cursors[platform]
         visits = self._visits[platform]
         return visits[index] if index < len(visits) else None
 
     def _sort_pending_visits(self, platform: str, cursor: dict[str, int]) -> None:
+        """Insert activated return trips without reordering completed visits.
+
+        Only the suffix beyond the relevant cursor is mutable; changing the
+        prefix would change which vehicle currently owns the platform.
+        """
         visits = self._visits[platform]
         index = cursor[platform]
         visits[index:] = sorted(visits[index:], key=self._visit_sort_key)
@@ -142,6 +239,12 @@ class TrainComponent:
             self._release_arrival(platform, scheduler)
 
     def _release_arrival(self, platform: str, scheduler: Scheduler) -> None:
+        """Schedule the next ready arrival after platform and spacing constraints.
+
+        A reserved or occupied platform cannot accept another vehicle. Delay
+        injections apply once to a matching arrival and propagate with the train.
+        The departure boundary uses the next float because arrivals sort first.
+        """
         visit = self._next_visit(platform, self._arrival_cursor)
         if (
             visit is None
@@ -215,6 +318,19 @@ class TrainComponent:
             )
         return tuple(entries)
 
+    def boarding_manifest_entries(self) -> tuple[dict[str, object], ...]:
+        """Record explicit REM parameters and fixed-window semantics for replay."""
+        return tuple(
+            {
+                "train_id": train_id,
+                "passengers_per_second_per_door": config.passengers_per_second_per_door,
+                "doors": config.doors,
+                "window": "scheduled_dwell",
+                "rounding": "floor",
+            }
+            for train_id, config in sorted(self.rem_door_throughput.items())
+        )
+
     def decision_records(self) -> tuple[dict[str, Any], ...]:
         """Return the strategy's audit records for ``decisions.jsonl`` (#44)."""
         return self.decision.decision_records()
@@ -226,6 +342,12 @@ class TrainComponent:
         )
 
     def _train_state(self, train: Train) -> TrainState:
+        """Copy the vehicle's next visit, load and schedule deviation.
+
+        A train at a platform reports its following stop. Completed service has
+        no next stop, while its identity and final onboard load remain available.
+        Passenger movements therefore reach controller observations immediately.
+        """
         visit = (train.id, train.current_trip_index, train.current_stop_index)
         if visit in self._at_platform[self._stop(visit).platform_id]:
             # A dwelling train's next stop is the following one in its trip
@@ -254,6 +376,167 @@ class TrainComponent:
             for platform in sorted(self._visits)
         )
 
+    def future_visits(
+        self, now_s: float, until_s: float = math.inf
+    ) -> tuple[FutureVisit, ...]:
+        """Copy remaining visits arriving by ``until_s`` (inclusive seconds).
+
+        Existing holds remain fixed. Return-trip recovery consumes slack once;
+        inbound terminals have an arrival but no decision or departure.
+        Other strategies never request this potentially larger view.
+        No random stream is consumed while copying these values. The observation
+        error layer, rather than the train owner, perturbs future predictions.
+        Completed vehicles contribute no visits; their identities and final
+        loads remain in the existing next-stop view for other controllers.
+        The default preserves the complete-route API. A bounded request stops
+        each chronological route at its first arrival outside the window.
+        """
+        return tuple(
+            visit
+            for train_id, train in sorted(self.trains.items())
+            if train_id not in self._finished
+            for visit in self._future_train_visits(train, now_s, until_s)
+        )
+
+    def headway_visits(
+        self, now_s: float, until_s: float, platforms: frozenset[str]
+    ) -> tuple[FutureVisit, ...]:
+        """Copy the first later service per train/requested platform, in seconds.
+
+        These immutable references supply headways, not additional decisions.
+        Only relevant platforms are explored, with the same hold/recovery
+        semantics as bounded visits and no random draws or live-state changes.
+        """
+        return tuple(
+            visit
+            for train_id, train in sorted(self.trains.items())
+            if train_id not in self._finished
+            for visit in self._future_train_visits(
+                train,
+                now_s,
+                until_s,
+                {
+                    platform
+                    for platform, key in self._last_route_visit[train_id].items()
+                    if platform in platforms
+                    and key
+                    >= (train_id, train.current_trip_index, train.current_stop_index)
+                },
+            )
+        )
+
+    def _future_train_visits(
+        self,
+        train: Train,
+        now_s: float,
+        until_s: float,
+        references: set[str] | None = None,
+    ) -> list[FutureVisit]:
+        """Project timetable times with current delay and known readiness.
+
+        Fixed holds change later-stop lateness immediately in the view, even
+        before HoldEnd updates the live train. At a trip boundary, only the
+        unused part of layover can absorb a newly proposed hold. Each return
+        starts a distinct trip index even when it reuses the same platform.
+        """
+        visits = []
+        remaining = None if references is None else set(references)
+        if remaining == set():
+            return visits
+        delay = train.current_delay
+        for trip_index in range(
+            train.current_trip_index, len(self._schedules[train.id])
+        ):
+            recovery = 0.0
+            first_stop = (
+                train.current_stop_index
+                if trip_index == train.current_trip_index
+                else 0
+            )
+            if trip_index > train.current_trip_index:
+                recovery = max(0.0, train.layover_slack - max(0.0, delay))
+                delay = max(0.0, delay - train.layover_slack)
+            trip = self._schedules[train.id][trip_index]
+            for stop_index in range(first_stop, len(trip)):
+                key = (train.id, trip_index, stop_index)
+                visit = self._future_visit(
+                    key, delay, recovery if stop_index == 0 else 0.0, now_s
+                )
+                if not self._retain_future_visit(
+                    key, visit, until_s, remaining, visits
+                ):
+                    return visits
+                if not visit.skips_departure:
+                    delay = visit.departure_s - visit.scheduled_departure_s
+        return visits
+
+    def _retain_future_visit(self, key, visit, until_s, remaining, visits):
+        """Retain bounded decisions or first later services, stopping when done."""
+        if remaining is None:
+            if visit.arrival_s > until_s:
+                return False
+            visits.append(visit)
+            return True
+        if visit.arrival_s > until_s and visit.platform_id in remaining:
+            if not visit.skips_departure:
+                visits.append(visit)
+                remaining.remove(visit.platform_id)
+        if key == self._last_route_visit[key[0]][visit.platform_id]:
+            remaining.discard(visit.platform_id)
+        return bool(remaining)
+
+    def _future_visit(
+        self, key: Visit, delay: float, recovery: float, now_s: float
+    ) -> FutureVisit:
+        """Copy known timing bounds; future disturbances stay unobserved.
+
+        An arrival already queued has a known separation wait and any already
+        scheduled injection. Propagating those bounds prevents an optimistic
+        route forecast while preserving the live train's single state owner.
+        Already observed arrivals come from the occupied platform's actual
+        arrival clock; a later departure-delay update cannot rewrite that past.
+        """
+        train = self.trains[key[0]]
+        stop = self._stop(key)
+        arrived = key in self._at_platform[stop.platform_id]
+        arrival = self._ready_arrivals.get(key, stop.arrival_s + delay)
+        arrival += self._arrival_wait.get(key, 0.0)
+        for disruption_id in self._disruptions_by_arrival.get(key, ()):
+            arrival = max(
+                arrival, self._scheduled_disruptions[disruption_id]["arrival_time_s"]
+            )
+        if arrived:
+            arrival = self._last_arrival[stop.platform_id]
+        departure = self._ready_departures.get(
+            key,
+            arrival + stop.departure_s - stop.arrival_s + self._hold_s.get(key, 0.0),
+        )
+        skips = key[2] == len(self._schedules[train.id][key[1]]) - 1 and key[1] < len(
+            train.return_trips
+        )
+        return FutureVisit(
+            train.id,
+            key[1],
+            key[2],
+            stop.station_id,
+            stop.platform_id,
+            arrival,
+            max(now_s, departure) if not skips else arrival,
+            stop.arrival_s,
+            stop.departure_s,
+            key not in self._hold_s and key not in self._ready_departures and not skips,
+            skips,
+            recovery,
+            arrived,
+            self._last_arrival.get(stop.platform_id, -self.minimum_gap_s)
+            + self.minimum_gap_s,
+        )
+
+    def service_irregularity(self, train_id: str, platform_id: str) -> float | None:
+        """Read the last measured deviation for the train's line and platform."""
+        train = self.trains.get(train_id)
+        return self._irregularity.value(train.line_id, platform_id) if train else None
+
     def handle(self, event: Event, scheduler: Scheduler) -> None:
         """Process train movement, dispatch restrictions and passenger arrivals."""
         if isinstance(event, TrainArrival):
@@ -266,18 +549,36 @@ class TrainComponent:
             self._on_clearance(event, scheduler)
         elif isinstance(event, TrainDeparture):
             self._on_departure(event, scheduler)
+        elif isinstance(event, Alighting) and self.passenger_queue is not None:
+            self.passenger_queue.external_alighting(event)
         elif isinstance(event, PassengerArrival) and self.passenger_queue is not None:
             if self.passenger_queue.arrive(event):
+                for missed in self.passenger_queue.late_arrival(event):
+                    scheduler.schedule(missed)
                 self._board_waiting(event.platform_id, event.time_s, scheduler)
 
     def _board_waiting(
         self, platform: str, time_s: float, scheduler: Scheduler
     ) -> None:
+        """Board once through the queue and record actual movement events.
+
+        The queue updates live load before a departure decision can read it.
+        Capacity released by destination alighting is already available here.
+        Per-visit counts include arrivals during holds and dispatch waits.
+        """
         if self.passenger_queue is None:
             return
         for visit in self._at_platform[platform]:
             train = self.trains[visit[0]]
-            passenger_ids = self.passenger_queue.board(platform, train)
+            config = self.rem_door_throughput.get(train.id)
+            remaining = None
+            if config is not None:
+                stop = self._stop(visit)
+                total = config.budget(stop.departure_s - stop.arrival_s)
+                remaining = max(0, total - self._boarded[visit])
+            passenger_ids = self.passenger_queue.board(
+                platform, train, max_boarding=remaining
+            )
             self._boarded[visit] += len(passenger_ids)
             for passenger_id in passenger_ids:
                 scheduler.schedule(
@@ -290,6 +591,12 @@ class TrainComponent:
                 )
 
     def _on_arrival(self, event: TrainArrival, scheduler: Scheduler) -> None:
+        """Open this visit and alight destination passengers before boarding.
+
+        Alighting happens before terminal recovery mutates the current trip.
+        Its records retain the inbound platform, including at a terminus with
+        no inbound departure. The next trip starts fresh passenger counts.
+        """
         train = self.trains.get(event.train_id)
         if train is None:
             return
@@ -310,6 +617,10 @@ class TrainComponent:
         self._arrival_cursor[platform] += 1
         self._arrival_queued.discard(visit)
         stop = self._stop(visit)
+
+        if self.passenger_queue is not None:
+            for alighting in self.passenger_queue.train_arrival(event, train):
+                scheduler.schedule(alighting)
 
         if visit[2] == len(
             self._schedules[train.id][visit[1]]
@@ -351,11 +662,21 @@ class TrainComponent:
     def _skip_departure(
         self, visit: Visit, platform: str, scheduler: Scheduler
     ) -> None:
+        """Clear a terminal's inbound visit without inventing a departure.
+
+        Actual departures belong to the configured return trip. Followers can
+        proceed after the inbound vehicle releases its occupied platform.
+        """
         self._skipped_departures.add(visit)
         self._advance_skipped_departures(platform)
         self._release_departure(platform, scheduler)
 
     def _advance_skipped_departures(self, platform: str) -> None:
+        """Advance over terminal visits that have no physical departure.
+
+        A skipped visit may become the cursor head after a preceding vehicle
+        leaves, so clearance is checked again whenever departures are released.
+        """
         while (
             self._next_visit(platform, self._departure_cursor)
             in self._skipped_departures
@@ -367,6 +688,13 @@ class TrainComponent:
             self._departure_cursor[platform] += 1
 
     def _on_due(self, event: DepartureDue, scheduler: Scheduler) -> None:
+        """Ask the controller after same-time boarding is known.
+
+        Positive holds defer readiness until HoldEnd, keeping doors open.
+        A duplicate decision for the same visit raises RuntimeError rather than
+        scheduling two holds or recording inconsistent departure counts.
+        Platform arrivals at this instant have already used any available seats.
+        """
         train = self.trains.get(event.train_id)
         if train is None:
             return
@@ -405,12 +733,24 @@ class TrainComponent:
         self._release_departure(event.platform_id, scheduler)
 
     def _on_hold_end(self, event: HoldEnd, scheduler: Scheduler) -> None:
+        """End the policy hold and recheck physical departure constraints.
+
+        Boarding at this exact instant sorts before HoldEnd. A dispatch or
+        minimum-gap wait can still postpone the actual closing of the doors.
+        """
         train = self.trains[event.train_id]
         visit = (train.id, train.current_trip_index, train.current_stop_index)
         self._ready_departures[visit] = event.time_s
         self._release_departure(event.platform_id, scheduler)
 
     def _release_departure(self, platform: str, scheduler: Scheduler) -> None:
+        """Build departure records only when the vehicle can actually leave.
+
+        Dispatch suspension and minimum gaps can extend the boarding window.
+        Future clearance events contain no passenger counts; final boarding,
+        alighting and load are copied only at the real departure time.
+        A hold's duration stays distinct from additional platform-spacing delay.
+        """
         self._advance_skipped_departures(platform)
         visit = self._next_visit(platform, self._departure_cursor)
         if (
@@ -479,7 +819,11 @@ class TrainComponent:
                 disruption_delay_s=train.disruption_delay_s,
                 hold_s=self._hold_s.pop(visit, 0.0),
                 boarded_count=self._boarded[visit],
-                alighted_count=0,
+                alighted_count=(
+                    self.passenger_queue.alighted_count(train.id)
+                    if self.passenger_queue is not None
+                    else 0
+                ),
                 onboard_load=train.onboard_load,
                 generated_delay_s=train.generated_delay_s,
                 inherited_delay_s=train.inherited_delay_s,
@@ -488,6 +832,11 @@ class TrainComponent:
         self._departure_queued.add(visit)
 
     def _on_clearance(self, event: DepartureClearance, scheduler: Scheduler) -> None:
+        """Reconsider a waiting departure without duplicating its clearance.
+
+        The platform may still be constrained by a suspension or a predecessor.
+        Only the final release constructs the departure and its passenger counts.
+        """
         train = self.trains.get(event.train_id)
         if train is None:
             return
@@ -496,6 +845,15 @@ class TrainComponent:
         self._release_departure(event.platform_id, scheduler)
 
     def _on_departure(self, event: TrainDeparture, scheduler: Scheduler) -> None:
+        """Close doors, mark missed connections, then advance the vehicle.
+
+        The queue snapshots the departing route before the stop index changes.
+        Passenger arrivals processed later can then identify the service missed.
+        Followers are released only after occupancy and both cursors agree.
+        Per-stop counts reset at the next arrival; through passengers keep seats.
+        The same vehicle may revisit a platform on a later configured trip.
+        Those departures remain distinct entries in passenger connection history.
+        """
         train = self.trains.get(event.train_id)
         if train is None:
             return
@@ -504,6 +862,9 @@ class TrainComponent:
         self._advance_skipped_departures(platform)
         if visit != self._next_visit(platform, self._departure_cursor):
             raise RuntimeError("Train departure violates platform order")
+        if self.passenger_queue is not None:
+            for missed in self.passenger_queue.train_departure(event, train):
+                scheduler.schedule(missed)
         current_stop = self._stop(visit)
         self._last_departure[platform] = event.time_s
         if self._occupied_platforms.pop(platform, None) != visit:
@@ -512,6 +873,7 @@ class TrainComponent:
         self._departure_queued.discard(visit)
         self._ready_departures.pop(visit, None)
         self._at_platform[platform].remove(visit)
+        self._irregularity.record_departure(event, train.line_id)
 
         if train.advance_stop():
             next_visit = (train.id, train.current_trip_index, train.current_stop_index)

@@ -3,6 +3,7 @@
 import copy
 import math
 from dataclasses import dataclass, field
+from numbers import Integral
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,6 +26,17 @@ class ScheduledStop:
             raise ValueError("Invalid stop arrival/departure times")
 
 
+def _whole_count(name: str, value: object) -> int:
+    """Normalize Python/NumPy integers; reject booleans and non-integer types.
+
+    Range checks belong to the caller: capacity, load and passenger movements
+    have different bounds. Convert before arithmetic to avoid NumPy overflow.
+    """
+    if isinstance(value, bool) or not isinstance(value, Integral):
+        raise ValueError(f"{name} must be an integer")
+    return int(value)
+
+
 def _check_chronological(stops: tuple[ScheduledStop, ...]) -> None:
     """Require each stop to arrive no earlier than the previous one departs."""
     for previous, current in zip(stops, stops[1:], strict=False):
@@ -34,7 +46,13 @@ def _check_chronological(stops: tuple[ScheduledStop, ...]) -> None:
 
 @dataclass(slots=True)
 class Train:
-    """One vehicle with persistent identity across scheduled trips, in seconds."""
+    """One vehicle with persistent identity across scheduled trips, in seconds.
+
+    Capacity and initial load count whole passengers, including aggregate riders.
+    Python/NumPy integers are normalized to Python integers; invalid count types
+    and out-of-range loads raise ValueError before a platform can board anyone.
+    Stock-specific capacity is supplied by the scenario, never inferred by line.
+    """
 
     id: str
     capacity: int
@@ -58,10 +76,14 @@ class Train:
         if not isinstance(self.line_id, str):
             raise ValueError("Line ID must be a string")
 
-        if self.capacity <= 0:
-            raise ValueError("Train capacity must be positive")
-
-        if not 0 <= self.onboard_load <= self.capacity:
+        # Capacity arithmetic counts whole passengers. Normalize NumPy scalars
+        # before arithmetic so fixed-width addition cannot wrap the live load.
+        for name, minimum in (("capacity", 1), ("onboard_load", 0)):
+            value = _whole_count(f"Train {name}", getattr(self, name))
+            if value < minimum:
+                raise ValueError(f"Train {name} must be >= {minimum}")
+            setattr(self, name, value)
+        if self.onboard_load > self.capacity:
             raise ValueError("Onboard load exceeds train capacity")
 
         if not self.schedule:
@@ -112,6 +134,7 @@ class Train:
 
     @property
     def available_capacity(self) -> int:
+        """Return spaces remaining after both tracked and aggregate riders."""
         return self.capacity - self.onboard_load
 
     @property
@@ -136,19 +159,15 @@ class Train:
 
     def board(self, count: int) -> None:
         """Add passengers without exceeding capacity."""
-        if isinstance(count, bool) or not isinstance(count, int):
-            raise ValueError("Boarding count must be an integer")
-
+        count = _whole_count("Boarding count", count)
         if count < 0 or count > self.available_capacity:
             raise ValueError("Invalid boarding count")
 
         self.onboard_load += count
 
     def alight(self, count: int) -> None:
-        """Remove passengers from the train"""
-        if isinstance(count, bool) or not isinstance(count, int):
-            raise ValueError("Alighting count must be an integer")
-
+        """Remove a whole-passenger count; reject invalid requests atomically."""
+        count = _whole_count("Alighting count", count)
         if count < 0 or count > self.onboard_load:
             raise ValueError("Invalid alighting count")
 

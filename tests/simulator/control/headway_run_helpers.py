@@ -40,6 +40,11 @@ def scenario_input(
         "strategy": strategy,
         "hold_search": {"step_s": 10, "max_hold_s": 90},
         "weights": {"w_wait": 1.5, "w_onboard": 0.75},
+        "prediction_error": {
+            "arrival_kappa": 0.5,
+            "transfer_kappa": 2.0,
+            "load_kappa": 0.0,
+        },
     }
     if strategy == "headway_regulation":
         control["target_headways_s"] = {"P": target}
@@ -109,6 +114,7 @@ def run_selected(
                 trains,
                 minimum_gap_s=engine_gap,
                 suspensions=suspensions,
+                control=settings.control,
                 decision=DecisionPipeline(
                     policy, enforcer=OperatingRulesEnforcer(settings.operating_rules)
                 ),

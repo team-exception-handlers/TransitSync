@@ -1,0 +1,15 @@
+.git
+.venv
+**/.venv
+**/__pycache__
+.pytest_cache
+.ruff_cache
+.hypothesis
+.env
+.env.*
+requirements-dev.txt
+tests
+scripts
+data
+web/node_modules
+web/dist
