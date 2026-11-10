@@ -23,7 +23,7 @@ describe("playback integration", () => {
 
   it("keeps clock, slider, Canvas and controls synchronized through StrictMode and cleanup", () => {
     const view = render(<StrictMode><App /></StrictMode>);
-    fireEvent.change(screen.getByRole("slider"), { target: { value: "85" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Seek simulation time" }), { target: { value: "85" } });
     fireEvent.click(screen.getByRole("button", { name: "Play" }));
     expect(vi.getTimerCount()).toBe(1);
     act(() => vi.advanceTimersByTime(1008));
@@ -48,7 +48,7 @@ describe("playback integration", () => {
   });
   it("applies speed, pause and rewind while keeping displayed time aligned", () => {
     render(<App />);
-    fireEvent.change(screen.getByRole("slider"), { target: { value: "85" } });
+    fireEvent.change(screen.getByRole("slider", { name: "Seek simulation time" }), { target: { value: "85" } });
     fireEvent.click(screen.getByRole("button", { name: "10× speed" }));
     fireEvent.click(screen.getByRole("button", { name: "Play" }));
     act(() => vi.advanceTimersByTime(1008));
