@@ -87,6 +87,7 @@ function buildBendFixture(): StationViewData {
             },
         ],
         train_events: [],
+        passengers: [],
     };
 }
 
