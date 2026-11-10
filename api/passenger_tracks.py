@@ -1,6 +1,14 @@
+# AI contribution: 50% or more AI-generated
 """Build map-positioned passenger tracks for the station-view API.
 
 Walk and corridor timestamps are seconds relative to the scenario start.
+
+A passenger's route runs from the feeder platform, along the transfer
+corridor, to the connecting platform. The simulator's walking time covers the
+whole transfer (Mathematical Foundations sections 2 and 3), and the corridor's
+capacity limit sits at its metro end, where ``corridor_arrival`` is recorded
+(section 5). The track therefore spreads the walk over the full route, or up
+to that bottleneck when the passenger has to queue there.
 """
 
 import math
@@ -9,6 +17,7 @@ from collections.abc import Mapping, Sequence
 
 from api.station_layout import Connection, Corridor, Platform, Point
 from simulator.engine.events import EventType
+from simulator.passengers.corridor import CorridorPassage
 from simulator.passengers.transfer_component import TransferComponent
 
 
@@ -40,27 +49,33 @@ def build_passenger_tracks(
     )
     if corridor is None:
         raise ValueError(f"Unknown corridor: {connection.corridor_id}")
-    path_points = _movement_path(
+    full_route = _movement_path(
         platforms[connection.from_platform_id],
         platforms[connection.to_platform_id],
         corridor,
     )
-    corridor_entry = corridor.path[0]
-    walk_path = path_points[: path_points.index(corridor_entry) + 1]
+    bottleneck = corridor.path[-1]
+    route_to_bottleneck = full_route[: full_route.index(bottleneck) + 1]
     tracks = []
     for passenger_id, walk in sorted(transfers.walk_records().items()):
         passenger_events = events_by_passenger[passenger_id]
         alighting = _source_alighting(passenger_events, connection.from_platform_id)
         if alighting is None:
             continue
+        passage = transfers.passages.get(passenger_id)
+        # A queued passenger stops at the bottleneck; everyone else walks
+        # straight on to the platform, where they arrive at the same instant.
+        queued = passage is not None and passage.queue_delay_s > 0
         samples = _walk_samples(
-            walk_path, float(alighting["time_s"]), walk.corridor_arrival_s, duration_s
+            route_to_bottleneck if queued else full_route,
+            float(alighting["time_s"]),
+            walk.corridor_arrival_s,
+            duration_s,
         )
-        _append_corridor_samples(
-            samples, passenger_id, transfers, corridor_entry, duration_s
-        )
+        if queued:
+            _append_queue_samples(samples, passage, bottleneck, duration_s)
         _append_arrival_and_terminal_samples(
-            samples, passenger_events, path_points[-1], platforms, duration_s
+            samples, passenger_events, full_route[-1], platforms, duration_s
         )
         tracks.append(
             {
@@ -114,9 +129,10 @@ def _walk_samples(
 ) -> list[dict[str, object]]:
     """Sample the exact walking interval, clipping unfinished walks at run end.
 
-    The interpolation runs from feeder platform to the corridor entrance.
-    Degenerate paths stay at their origin, and out-of-run endpoints are clipped.
-    The simulator does not model a separate in-corridor travel duration.
+    One sample is placed at every point of ``points``, timed in proportion to
+    the distance walked, so the passenger moves at a steady pace along the
+    corridor's bends. Degenerate paths stay at their origin, and out-of-run
+    endpoints are clipped.
     """
     if end_s <= start_s:
         return [
@@ -143,9 +159,18 @@ def _walk_samples(
     samples: list[dict[str, object]] = []
     elapsed_length = 0.0
     _append_sample(samples, start_s, points[0], "walking", duration_s)
-    for point, segment_length in zip(points[1:], lengths, strict=True):
+    last_index = len(lengths) - 1
+    for index, (point, segment_length) in enumerate(
+        zip(points[1:], lengths, strict=True)
+    ):
         elapsed_length += segment_length
-        time_s = start_s + (end_s - start_s) * elapsed_length / total_length
+        # The route's end is timed exactly at end_s: computing it would round
+        # it a hair past the event recorded at end_s and break the time order.
+        time_s = (
+            end_s
+            if index == last_index
+            else start_s + (end_s - start_s) * elapsed_length / total_length
+        )
         if time_s > duration_s:
             # Later corridor points also occur after the horizon.
             break
@@ -163,26 +188,22 @@ def _walk_samples(
     return samples
 
 
-def _append_corridor_samples(
+def _append_queue_samples(
     samples: list[dict[str, object]],
-    passenger_id: str,
-    transfers: TransferComponent,
-    corridor_entry: Point,
+    passage: CorridorPassage,
+    bottleneck: Point,
     duration_s: float,
 ) -> None:
-    """Record corridor queueing or passage at the simulation horizon.
+    """Hold a delayed passenger at the corridor bottleneck until they pass.
 
-    Queue delay holds the passenger at the corridor entry until passage.
-    A passenger whose passage extends past the run remains queued at its end.
+    The queued sample replaces the walk's last sample, which has the same time
+    and place. A passenger still queued when the run ends stays queued there.
     """
-    passage = transfers.passages.get(passenger_id)
-    if passage is None:
+    if passage.arrival_s > duration_s:
         return
-    if passage.arrival_s <= duration_s:
-        phase = "queued" if passage.queue_delay_s > 0 else "walking"
-        _append_sample(samples, passage.arrival_s, corridor_entry, phase, duration_s)
-    if passage.passage_s > duration_s and passage.arrival_s <= duration_s:
-        _append_sample(samples, duration_s, corridor_entry, "queued", duration_s)
+    _append_sample(samples, passage.arrival_s, bottleneck, "queued", duration_s)
+    if passage.passage_s > duration_s:
+        _append_sample(samples, duration_s, bottleneck, "queued", duration_s)
 
 
 def _append_arrival_and_terminal_samples(

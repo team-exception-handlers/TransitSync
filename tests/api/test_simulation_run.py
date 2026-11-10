@@ -5,6 +5,7 @@ Tests use the committed schedules and station layouts; no external service is
 required to execute a complete one-hour simulation.
 """
 
+import math
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from threading import Barrier, Lock
@@ -32,6 +33,38 @@ RUN_SETTINGS = {
     "passenger_flow": "Normal",
     "disruption_enabled": False,
 }
+
+
+def _route_points(payload: dict, connection_id: str) -> list[dict[str, float]]:
+    """Return the feeder platform, corridor path and connecting platform points."""
+    connection = next(
+        item for item in payload["connections"] if item["id"] == connection_id
+    )
+    corridor = next(
+        item for item in payload["corridors"] if item["id"] == connection["corridor_id"]
+    )
+    platforms = {item["platform_id"]: item for item in payload["platforms"]}
+    return [
+        platforms[connection["from_platform_id"]]["position"],
+        *corridor["path"],
+        platforms[connection["to_platform_id"]]["position"],
+    ]
+
+
+def _distance_to_route(point: dict, route: list[dict[str, float]]) -> float:
+    """Return the shortest distance in pixels from a point to the route polyline."""
+    best = float("inf")
+    for start, end in zip(route, route[1:], strict=False):
+        dx, dy = end["x"] - start["x"], end["y"] - start["y"]
+        length_squared = dx * dx + dy * dy
+        fraction = 0.0
+        if length_squared > 0:
+            projected = (point["x"] - start["x"]) * dx + (point["y"] - start["y"]) * dy
+            fraction = min(1.0, max(0.0, projected / length_squared))
+        nearest_x = start["x"] + fraction * dx
+        nearest_y = start["y"] + fraction * dy
+        best = min(best, math.hypot(point["x"] - nearest_x, point["y"] - nearest_y))
+    return best
 
 
 @pytest.mark.parametrize(
@@ -82,6 +115,16 @@ def test_run_endpoint_returns_map_ready_station_view_playback(
         times = [sample["time_s"] for sample in track["samples"]]
         assert times == sorted(times)
         assert all(0 <= time_s <= payload["duration_s"] for time_s in times)
+    # Every position is on the platform-corridor-platform route, so markers
+    # follow the corridor instead of cutting across the map (US-3.1).
+    route = _route_points(payload, connection_id)
+    off_route = [
+        sample["position"]
+        for track in payload["passenger_tracks"]
+        for sample in track["samples"]
+        if _distance_to_route(sample["position"], route) > 1e-6
+    ]
+    assert off_route == []
 
 
 def test_run_service_caches_detached_responses(
@@ -216,26 +259,18 @@ def test_run_settings_change_demand_and_apply_selected_feeder_disruption() -> No
         if sample["phase"] == "queued"
     ]
     assert queued_samples
-    corridor_entry = high_flow["corridors"][0]["path"][0]
-    assert all(sample["position"] == corridor_entry for sample in queued_samples)
-    feeder_position = next(
-        platform["position"]
-        for platform in high_flow["platforms"]
-        if platform["platform_id"] == "rem_mcgill_0"
-    )
-    walking_samples = [
-        sample
+    # The corridor's capacity limit is at its metro end (US-3.1 path fix).
+    corridor_path = high_flow["corridors"][0]["path"]
+    bottleneck = corridor_path[-1]
+    assert all(sample["position"] == bottleneck for sample in queued_samples)
+    walking_positions = [
+        sample["position"]
         for track in high_flow["passenger_tracks"]
         for sample in track["samples"]
         if sample["phase"] == "walking"
     ]
-    assert all(
-        sample["position"]["y"] == feeder_position["y"] for sample in walking_samples
-    )
-    assert all(
-        feeder_position["x"] <= sample["position"]["x"] <= corridor_entry["x"]
-        for sample in walking_samples
-    )
+    # Walks follow the corridor, so every bend in it is a sampled position.
+    assert all(point in walking_positions for point in corridor_path)
     uninterrupted_times = {
         (event["train_id"], event["platform_id"], event["event_type"]): event["time_s"]
         for event in uninterrupted["train_events"]
