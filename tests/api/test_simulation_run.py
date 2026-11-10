@@ -302,7 +302,10 @@ def test_every_registered_strategy_builds_through_the_api(
         component_factory(scenario, StreamManager(42))
         events_path = output_dir / "events.jsonl"
         events_path.write_text("", encoding="utf-8")
-        return SimpleNamespace(events_path=events_path)
+        # The real RunResult always has a decision log; the API reads it (#60).
+        decisions_path = output_dir / "decisions.jsonl"
+        decisions_path.write_text("", encoding="utf-8")
+        return SimpleNamespace(events_path=events_path, decisions_path=decisions_path)
 
     monkeypatch.setattr(simulation_run, "run_scenario", fake_run_scenario)
     client = TestClient(create_app())
@@ -372,3 +375,40 @@ def test_adaptive_connection_mode_receives_incoming_transfers(monkeypatch):
 
     assert response.status_code == 200
     assert max(transfer_counts, default=0) > 0
+
+
+def test_adaptive_run_returns_mode_switches_for_the_selected_connection() -> None:
+    """Expose adaptive mode switches so the timeline can mark them (#60).
+
+    Adaptive switches to headway regulation exactly when the recorded
+    irregularity is above the threshold, and back otherwise, so each record's
+    direction can be checked against its own numbers.
+    """
+    settings = {
+        **RUN_SETTINGS,
+        "strategy": "adaptive",
+        "irregularity_threshold": 0.25,
+    }
+    payload = TestClient(create_app()).post("/simulation/run", json=settings).json()
+    connection = payload["connections"][0]
+    shown = {connection["from_platform_id"], connection["to_platform_id"]}
+    switches = payload["mode_switches"]
+    times = [switch["time_s"] for switch in switches]
+
+    assert switches
+    assert {switch["platform_id"] for switch in switches} <= shown
+    assert times == sorted(times)
+    assert all(0 <= time_s <= payload["duration_s"] for time_s in times)
+    for switch in switches:
+        above = switch["service_irregularity"] > switch["irregularity_threshold"]
+        expected = "headway_regulation" if above else "connection_protection"
+        assert switch["to_mode"] == expected
+        assert switch["from_mode"] != switch["to_mode"]
+
+
+def test_non_adaptive_run_returns_no_mode_switches() -> None:
+    """Only adaptive switches mode, so other strategies return an empty list."""
+    response = TestClient(create_app()).post("/simulation/run", json=RUN_SETTINGS)
+
+    assert response.status_code == 200
+    assert response.json()["mode_switches"] == []
