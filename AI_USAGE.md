@@ -31,11 +31,10 @@ Passenger time-sync tests and adaptive mode-switch markers (#72, #60): Claude (C
 Add tests that pin passenger positions to simulation time on a hand-built run with
 hand-calculated positions (clock advance, speed change, before the first passenger,
 at and beyond the end, seeking backwards, rewind). Mark Adaptive mode switches on the
-playback timeline as diamonds with a text label, from decision-audit records of kind
-`mode_switch` in a run's `decisions` list. The run endpoint does not return those
-records yet, so the markers appear once it does. Marker tests check the fraction of
-`duration_s`, the label, and that hold decisions, malformed records and runs without
-switches give no markers.
+playback timeline as diamonds with a text label, from the run response's
+`mode_switches` list (added to the API in a separate PR). Marker tests check the
+fraction of `duration_s`, the label, and that hold decisions, malformed records,
+runs without switches and an API without the key give no markers.
 Files: web/src/lib/modeSwitches.ts, web/src/components/PlaybackTimeline.tsx,
 web/src/components/playback-timeline.css, web/tests/playback/passenger-time-sync.test.ts,
 web/tests/lib/modeSwitches.test.ts, web/tests/components/PlaybackTimeline.test.tsx, AI_USAGE.md.
