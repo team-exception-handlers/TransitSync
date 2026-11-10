@@ -32,12 +32,85 @@ Add tests that pin passenger positions to simulation time on a hand-built run wi
 hand-calculated positions (clock advance, speed change, before the first passenger,
 at and beyond the end, seeking backwards, rewind). Mark Adaptive mode switches on the
 playback timeline as diamonds with a text label, from the run response's
-`mode_switches` list (added to the API in a separate PR). Marker tests check the
+`mode_switches` list (added to the API in #214). Marker tests check the
 fraction of `duration_s`, the label, and that hold decisions, malformed records,
 runs without switches and an API without the key give no markers.
 Files: web/src/lib/modeSwitches.ts, web/src/components/PlaybackTimeline.tsx,
 web/src/components/playback-timeline.css, web/tests/playback/passenger-time-sync.test.ts,
 web/tests/lib/modeSwitches.test.ts, web/tests/components/PlaybackTimeline.test.tsx, AI_USAGE.md.
+
+Run conditions in the run settings panel (#183, #182, #25): Claude (Claude Code, Anthropic), 50% or more AI-generated.
+Add an error magnitude slider (0 to 3, with 0 labelled "upper bound (perfect
+information)"), a Low/Normal/High passenger flow selector and a disruption on/off
+switch to the run settings panel, send them to the run endpoint and show the active
+values beside the results. The API only has `disruption_enabled`, so the disruption
+types in #25 are not built. Tests cover each control, the -0.1/0/3/3.1 error-magnitude
+boundaries, invalid flow and switch values, and that the request body's keys equal
+the field names read from `api/simulation_run.py`.
+Files: web/src/types/runSettings.ts, web/src/lib/run-settings.ts,
+web/src/components/setting-choice.tsx, web/src/components/run-settings-panel.tsx,
+web/src/components/run-summary.tsx, web/src/components/run-settings.css,
+web/tests/lib/run-settings.test.ts, web/tests/lib/run-simulation.test.ts,
+web/tests/store/useRunSettingsStore.test.ts,
+web/tests/components/run-settings-panel.test.tsx, README.md, AI_USAGE.md.
+
+Run settings panel (#45, #50, #60): Claude (Claude Code, Anthropic), 50% or more AI-generated.
+Add the station view's run settings panel from the Scenario setup mockup: strategy
+radio cards, a maximum hold slider with a help note, the irregularity threshold
+(enabled only for Adaptive), "Run scenario" and "Reset to defaults". A run starts
+only on the button; the settings behind the displayed run are shown beside the
+station heading, and a failed run keeps the previous run on screen. Tests cover
+each control, the slider limits, the request body through a mocked fetch,
+404/422/network failures and reset. Checked in a browser against
+the backend in Docker.
+Files: web/src/components/run-settings-panel.tsx, web/src/components/setting-slider.tsx,
+web/src/components/run-summary.tsx, web/src/components/run-settings.css, web/src/App.tsx,
+web/tests/components/run-settings-panel.test.tsx,
+web/tests/components/playback-integration.test.tsx, README.md, AI_USAGE.md.
+
+Adaptive mode switches in the run response (#60): Claude (Claude Code, Anthropic), 50% or more AI-generated.
+`POST /simulation/run` now returns `mode_switches`: the adaptive strategy's
+decision-audit records of kind `mode_switch` on the selected connection's two
+platforms, in time order, so the playback timeline can mark them. The list is empty
+for every other strategy. Tests check the filter and ordering on hand-built records,
+that the strict response model rejects other modes, and, on a real adaptive run, that
+each switch goes to headway regulation exactly when its irregularity is above the
+threshold.
+Files: api/station_view.py, api/simulation_run.py, tests/api/test_station_view.py,
+tests/api/test_simulation_run.py, AI_USAGE.md.
+
+Passenger paths along the transfer corridor (US-3.1, #65): Claude (Claude Code, Anthropic), 50% or more AI-generated.
+Passengers in simulator runs walked a straight diagonal across the station map
+because most tracks had only two points: the REM platform and the metro platform.
+Each walk is now spread over the whole route (feeder platform, corridor, connecting
+platform) for its recorded walking time; a passenger who has to queue walks to the
+corridor's metro end, waits there and then reaches the platform. The route's last
+point is timed exactly at the walk's end so it cannot round past the platform
+arrival. Tests check hand-calculated positions on an L-shaped route (unqueued,
+queued, still queued at run end, walk cut by run end), and that every position in
+real runs for all three connections lies on the route. The #180 flow test's
+assertions about where walking and queued passengers stand were updated to match.
+Files: api/passenger_tracks.py, tests/api/test_passenger_tracks.py,
+tests/api/test_simulation_run.py, AI_USAGE.md.
+
+Run settings request client and store (#45, #50, #60): Claude (Claude Code, Anthropic), 50% or more AI-generated.
+Add typed run settings, the request-body builder and `runSimulation` to the station
+view's API client, plus the store that holds the settings. The builder leaves
+`irregularity_threshold` out of the JSON unless the strategy is adaptive, as the API
+requires, and 404, 422, server and network failures become user-facing messages. The
+store clamps and snaps every value to the API's ranges, and `loadConnectionRun` can
+re-run a connection that already has output. Tests check the exact body and its JSON
+types, the 0/5/300/305/47 maximum-hold boundaries, every failure path, reset, and that
+the offered strategy names equal the names declared in `simulator/control/strategies/`.
+The request shapes were also sent to the real endpoint in Docker. Review on #210 found
+two gaps in the AI-generated code, both fixed with regression tests: an older rerun of
+the same connection finishing last could overwrite newer results, and a cancel while
+the response body was being read was reported as an error instead of an abort.
+Files: web/src/types/runSettings.ts, web/src/lib/run-settings.ts,
+web/src/lib/simulation-api.ts, web/src/store/useRunSettingsStore.ts,
+web/src/store/usePlaybackStore.ts, web/tests/lib/run-settings.test.ts,
+web/tests/lib/run-simulation.test.ts, web/tests/store/useRunSettingsStore.test.ts,
+web/tests/store/connection-run-loading.test.ts, AI_USAGE.md.
 
 Simulation-run endpoint (#180): Copilot SDK in VS Code, 50% or more AI-generated.
 Load the committed one-hour scenario for a selected connection, apply validated
@@ -667,6 +740,23 @@ Design-pattern documentation is on the [Design Patterns wiki page](https://githu
 - **Change:** Use the observed service irregularity to select connection protection or headway regulation for each line and directional platform.
 - **Verification:** Full suite: 1682 passed. All ruff checks passed. Hand-calculated the irregularity scores for the integration test. Unit tests cover invalid thresholds, equality at the threshold, missing scores, and independent modes across services. 
 -**Corrections:** The initial wiring imported the strategy without registering it, and existing settings guards still rejected the headway maps required by adaptive mode. The review corrected both and added regression coverage.
+
+## Run settings panel (#45, #50, #60)
+
+- **Tool:** Claude (Claude Code, Anthropic); **AI contribution:** 50% or more AI-generated.
+- **Files and PR:** See the "Run settings panel" and "Run settings request client" rows above.
+- **Change:** A panel in the station view edits a draft of the run settings and
+  sends it to `POST /simulation/run` only when "Run scenario" is clicked.
+- **Verification:** Front-end lint, typecheck and tests passed. The request shapes
+  were sent to the real endpoint in Docker: adaptive with a threshold returned 200,
+  a threshold on `no_control` and a maximum hold of 47 returned 422, and an unknown
+  connection returned 404, matching the messages the tests expect.
+- **Corrections:** The first slider row used an `<output>` element for its value.
+  `<output>` has the implicit `status` role, so six existing App tests that look up
+  the page's single status line failed; it was replaced with a `<span>` and the
+  slider's `aria-valuetext`. The first version also measured 628 changed source
+  lines in one PR, over the 400-line limit, so it was split into a client-and-store
+  PR and a panel PR along its commits.
 
 ## Keeping this file up to date
 

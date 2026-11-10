@@ -1,0 +1,51 @@
+/* AI contribution: 50% or more AI-generated */
+/*
+ * Styles for the run settings panel, its slider rows and the run summary.
+ * Kept out of App.css, which is already past the 500-line team limit.
+ * Colours, radii and type sizes are the same tokens App.css uses.
+ */
+
+/* Full-width row under the timeline. Tokens follow the Scenario setup mockup:
+   radio cards for strategies, label-left / monospace-value-right sliders. */
+.run-settings { grid-column: 1 / -1; padding: 18px 20px; }
+.run-settings-header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+.run-settings-header h2 { margin: 0; }
+.run-settings-actions { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; }
+.run-settings-actions .playback-button { padding: 0 14px; font: 500 14px "IBM Plex Sans", Arial, sans-serif; cursor: pointer; }
+.run-settings-note { margin: 10px 0 0; color: #5b6168; font-size: 13px; }
+.run-settings-error { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: #fbe1e1; color: #a21b1b; font-size: 13px; font-weight: 500; }
+.run-settings-body { display: grid; grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr); gap: 16px 24px; margin-top: 12px; }
+.strategy-list { min-width: 0; margin: 0; padding: 0; border: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.strategy-list legend { padding: 0 0 8px; font-size: 14px; font-weight: 600; }
+.strategy-option { display: flex; align-items: flex-start; gap: 12px; padding: 12px; border: 1px solid #e4e6e1; border-radius: 10px; font-size: 14px; cursor: pointer; }
+/* Selection is shown by the native radio dot and a darker border, not colour alone. */
+.strategy-option:has(input:checked) { border-color: #16191d; }
+.strategy-option:focus-within { outline: 3px solid #4b96dd; outline-offset: 2px; }
+.strategy-option input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: #16191d; flex-shrink: 0; }
+.strategy-option small { display: block; margin-top: 2px; color: #5b6168; font-size: 13px; }
+.strategy-list .setting { grid-column: 1 / -1; border-top: 0; padding-top: 4px; }
+.setting { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-top: 1px solid #e4e6e1; }
+.setting:first-child { border-top: 0; padding-top: 0; }
+.setting-top { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.setting label, .setting-label { font-size: 14px; font-weight: 500; }
+/* Segmented rows: buttons sit on the right, where sliders show their value. */
+.setting-choice { margin-left: auto; }
+.setting-choice button { padding: 0 14px; }
+.setting-note { margin: 0; color: #5b6168; font-size: 13px; }
+.setting-value { margin-left: auto; font-family: "IBM Plex Mono", monospace; font-size: 14px; font-weight: 600; }
+.setting input[type="range"] { width: 100%; height: 24px; margin: 0; accent-color: #16191d; }
+.setting input[type="range"]:disabled { opacity: 0.5; }
+.setting input[type="range"]:focus-visible { outline: 3px solid #4b96dd; outline-offset: 4px; }
+/* 22px visible circle inside a 44px touch target. */
+.setting-help { width: 44px; height: 44px; margin: -12px -10px; padding: 0; border: 0; background: transparent; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
+.setting-help span { width: 22px; height: 22px; border-radius: 50%; border: 1px solid #c9cdc6; background: #fff; color: #3d434a; font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; justify-content: center; }
+.setting-help[aria-expanded="true"] span { background: #16191d; border-color: #16191d; color: #fff; }
+.setting-help-text { margin: 0; padding: 10px 12px; border-radius: 8px; background: #f3f4f1; color: #3d434a; font-size: 13px; line-height: 1.5; }
+/* Settings behind the displayed run, beside the station heading. */
+.run-summary { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0 0; }
+.run-summary div { display: flex; align-items: baseline; gap: 6px; }
+.run-summary dt { color: #5b6168; font-size: 11px; }
+.run-summary dd { margin: 0; font-family: "IBM Plex Mono", monospace; font-size: 12px; font-weight: 600; }
+@media (max-width: 930px) {
+  .run-settings-body { grid-template-columns: 1fr; }
+}
