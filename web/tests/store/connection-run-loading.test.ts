@@ -154,3 +154,93 @@ describe("loadConnectionRun", () => {
     expect(usePlaybackStore.getState().simulatedConnectionIds).toStrictEqual([]);
   });
 });
+
+describe("loadConnectionRun with rerun (run settings panel)", () => {
+  beforeEach(() => {
+    const store = usePlaybackStore.getState();
+    store.setAvailableRuns(connectionRuns);
+    store.loadData(stationViewData);
+    usePlaybackStore.setState({ runStatus: "mock", runError: null });
+  });
+
+  it("reuses loaded output by default but replaces it when rerun is set", async () => {
+    const store = usePlaybackStore.getState();
+    const first = simulatedRun();
+    const second = simulatedRun();
+    second.duration_s = 900;
+
+    expect(await store.loadConnectionRun(MCGILL, async () => first)).toBe(true);
+    const reused = vi.fn(async () => second);
+    expect(await store.loadConnectionRun(MCGILL, reused)).toBe(false);
+    expect(reused).not.toHaveBeenCalled();
+
+    expect(await store.loadConnectionRun(MCGILL, async () => second, undefined, { rerun: true })).toBe(true);
+    expect(usePlaybackStore.getState().data?.duration_s).toBe(900);
+    expect(usePlaybackStore.getState().simulatedConnectionIds).toStrictEqual([MCGILL]);
+  });
+
+  it("keeps the newer rerun when two reruns resolve in reverse order", async () => {
+    const store = usePlaybackStore.getState();
+    const older = deferred<StationViewData>();
+    const newer = deferred<StationViewData>();
+    const olderRun = simulatedRun();
+    olderRun.duration_s = 600;
+    const newerRun = simulatedRun();
+    newerRun.duration_s = 900;
+    const rerun = { rerun: true };
+    const olderLoad = store.loadConnectionRun(MCGILL, () => older.promise, undefined, rerun);
+    const newerLoad = store.loadConnectionRun(MCGILL, () => newer.promise, undefined, rerun);
+
+    newer.resolve(newerRun);
+    expect(await newerLoad).toBe(true);
+    older.resolve(olderRun);
+
+    expect(await olderLoad).toBe(false);
+    expect(usePlaybackStore.getState().data?.duration_s).toBe(900);
+    expect(usePlaybackStore.getState().runStatus).toBe("simulated");
+  });
+
+  it("ignores an older rerun's failure that arrives after a newer rerun succeeded", async () => {
+    const store = usePlaybackStore.getState();
+    const older = deferred<StationViewData>();
+    const rerun = { rerun: true };
+    const olderLoad = store.loadConnectionRun(MCGILL, () => older.promise, undefined, rerun);
+    await store.loadConnectionRun(MCGILL, async () => simulatedRun(), undefined, rerun);
+
+    older.reject(new Error("The simulation run failed on the server (HTTP 500)."));
+
+    expect(await olderLoad).toBe(false);
+    expect(usePlaybackStore.getState().runStatus).toBe("simulated");
+    expect(usePlaybackStore.getState().runError).toBeNull();
+  });
+
+  it("does not let a reused load cancel a rerun in flight", async () => {
+    const store = usePlaybackStore.getState();
+    await store.loadConnectionRun(MCGILL, async () => simulatedRun());
+    const pending = deferred<StationViewData>();
+    const rerunLoad = store.loadConnectionRun(MCGILL, () => pending.promise, undefined, { rerun: true });
+    // Same connection without rerun: reuses the loaded output and loads nothing.
+    expect(await store.loadConnectionRun(MCGILL, async () => simulatedRun())).toBe(false);
+
+    const rerunRun = simulatedRun();
+    rerunRun.duration_s = 900;
+    pending.resolve(rerunRun);
+
+    expect(await rerunLoad).toBe(true);
+    expect(usePlaybackStore.getState().data?.duration_s).toBe(900);
+  });
+
+  it("resolves false and keeps the shown run when a rerun fails", async () => {
+    const store = usePlaybackStore.getState();
+    await store.loadConnectionRun(MCGILL, async () => simulatedRun());
+    const shown = usePlaybackStore.getState().data;
+    const failing = async (): Promise<StationViewData> => {
+      throw new Error("The simulation run failed on the server (HTTP 500). Try again in a moment.");
+    };
+
+    expect(await store.loadConnectionRun(MCGILL, failing, undefined, { rerun: true })).toBe(false);
+    expect(usePlaybackStore.getState().data).toBe(shown);
+    expect(usePlaybackStore.getState().runStatus).toBe("error");
+    expect(usePlaybackStore.getState().runError).toContain("HTTP 500");
+  });
+});
