@@ -38,6 +38,39 @@ threshold.
 Files: api/station_view.py, api/simulation_run.py, tests/api/test_station_view.py,
 tests/api/test_simulation_run.py, AI_USAGE.md.
 
+Passenger paths along the transfer corridor (US-3.1, #65): Claude (Claude Code, Anthropic), 50% or more AI-generated.
+Passengers in simulator runs walked a straight diagonal across the station map
+because most tracks had only two points: the REM platform and the metro platform.
+Each walk is now spread over the whole route (feeder platform, corridor, connecting
+platform) for its recorded walking time; a passenger who has to queue walks to the
+corridor's metro end, waits there and then reaches the platform. The route's last
+point is timed exactly at the walk's end so it cannot round past the platform
+arrival. Tests check hand-calculated positions on an L-shaped route (unqueued,
+queued, still queued at run end, walk cut by run end), and that every position in
+real runs for all three connections lies on the route. The #180 flow test's
+assertions about where walking and queued passengers stand were updated to match.
+Files: api/passenger_tracks.py, tests/api/test_passenger_tracks.py,
+tests/api/test_simulation_run.py, AI_USAGE.md.
+
+Run settings request client and store (#45, #50, #60): Claude (Claude Code, Anthropic), 50% or more AI-generated.
+Add typed run settings, the request-body builder and `runSimulation` to the station
+view's API client, plus the store that holds the settings. The builder leaves
+`irregularity_threshold` out of the JSON unless the strategy is adaptive, as the API
+requires, and 404, 422, server and network failures become user-facing messages. The
+store clamps and snaps every value to the API's ranges, and `loadConnectionRun` can
+re-run a connection that already has output. Tests check the exact body and its JSON
+types, the 0/5/300/305/47 maximum-hold boundaries, every failure path, reset, and that
+the offered strategy names equal the names declared in `simulator/control/strategies/`.
+The request shapes were also sent to the real endpoint in Docker. Review on #210 found
+two gaps in the AI-generated code, both fixed with regression tests: an older rerun of
+the same connection finishing last could overwrite newer results, and a cancel while
+the response body was being read was reported as an error instead of an abort.
+Files: web/src/types/runSettings.ts, web/src/lib/run-settings.ts,
+web/src/lib/simulation-api.ts, web/src/store/useRunSettingsStore.ts,
+web/src/store/usePlaybackStore.ts, web/tests/lib/run-settings.test.ts,
+web/tests/lib/run-simulation.test.ts, web/tests/store/useRunSettingsStore.test.ts,
+web/tests/store/connection-run-loading.test.ts, AI_USAGE.md.
+
 Simulation-run endpoint (#180): Copilot SDK in VS Code, 50% or more AI-generated.
 Load the committed one-hour scenario for a selected connection, apply validated
 control, demand, prediction-error and disruption settings, and convert the run
