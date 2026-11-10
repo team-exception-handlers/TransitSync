@@ -41,6 +41,31 @@ web/src/components/run-summary.tsx, web/src/components/run-settings.css, web/src
 web/tests/components/run-settings-panel.test.tsx,
 web/tests/components/playback-integration.test.tsx, README.md, AI_USAGE.md.
 
+Adaptive mode switches in the run response (#60): Claude (Claude Code, Anthropic), 50% or more AI-generated.
+`POST /simulation/run` now returns `mode_switches`: the adaptive strategy's
+decision-audit records of kind `mode_switch` on the selected connection's two
+platforms, in time order, so the playback timeline can mark them. The list is empty
+for every other strategy. Tests check the filter and ordering on hand-built records,
+that the strict response model rejects other modes, and, on a real adaptive run, that
+each switch goes to headway regulation exactly when its irregularity is above the
+threshold.
+Files: api/station_view.py, api/simulation_run.py, tests/api/test_station_view.py,
+tests/api/test_simulation_run.py, AI_USAGE.md.
+
+Passenger paths along the transfer corridor (US-3.1, #65): Claude (Claude Code, Anthropic), 50% or more AI-generated.
+Passengers in simulator runs walked a straight diagonal across the station map
+because most tracks had only two points: the REM platform and the metro platform.
+Each walk is now spread over the whole route (feeder platform, corridor, connecting
+platform) for its recorded walking time; a passenger who has to queue walks to the
+corridor's metro end, waits there and then reaches the platform. The route's last
+point is timed exactly at the walk's end so it cannot round past the platform
+arrival. Tests check hand-calculated positions on an L-shaped route (unqueued,
+queued, still queued at run end, walk cut by run end), and that every position in
+real runs for all three connections lies on the route. The #180 flow test's
+assertions about where walking and queued passengers stand were updated to match.
+Files: api/passenger_tracks.py, tests/api/test_passenger_tracks.py,
+tests/api/test_simulation_run.py, AI_USAGE.md.
+
 Run settings request client and store (#45, #50, #60): Claude (Claude Code, Anthropic), 50% or more AI-generated.
 Add typed run settings, the request-body builder and `runSimulation` to the station
 view's API client, plus the store that holds the settings. The builder leaves

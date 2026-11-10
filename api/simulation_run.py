@@ -210,7 +210,8 @@ class SimulationRunService:
     def _run_uncached(self, request: SimulationRunRequest) -> SimulationRunResponse:
         """Run and serialize one validated settings combination.
 
-        The event log is consumed before its temporary directory is removed.
+        The event and decision logs are read before the temporary directory is
+        removed.
         Simulator, filesystem, and serialization errors propagate to the route.
         A failed run never enters the response cache.
         """
@@ -246,8 +247,15 @@ class SimulationRunService:
                 scenario, StreamManager, build_components, Path(folder)
             )
             event_records = _read_json_lines(result.events_path)
+            # The audit log carries adaptive mode switches for the timeline (#60).
+            decision_records = _read_json_lines(result.decisions_path)
             return build_station_view_response(
-                layout, connection, scenario, event_records, run_state["transfers"]
+                layout,
+                connection,
+                scenario,
+                event_records,
+                run_state["transfers"],
+                decision_records,
             )
 
     def _select_connection(
