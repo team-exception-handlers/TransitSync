@@ -65,7 +65,10 @@ store clamps and snaps every value to the API's ranges, and `loadConnectionRun` 
 re-run a connection that already has output. Tests check the exact body and its JSON
 types, the 0/5/300/305/47 maximum-hold boundaries, every failure path, reset, and that
 the offered strategy names equal the names declared in `simulator/control/strategies/`.
-The request shapes were also sent to the real endpoint in Docker.
+The request shapes were also sent to the real endpoint in Docker. Review on #210 found
+two gaps in the AI-generated code, both fixed with regression tests: an older rerun of
+the same connection finishing last could overwrite newer results, and a cancel while
+the response body was being read was reported as an error instead of an abort.
 Files: web/src/types/runSettings.ts, web/src/lib/run-settings.ts,
 web/src/lib/simulation-api.ts, web/src/store/useRunSettingsStore.ts,
 web/src/store/usePlaybackStore.ts, web/tests/lib/run-settings.test.ts,

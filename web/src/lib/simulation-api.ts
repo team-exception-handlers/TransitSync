@@ -185,6 +185,9 @@ export async function runSimulation(
   try {
     return checkedRun(await response.json(), connectionId);
   } catch (error) {
+    // A cancel while the body is still being read rejects json() with the
+    // abort; pass it through unchanged, as for a cancel during fetch above.
+    if (signal?.aborted) throw error;
     const reason = error instanceof Error ? error.message : String(error);
     throw new SimulationRunError(
       `The simulator returned a run the station view cannot display (${reason}).`,
