@@ -1,8 +1,9 @@
 // AI contribution: 50% or more AI-generated
 /**
- * Run settings panel of the station view (#45, #50, #60): choose a strategy,
- * the maximum hold and the adaptive irregularity threshold, then run the
- * selected connection with those values.
+ * Run settings panel of the station view (#45, #50, #60, #183, #182, #25):
+ * choose a strategy, the maximum hold, the adaptive irregularity threshold,
+ * the prediction-error magnitude, the passenger flow and whether the demo
+ * disruption is on, then run the selected connection with those values.
  *
  * Controls only edit the draft in the run settings store. The simulator is
  * called when "Run scenario" is clicked, never on a change, because a run is
@@ -10,18 +11,27 @@
  */
 import { useEffect, useId, useRef } from "react";
 import {
+  ERROR_MAGNITUDE_RANGE,
   MAX_HOLD_RANGE,
+  PASSENGER_FLOWS,
   STRATEGY_OPTIONS,
   THRESHOLD_RANGE,
+  formatErrorMagnitude,
   formatSeconds,
   formatThreshold,
+  formatToggle,
 } from "../lib/run-settings";
 import type { ScenarioRunner } from "../lib/simulation-api";
 import { usePlaybackStore } from "../store/usePlaybackStore";
 import { useRunSettingsStore } from "../store/useRunSettingsStore";
+import { SettingChoice } from "./setting-choice";
 import { SettingSlider } from "./setting-slider";
 import "./run-settings.css";
 
+const ERROR_MAGNITUDE_HELP =
+  "How wrong the strategy's predictions are. At 0 it decides on the true values, "
+  + "which gives the best result that strategy can reach.";
+const DISRUPTION_HELP = "Delays the arriving REM train by 60 seconds, two minutes into the run.";
 // Wording from the Scenario setup mockup's help popover.
 const MAX_HOLD_HELP =
   "The longest any train may wait for transfers, whatever the strategy asks for.";
@@ -125,6 +135,17 @@ export function RunSettingsPanel({ runner }: Readonly<RunSettingsPanelProps>) {
           <SettingSlider label="Maximum hold" value={draft.max_hold_time}
             range={MAX_HOLD_RANGE} format={formatSeconds} help={MAX_HOLD_HELP}
             onChange={(value) => update({ max_hold_time: value })} />
+          <SettingSlider label="Error magnitude" value={draft.error_magnitude}
+            range={ERROR_MAGNITUDE_RANGE} format={formatErrorMagnitude}
+            help={ERROR_MAGNITUDE_HELP}
+            onChange={(value) => update({ error_magnitude: value })} />
+          <SettingChoice label="Passenger flow" options={PASSENGER_FLOWS}
+            value={draft.passenger_flow} format={(flow) => flow}
+            onChange={(flow) => update({ passenger_flow: flow })} />
+          {/* The API only has an on/off switch; delay and suspension types are not exposed yet. */}
+          <SettingChoice label="Disruption" options={[false, true]}
+            value={draft.disruption_enabled} format={formatToggle} note={DISRUPTION_HELP}
+            onChange={(enabled) => update({ disruption_enabled: enabled })} />
         </div>
       </div>
     </section>

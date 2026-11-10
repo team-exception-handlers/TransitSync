@@ -27,7 +27,8 @@ async function failure(fetchImpl: typeof fetch): Promise<SimulationRunError> {
 describe("runSimulation", () => {
   it("posts the settings body to /simulation/run and returns the validated run", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, stationViewData));
-    const settings = { strategy: "adaptive", max_hold_time: 45, irregularity_threshold: 0.3 } as const;
+    const settings = { ...DEFAULT_RUN_SETTINGS, strategy: "adaptive", max_hold_time: 45,
+      irregularity_threshold: 0.3, passenger_flow: "High" } as const;
     const run = await runSimulation(CONNECTION, settings, { baseUrl, fetchImpl });
 
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
@@ -37,6 +38,9 @@ describe("runSimulation", () => {
       connection_id: CONNECTION,
       strategy: "adaptive",
       max_hold_time: 45,
+      error_magnitude: 1,
+      passenger_flow: "High",
+      disruption_enabled: false,
       irregularity_threshold: 0.3,
     });
     expect(run.passengers).toHaveLength(stationViewData.passenger_tracks.length);

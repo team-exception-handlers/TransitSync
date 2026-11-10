@@ -1,7 +1,7 @@
 // AI contribution: 50% or more AI-generated
 // @vitest-environment jsdom
 /**
- * Run settings panel (#45, #50, #60): controls edit the store, nothing runs
+ * Run settings panel (#45, #50, #60, #183, #182, #25): controls edit the store, nothing runs
  * until "Run scenario", and a failed run leaves the previous run on screen.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -101,6 +101,52 @@ describe("run settings controls", () => {
     expect(screen.getByText("0.40")).toBeDefined();
   });
 
+  it("stores the error magnitude and labels zero as the upper bound", () => {
+    render(<RunSettingsPanel runner={null} />);
+    expect(screen.getByText("1.0")).toBeDefined();
+
+    fireEvent.change(slider(/Error magnitude/), { target: { value: "2.5" } });
+    expect(draft().error_magnitude).toBe(2.5);
+    expect(screen.getByText("2.5")).toBeDefined();
+
+    fireEvent.change(slider(/Error magnitude/), { target: { value: "0" } });
+    expect(draft().error_magnitude).toBe(0);
+    expect(screen.getByText("0.0 · upper bound (perfect information)")).toBeDefined();
+  });
+
+  it("limits the error magnitude slider to 0-3", () => {
+    render(<RunSettingsPanel runner={null} />);
+
+    expect(slider(/Error magnitude/).min).toBe("0");
+    expect(slider(/Error magnitude/).max).toBe("3");
+  });
+
+  it("stores the passenger flow, with Normal pressed by default", () => {
+    render(<RunSettingsPanel runner={null} />);
+    const flow = screen.getByRole("group", { name: "Passenger flow" });
+    const pressed = () => Array.from(flow.querySelectorAll("button"))
+      .filter((button) => button.getAttribute("aria-pressed") === "true")
+      .map((button) => button.textContent);
+    expect(pressed()).toStrictEqual(["Normal"]);
+
+    fireEvent.click(screen.getByRole("button", { name: "High" }));
+
+    expect(draft().passenger_flow).toBe("High");
+    expect(pressed()).toStrictEqual(["High"]);
+  });
+
+  it("stores the disruption switch, off by default", () => {
+    render(<RunSettingsPanel runner={null} />);
+    const on = screen.getByRole("button", { name: "On" });
+    expect(on.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(on);
+
+    expect(draft().disruption_enabled).toBe(true);
+    expect(on.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Off" }).getAttribute("aria-pressed")).toBe("false");
+  });
+
   it("opens and closes the maximum hold help note", () => {
     render(<RunSettingsPanel runner={null} />);
     const help = screen.getByRole("button", { name: "What is maximum hold?" });
@@ -117,6 +163,9 @@ describe("run settings controls", () => {
     render(<RunSettingsPanel runner={null} />);
     fireEvent.click(screen.getByRole("radio", { name: /^Adaptive/ }));
     fireEvent.change(slider(/Maximum hold/), { target: { value: "60" } });
+    fireEvent.change(slider(/Error magnitude/), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "High" }));
+    fireEvent.click(screen.getByRole("button", { name: "On" }));
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
 
     expect(draft()).toStrictEqual(DEFAULT_RUN_SETTINGS);
@@ -184,6 +233,9 @@ describe("Run scenario through the API client", () => {
     render(<App runLoader={null} scenarioRunner={runnerWith(fetchImpl)} />);
     fireEvent.click(screen.getByRole("radio", { name: /^Adaptive/ }));
     fireEvent.change(slider(/Maximum hold/), { target: { value: "60" } });
+    fireEvent.change(slider(/Error magnitude/), { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "High" }));
+    fireEvent.click(screen.getByRole("button", { name: "On" }));
     fireEvent.click(runButton());
 
     await waitFor(() => expect(screen.getByRole("status").textContent)
@@ -193,6 +245,9 @@ describe("Run scenario through the API client", () => {
       connection_id: CONNECTION,
       strategy: "adaptive",
       max_hold_time: 60,
+      error_magnitude: 0,
+      passenger_flow: "High",
+      disruption_enabled: true,
       irregularity_threshold: 0.25,
     });
     expect(usePlaybackStore.getState().data?.duration_s).toBe(600);
@@ -200,6 +255,9 @@ describe("Run scenario through the API client", () => {
     expect(summary.textContent).toContain("StrategyAdaptive");
     expect(summary.textContent).toContain("Max hold60 s");
     expect(summary.textContent).toContain("Irregularity threshold0.25");
+    expect(summary.textContent).toContain("Error magnitude0.0 · upper bound (perfect information)");
+    expect(summary.textContent).toContain("Passenger flowHigh");
+    expect(summary.textContent).toContain("DisruptionOn");
   });
 
   it("shows no settings summary for mock playback", () => {

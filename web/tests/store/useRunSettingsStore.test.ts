@@ -16,7 +16,21 @@ describe("useRunSettingsStore", () => {
       strategy: "no_control",
       max_hold_time: 300,
       irregularity_threshold: 0.25,
+      error_magnitude: 1,
+      passenger_flow: "Normal",
+      disruption_enabled: false,
     });
+  });
+
+  it.each([
+    [-0.1, 0],
+    [0, 0],
+    [3, 3],
+    [3.1, 3],
+  ])("stores a requested error magnitude of %d as %d", (requested, stored) => {
+    store().update({ error_magnitude: requested });
+
+    expect(store().draft.error_magnitude).toBe(stored);
   });
 
   it.each([
@@ -36,14 +50,15 @@ describe("useRunSettingsStore", () => {
     store().update({ irregularity_threshold: 0.4 });
 
     expect(store().draft).toStrictEqual({
+      ...DEFAULT_RUN_SETTINGS,
       strategy: "adaptive",
-      max_hold_time: 300,
       irregularity_threshold: 0.4,
     });
   });
 
   it("resets every control to the backend defaults", () => {
-    store().update({ strategy: "rolling_horizon", max_hold_time: 60, irregularity_threshold: 0.9 });
+    store().update({ strategy: "rolling_horizon", max_hold_time: 60, irregularity_threshold: 0.9,
+      error_magnitude: 0, passenger_flow: "High", disruption_enabled: true });
     store().reset();
 
     expect(store().draft).toStrictEqual(DEFAULT_RUN_SETTINGS);

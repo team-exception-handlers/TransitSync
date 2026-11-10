@@ -105,8 +105,9 @@ To show simulator output instead of the bundled mock runs, copy
 before `npm run dev`. Without it, the station view uses mock runs only.
 
 The **Run settings** panel under the playback timeline uses the same variable.
-"Run scenario" sends the chosen strategy, maximum hold and, for Adaptive, the
-irregularity threshold to `POST /simulation/run`, then replays the result. The
+"Run scenario" sends the chosen strategy, maximum hold, error magnitude,
+passenger flow, disruption switch and, for Adaptive, the irregularity threshold
+to `POST /simulation/run`, then replays the result. The
 button is disabled when `VITE_API_URL` is unset. The Docker front end is built
 without it, so run scenarios through `npm run dev` with the backend in Docker.
 
