@@ -33,7 +33,7 @@ class ConnectionProtectionStrategy(DecisionController):
     searches: Mapping[str, HoldSearch]
     headways_s: Mapping[str, float]
     name: ClassVar[str] = "connection_protection"
-    _audit: DecisionAuditLog = field(
+    audit: DecisionAuditLog = field(
         default_factory=DecisionAuditLog, init=False, repr=False, compare=False
     )
 
@@ -62,11 +62,11 @@ class ConnectionProtectionStrategy(DecisionController):
         inputs = HoldInputs.from_observation(observation, self.headways_s[platform_id])
         result = self.searches[platform_id].run(inputs)
         # Keep the reason even when the train should leave without a hold.
-        self._audit.record(result)
+        self.audit.record(result)
         if result.chosen is None:
             return ()
         return (HoldAction(observation.train_id, result.hold_s, result.reason),)
 
     def decision_records(self) -> tuple[dict[str, Any], ...]:
         """Return copies of the logged decisions, oldest first."""
-        return self._audit.decision_records()
+        return self.audit.decision_records()

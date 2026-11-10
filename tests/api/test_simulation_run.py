@@ -1,3 +1,4 @@
+# AI contribution: 50% or more AI-generated
 """Contract, validation, and cache tests for simulation-run requests.
 
 Tests use the committed schedules and station layouts; no external service is
@@ -18,6 +19,9 @@ from api.simulation_run import SimulationRunRequest, SimulationRunService
 from api.station_layout import load_station_layouts
 from api.station_view import SimulationRunResponse
 from simulator.control.strategies import STRATEGIES
+from simulator.control.strategies.connection_protection import (
+    ConnectionProtectionStrategy,
+)
 from simulator.engine.random_streams import StreamManager
 
 RUN_SETTINGS = {
@@ -256,6 +260,9 @@ def test_run_settings_change_demand_and_apply_selected_feeder_disruption() -> No
         {"max_hold_time": 121},
         {"error_magnitude": -1},
         {"error_magnitude": 1000},
+        {"strategy": "adaptive"},
+        {"strategy": "adaptive", "irregularity_threshold": -0.1},
+        {"strategy": "no_control", "irregularity_threshold": 0.25},
     ],
 )
 def test_run_endpoint_rejects_invalid_settings(
@@ -300,15 +307,15 @@ def test_every_registered_strategy_builds_through_the_api(
     monkeypatch.setattr(simulation_run, "run_scenario", fake_run_scenario)
     client = TestClient(create_app())
 
-    response = client.post(
-        "/simulation/run",
-        json={
-            **RUN_SETTINGS,
-            "strategy": strategy,
-            "passenger_flow": "Low",
-            "error_magnitude": 0,
-        },
-    )
+    request_settings = {
+        **RUN_SETTINGS,
+        "strategy": strategy,
+        "passenger_flow": "Low",
+        "error_magnitude": 0,
+    }
+    if strategy == "adaptive":
+        request_settings["irregularity_threshold"] = 0.25
+    response = client.post("/simulation/run", json=request_settings)
 
     assert response.status_code == 200
     assert response.json()["interchange"]["id"] == "mcgill"
@@ -329,3 +336,27 @@ def test_run_endpoint_returns_not_found_for_unknown_connection() -> None:
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Unknown connection: unknown"}
+
+
+def test_adaptive_connection_mode_receives_incoming_transfers(monkeypatch):
+    """Exercise the real API factory and observe its connection delegate."""
+    transfer_counts = []
+    original_evaluate = ConnectionProtectionStrategy.evaluate
+
+    def observe(self, observation):
+        transfer_counts.append(len(observation.incoming_transfers))
+        return original_evaluate(self, observation)
+
+    monkeypatch.setattr(ConnectionProtectionStrategy, "evaluate", observe)
+    response = TestClient(create_app()).post(
+        "/simulation/run",
+        json={
+            **RUN_SETTINGS,
+            "strategy": "adaptive",
+            "irregularity_threshold": 10.0,
+            "error_magnitude": 0,
+        },
+    )
+
+    assert response.status_code == 200
+    assert max(transfer_counts, default=0) > 0

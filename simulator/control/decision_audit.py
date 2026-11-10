@@ -39,9 +39,12 @@ from simulator.engine.event_log import partial_path
 DECISIONS_FILE = "decisions.jsonl"
 # Bump when a record field is added, removed or renamed
 DECISION_SCHEMA_VERSION = 2
+
 KIND_HOLD_SEARCH = "hold_search"
 KIND_ESTIMATES = "estimates"
 KIND_ROLLING_HORIZON = "rolling_horizon"
+KIND_MODE_SWITCH = "mode_switch"
+
 # The values the prediction error model changes (#39)
 TRAIN_ESTIMATES = ("predicted_arrival_s", "onboard_load")
 TRANSFER_ESTIMATES = ("passenger_count", "group_size")
@@ -62,7 +65,7 @@ class DecisionAuditSource(Protocol):
 
 
 class DecisionAuditLog:
-    """Collects one record per decision during a run.
+    """Collect hold decisions and adaptive mode switches during a run.
 
     A strategy calls ``record`` once per decision point, whether it holds or
     not, so declines are as visible as holds.
@@ -74,6 +77,34 @@ class DecisionAuditLog:
     def record(self, result: HoldSearchResult) -> None:
         """Store the record for ``result``, built now from the search result."""
         self._records.append(decision_record(result))
+
+    def record_mode_switch(
+        self,
+        observation: ObservationSnapshot,
+        *,
+        line_id: str,
+        from_mode: str,
+        to_mode: str,
+        irregularity: float,
+        threshold: float,
+    ) -> None:
+        """Record the transition before evaluating the newly selected policy."""
+        self._records.append(
+            {
+                "schema_version": DECISION_SCHEMA_VERSION,
+                "kind": KIND_MODE_SWITCH,
+                "strategy": "adaptive",
+                "time_s": observation.time_s,
+                "train_id": observation.train_id,
+                "station_id": observation.station_id,
+                "platform_id": observation.platform_id,
+                "line_id": line_id,
+                "from_mode": from_mode,
+                "to_mode": to_mode,
+                "service_irregularity": irregularity,
+                "irregularity_threshold": threshold,
+            }
+        )
 
     def decision_records(self) -> tuple[dict[str, Any], ...]:
         """Return a deep copy of every record so far, oldest first.

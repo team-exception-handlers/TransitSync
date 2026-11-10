@@ -12,7 +12,10 @@ from simulator.control.break_even import BreakEvenWeights
 from simulator.control.hold_search import HoldSearch, HoldSearchSettings
 from simulator.control.interface import DecisionController
 from simulator.control.registry import StrategyRegistry
-from simulator.control.settings import ControlSettings
+from simulator.control.settings import (
+    CONNECTION_HEADWAY_STRATEGIES,
+    ControlSettings,
+)
 from simulator.control.strategies import STRATEGIES
 from simulator.control.strategies.connection_protection import (
     ConnectionProtectionStrategy,
@@ -62,8 +65,8 @@ def build_selected_connection_protection(
     saved weights and hold settings are used unchanged. Return a fresh strategy.
     Raise ``ValueError`` for another selection or invalid route/headway coverage.
     """
-    if control.strategy != ConnectionProtectionStrategy.name:
-        raise ValueError("control.strategy: expected connection_protection")
+    if control.strategy not in CONNECTION_HEADWAY_STRATEGIES:
+        raise ValueError("control.strategy: expected connection_protection or adaptive")
     walking = _prepare_walking(
         routes,
         control.connection_headways_s,
@@ -76,6 +79,8 @@ def build_selected_connection_protection(
         weights=control.weights,
         hold_search=control.hold_search,
         connection_headways_s=control.connection_headways_s,
+        target_headways_s=control.target_headways_s,
+        irregularity_threshold=control.irregularity_threshold,
     )
 
 

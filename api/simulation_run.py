@@ -22,7 +22,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from api.network_data import DATASET_ID, dataset_metadata, load_reference_network
 from api.station_layout import Connection, StationLayoutResponse
@@ -33,12 +33,19 @@ from simulator.control.connection_configuration import (
     build_selected_connection_protection,
 )
 from simulator.control.decision import DecisionPipeline
+from simulator.control.headway_configuration import validate_headway_configuration
+from simulator.control.observation_builder import ObservationBuilder
 from simulator.control.prediction_error import (
     PredictionErrorModel,
     PredictionErrorSettings,
 )
 from simulator.control.rules import OperatingRulesEnforcer
+from simulator.control.settings import (
+    CONNECTION_HEADWAY_STRATEGIES,
+    TARGET_HEADWAY_STRATEGIES,
+)
 from simulator.control.strategies import STRATEGIES
+from simulator.control.strategies.adaptive import AdaptiveStrategy
 from simulator.control.walking_cdf import ShiftedExponentialCdf
 from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import Component, run_scenario
@@ -104,6 +111,20 @@ class SimulationRunRequest(BaseModel):
     )
     passenger_flow: Literal["Low", "Normal", "High"] = "Normal"
     disruption_enabled: bool = Field(default=False, strict=True)
+
+    irregularity_threshold: float | None = Field(
+        default=None, ge=0, allow_inf_nan=False, strict=True
+    )
+
+    @model_validator(mode="after")
+    def validate_adaptive_threshold(self) -> SimulationRunRequest:
+        """Require a threshold only when adaptive mode is requested."""
+        if self.strategy == AdaptiveStrategy.name:
+            if self.irregularity_threshold is None:
+                raise ValueError("irregularity_threshold is required for adaptive")
+        elif "irregularity_threshold" in self.model_fields_set:
+            raise ValueError("irregularity_threshold is only valid for adaptive")
+        return self
 
     @field_validator("strategy")
     @classmethod
@@ -248,8 +269,8 @@ class SimulationRunService:
     ) -> Scenario:
         """Load the committed one-hour scenario and apply validated run settings.
 
-        Headway targets are derived only for the headway-regulation strategy.
-        Connection protection uses the selected destination's median service gap.
+        Headway regulation uses platform targets, and connection protection uses
+        the selected destination's median service gap. Adaptive mode uses both.
         The maximum hold is set in both control search and operating safeguards.
         Prediction-error kappa is shared across arrival, transfer, and load inputs.
         Returned scenario state is replaced rather than mutating the committed data.
@@ -257,22 +278,23 @@ class SimulationRunService:
         scenario = load_scenario_file(
             SCENARIO_PATHS[interchange_id], {DATASET_ID: self._dataset}
         )
+        uses_targets = request.strategy in TARGET_HEADWAY_STRATEGIES
+        uses_connections = request.strategy in CONNECTION_HEADWAY_STRATEGIES
         headways = (
             _headway_targets(self._network, scenario.service_date)
-            if request.strategy in {"headway_regulation", "connection_protection"}
+            if uses_targets or uses_connections
             else {}
         )
         control = replace(
             scenario.control,
             strategy=request.strategy,
-            target_headways_s=(
-                headways if request.strategy == "headway_regulation" else None
-            ),
+            target_headways_s=headways if uses_targets else None,
             connection_headways_s=(
                 {connecting_platform_id: headways[connecting_platform_id]}
-                if request.strategy == "connection_protection"
+                if uses_connections
                 else None
             ),
+            irregularity_threshold=request.irregularity_threshold,
             hold_search=replace(
                 scenario.control.hold_search,
                 max_hold_s=request.max_hold_time,
@@ -384,10 +406,18 @@ def _build_train_component(
     The platform queue and walking estimate both use the connection's metro side.
     """
     trains = _build_trains(network, scenario)
-    if scenario.control.strategy == "connection_protection":
-        # Validate coverage and derive walking CDFs from the passenger route.
+    platform_ids = [p.platform_id for p in network.platforms]
+    adaptive = scenario.control.strategy == AdaptiveStrategy.name
+    if adaptive:
+        validate_headway_configuration(
+            scenario.control,
+            trains,
+            platform_ids,
+            scenario.operating_rules.min_safe_gap,
+        )
+    if scenario.control.strategy in CONNECTION_HEADWAY_STRATEGIES:
         strategy = build_selected_connection_protection(
-            scenario.control, [route], [p.platform_id for p in network.platforms]
+            scenario.control, [route], platform_ids
         )
     else:
         strategy = STRATEGIES.build(
@@ -404,6 +434,7 @@ def _build_train_component(
         )
     decision = DecisionPipeline(
         strategy,
+        builder=ObservationBuilder([transfers]) if adaptive else None,
         enforcer=OperatingRulesEnforcer(scenario.operating_rules),
         error_model=PredictionErrorModel(
             scenario.control.prediction_error,
