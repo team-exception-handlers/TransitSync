@@ -123,3 +123,78 @@ describe("PlaybackTimeline", () => {
         ).toBeNull();
     });
 });
+
+describe("PlaybackTimeline mode-switch markers (#60)", () => {
+    // The fixture run lasts 360 s and starts at 07:40:00.
+    const switchAt = (time_s: number, to_mode: string) => ({
+        kind: "mode_switch",
+        time_s,
+        platform_id: "green_mcgill_0",
+        from_mode: to_mode === "headway_regulation" ? "connection_protection" : "headway_regulation",
+        to_mode,
+    });
+
+    afterEach(() => {
+        cleanup();
+    });
+
+    it("draws no marker list when the run has no switch entries", () => {
+        usePlaybackStore.getState().loadData({ ...stationViewData, decisions: [] });
+        render(<PlaybackTimeline />);
+
+        expect(screen.queryByRole("list", { name: "Adaptive mode switches" })).toBeNull();
+    });
+
+    it("places each switch at its fraction of the run duration", () => {
+        usePlaybackStore.getState().loadData({
+            ...stationViewData,
+            decisions: [switchAt(90, "headway_regulation"), switchAt(270, "connection_protection")],
+        });
+        render(<PlaybackTimeline />);
+
+        const markers = screen.getByRole("list", { name: "Adaptive mode switches" })
+            .querySelectorAll("li");
+        expect(markers).toHaveLength(2);
+        // 90 s of 360 s is a quarter of the way along; 270 s is three quarters.
+        expect(markers[0].style.left).toBe("25%");
+        expect(markers[1].style.left).toBe("75%");
+    });
+
+    it("labels each marker with its clock time and both modes", () => {
+        usePlaybackStore.getState().loadData({
+            ...stationViewData,
+            decisions: [switchAt(90, "headway_regulation")],
+        });
+        render(<PlaybackTimeline />);
+
+        const label = "Mode switch at 07:41:30: connection protection to headway regulation";
+        expect(screen.getByText(label)).toBeDefined();
+        expect(screen.getByRole("listitem").getAttribute("title")).toBe(label);
+    });
+
+    it("ignores hold decisions in the same list", () => {
+        const hold = { time_s: 60, train_id: "T1", station_id: "S", platform_id: "P",
+            requested_s: 30, applied_s: 30, reason: "hold for transfer group" };
+        usePlaybackStore.getState().loadData({
+            ...stationViewData,
+            decisions: [hold, switchAt(180, "headway_regulation")],
+        });
+        render(<PlaybackTimeline />);
+
+        const markers = screen.getAllByRole("listitem");
+        expect(markers).toHaveLength(1);
+        expect(markers[0].style.left).toBe("50%");
+    });
+
+    it("keeps the seek slider working with markers present", () => {
+        usePlaybackStore.getState().loadData({
+            ...stationViewData,
+            decisions: [switchAt(90, "headway_regulation")],
+        });
+        render(<PlaybackTimeline />);
+        fireEvent.change(screen.getByRole("slider", { name: "Seek simulation time" }),
+            { target: { value: "90" } });
+
+        expect(usePlaybackStore.getState().currentTime_s).toBe(90);
+    });
+});

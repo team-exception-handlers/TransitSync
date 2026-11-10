@@ -1,0 +1,39 @@
+/* AI contribution: 50% or more AI-generated */
+/*
+ * Adaptive mode-switch markers on the playback timeline (#60). Kept out of
+ * App.css, which is already past the 500-line team limit.
+ */
+
+/* A thin strip tucked under the slider; markers are positioned inside it.
+   The negative margins keep the fixed-height playback row from growing. */
+.timeline-markers {
+  position: relative;
+  height: 8px;
+  /* Inset by half the slider thumb so 0% and 100% line up with the track ends. */
+  margin: -5px 8px -3px;
+  padding: 0;
+  list-style: none;
+}
+
+/* An 8px square turned 45 degrees: a diamond centred on its time. The teal
+   outline on white differs from the dark slider thumb in shape and lightness. */
+.timeline-marker {
+  position: absolute;
+  top: 0;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  background: #ffffff;
+  border: 2px solid #007b78;
+  transform: rotate(45deg);
+}
+
+/* Text for assistive technology only. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
