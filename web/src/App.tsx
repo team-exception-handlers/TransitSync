@@ -1,4 +1,13 @@
 // AI contribution: 50% or more AI-generated
+/**
+ * Station view shell: header with the connection selector, the Canvas map,
+ * the clock, rules and decision panels, and the playback timeline.
+ *
+ * On start it registers the mock run catalog so the view works offline. When
+ * an API URL is configured, every connection the user selects is then swapped
+ * for that connection's simulator run output (#79); all panels read the run
+ * and playback position from the shared Zustand store, so they switch together.
+ */
 
 import { useEffect } from "react";
 import { PlaybackTimeline } from "./components/PlaybackTimeline";
@@ -10,13 +19,38 @@ import { SimulationClock } from "./components/simulation-clock";
 import { OperatingRulesPanel } from "./components/operating-rules-panel";
 import { DecisionView } from "./components/decision-view";
 import { startPlaybackClock } from "./lib/playback-clock";
+import {
+  configuredApiUrl,
+  createConnectionRunLoader,
+  type ConnectionRunLoader,
+} from "./lib/simulation-api";
 import { PlaybackControls } from "./components/playback-controls";
 import { SpeedSelector } from "./components/speed-selector";
-import { usePlaybackStore } from "./store/usePlaybackStore";
+import { usePlaybackStore, type RunStatus } from "./store/usePlaybackStore";
 
+// Built once per page load. Without VITE_API_URL the app stays on its bundled
+// mock runs, which is also what the component tests render.
+const apiUrl = configuredApiUrl();
+const defaultRunLoader = apiUrl === null ? null : createConnectionRunLoader(apiUrl);
 
-export default function App() {
+// Subtitle under the heading, so viewers always know whether they are looking
+// at simulator output or synthetic data.
+const RUN_STATUS_TEXT: Record<RunStatus, string> = {
+  mock: "Mock playback · synthetic passenger and train data",
+  loading: "Loading simulation run…",
+  simulated: "Simulation run · demo scenario output",
+  error: "Showing mock playback · simulation run unavailable",
+};
+
+interface AppProps {
+  // Injectable for tests; null keeps the app on the mock catalog.
+  runLoader?: ConnectionRunLoader | null;
+}
+
+export default function App({ runLoader = defaultRunLoader }: Readonly<AppProps>) {
   useEffect(startPlaybackClock, []);
+  const runStatus = usePlaybackStore((state) => state.runStatus);
+  const runError = usePlaybackStore((state) => state.runError);
   const data = usePlaybackStore(
     (state) => state.data
   );
@@ -37,6 +71,18 @@ export default function App() {
       store.loadData(stationViewData);
     }
   }, []);
+
+  // Each selection change requests that connection's run output. Leaving the
+  // connection aborts the request so its late response cannot replace the
+  // newer selection (the store also checks, for loaders that ignore aborts).
+  useEffect(() => {
+    if (runLoader === null || selectedConnectionId === null) return;
+    const controller = new AbortController();
+    void usePlaybackStore
+      .getState()
+      .loadConnectionRun(selectedConnectionId, runLoader, controller.signal);
+    return () => controller.abort();
+  }, [runLoader, selectedConnectionId]);
 
   return (
     <div className="app-shell">
@@ -97,7 +143,9 @@ export default function App() {
             <div className="station-heading">
               <span className="clock-heading">Selected connection</span>
               <h1>{selectedConnection?.label ?? "Choose a connection"}</h1>
-              <small>Mock playback · synthetic passenger and train data</small>
+              <small role="status" title={runError ?? undefined}>
+                {RUN_STATUS_TEXT[runStatus]}
+              </small>
             </div>
             <StationCanvas />
           </section>
