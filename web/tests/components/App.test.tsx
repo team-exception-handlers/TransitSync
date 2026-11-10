@@ -1,10 +1,12 @@
 // AI contribution: 50% or more AI-generated
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "../../src/App";
 import { stationViewData } from "../../src/data/stationViewData";
+import { parseStationViewData } from "../../src/lib/validateStationView";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
+import type { StationViewData } from "../../src/types/stationView";
 
 describe("TransitSync application shell", () => {
     beforeEach(() => {
@@ -140,6 +142,74 @@ describe("TransitSync application shell", () => {
         );
 
         expect(screen.getByRole("heading", { level: 1 }).textContent).toBe(selectedLabel);
+    });
+
+    it("stays on the mock run and labels it when no API is configured", () => {
+        render(<App runLoader={null} />);
+
+        expect(screen.getByRole("status").textContent).toContain("Mock playback");
+    });
+});
+
+describe("Selected connection to simulation run (#79)", () => {
+    beforeEach(() => {
+        vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+        usePlaybackStore.setState({
+            data: null,
+            currentTime_s: 0,
+            selectedConnectionId: null,
+            availableRuns: [],
+            simulatedConnectionIds: [],
+            runStatus: "mock",
+            runError: null,
+        });
+    });
+
+    afterEach(() => {
+        cleanup();
+        vi.restoreAllMocks();
+    });
+
+    it("loads the selected connection's run and shows it as simulator output", async () => {
+        const run = structuredClone(stationViewData);
+        run.duration_s = 600;
+        const loader = vi.fn(async () => parseStationViewData(run));
+        render(<App runLoader={loader} />);
+
+        await waitFor(() => expect(screen.getByRole("status").textContent)
+            .toBe("Simulation run · demo scenario output"));
+        expect(loader).toHaveBeenCalledWith("mcgill-rem-green", expect.any(AbortSignal));
+        expect(usePlaybackStore.getState().data?.duration_s).toBe(600);
+    });
+
+    it("requests the new connection and aborts the old request on a switch", async () => {
+        const signals: AbortSignal[] = [];
+        const loader = vi.fn((_id: string, signal?: AbortSignal) => {
+            if (signal) signals.push(signal);
+            return new Promise<StationViewData>(() => {});
+        });
+        render(<App runLoader={loader} />);
+        await waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
+
+        fireEvent.click(screen.getByRole("button", { name: /Gare Centrale/ }));
+
+        await waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
+        expect(loader.mock.calls[1][0]).toBe("gare_centrale_bonaventure-rem-orange");
+        expect(signals[0].aborted).toBe(true);
+        expect(signals[1].aborted).toBe(false);
+        expect(screen.getByRole("status").textContent).toBe("Loading simulation run…");
+    });
+
+    it("keeps the mock run on screen and says the run is unavailable when loading fails", async () => {
+        const loader = vi.fn(async () => {
+            throw new Error("Simulation run failed");
+        });
+        render(<App runLoader={loader} />);
+
+        await waitFor(() => expect(screen.getByRole("status").textContent)
+            .toBe("Showing mock playback · simulation run unavailable"));
+        expect(screen.getByRole("status").getAttribute("title")).toBe("Simulation run failed");
+        expect(usePlaybackStore.getState().data?.interchange.id).toBe("mcgill");
     });
 });
 

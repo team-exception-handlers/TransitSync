@@ -100,6 +100,10 @@ $env:TRANSITSYNC_CORS_ORIGINS = "http://localhost:5173"
 python -m uvicorn api.main:app --reload
 ```
 
+To show simulator output instead of the bundled mock runs, copy
+`web/.env.example` to `web/.env` and set `VITE_API_URL=http://localhost:8000`
+before `npm run dev`. Without it, the station view uses mock runs only.
+
 The `.venv` and `web/node_modules` directories are local development artifacts;
 they are excluded from Docker build contexts.
 

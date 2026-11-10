@@ -1,17 +1,42 @@
 // AI contribution: 50% or more AI-generated
-/** Authoritative frontend playback position, loaded run and connection selection. */
+/**
+ * Authoritative frontend playback position, loaded run and connection selection.
+ *
+ * Selecting a connection shows its catalog run at once (a mock until the
+ * simulator output arrives) and restarts playback; `loadConnectionRun` then
+ * replaces that entry with the API's run output for the same connection.
+ */
 import { create } from "zustand";
 
 import { getNetworkSnapshot } from "../lib/getNetworkSnapshot";
+import type { ConnectionRunLoader } from "../lib/simulation-api";
 import { parseStationViewData } from "../lib/validateStationView";
 
 import type { NetworkSnapshot, StationViewData } from "../types/stationView";
 import { PLAYBACK_SPEEDS, type PlaybackSpeed } from "../types/playback-speed";
 
+/**
+ * Where the shown run came from: the bundled mock catalog, an API request in
+ * flight, the simulator's run output, or a failed request (mock still shown).
+ */
+export type RunStatus = "mock" | "loading" | "simulated" | "error";
+
 interface StationViewStore {
   data: StationViewData | null;
   availableRuns: StationViewData[];
   setAvailableRuns: (runs: readonly unknown[]) => void;
+
+  // Connections whose catalog entry has been replaced by simulator output.
+  simulatedConnectionIds: readonly string[];
+  runStatus: RunStatus;
+  // User-facing reason for the last failed load; null unless status is "error".
+  runError: string | null;
+  // Fetch the selected connection's run output and show it from time 0.
+  loadConnectionRun: (
+    connectionId: string,
+    loader: ConnectionRunLoader,
+    signal?: AbortSignal,
+  ) => Promise<void>;
 
   // current position in the run, in seconds
   currentTime_s: number;
@@ -63,6 +88,33 @@ function clampTime(
   );
 }
 
+// A different run has a different timeline, so any run change restarts paused
+// at 0 s; speed is a viewer preference and survives the change.
+const PLAYBACK_RESET = {
+  currentTime_s: 0,
+  isPlaying: false,
+  updatedAt_ms: null,
+  anchorTime_s: 0,
+} as const;
+
+/**
+ * Swap the catalog entry (or entries) sharing a connection with `run` for `run`.
+ *
+ * The new run takes the position of the first entry it replaces, so the
+ * selector keeps its order; removing every overlapping entry keeps connection
+ * IDs unique even when a run bundles several connections.
+ */
+function replaceRun(runs: readonly StationViewData[], run: StationViewData): StationViewData[] {
+  const ids = new Set(run.connections.map((connection) => connection.id));
+  const overlaps = (item: StationViewData) =>
+    item.connections.some((connection) => ids.has(connection.id));
+  const index = runs.findIndex(overlaps);
+  const kept = runs.filter((item) => !overlaps(item));
+  if (index === -1) return [...kept, run];
+  // Entries before the first overlap are never removed, so index stays valid.
+  return [...kept.slice(0, index), run, ...kept.slice(index)];
+}
+
 /** Convert elapsed wall milliseconds into run seconds, clamped at the run end. */
 function positionNow(state: StationViewStore, now_ms: number): number {
   if (!state.isPlaying || state.updatedAt_ms === null) return state.currentTime_s;
@@ -81,13 +133,44 @@ export const usePlaybackStore = create<StationViewStore>(
     speed: 1,
     updatedAt_ms: null,
     anchorTime_s: 0,
+    simulatedConnectionIds: [],
+    runStatus: "mock",
+    runError: null,
 
     // Validate the entire catalog before publishing it, so failure is atomic.
+    // A new catalog holds no simulator output yet.
     setAvailableRuns: (runs) => {
       const availableRuns = runs.map(parseStationViewData);
       const ids = availableRuns.flatMap((run) => run.connections.map((item) => item.id));
       if (new Set(ids).size !== ids.length) throw new Error("Duplicate connection in catalog");
-      set({ availableRuns });
+      set({ availableRuns, simulatedConnectionIds: [] });
+    },
+
+    // Only the latest selection may publish: a response for a connection the
+    // user has since left, or for an aborted request, is dropped silently.
+    loadConnectionRun: async (connectionId, loader, signal) => {
+      const isCurrent = () => !signal?.aborted && get().selectedConnectionId === connectionId;
+      // Output already loaded for this connection is reused, not re-run.
+      if (!isCurrent() || get().simulatedConnectionIds.includes(connectionId)) return;
+      set({ runStatus: "loading", runError: null });
+      try {
+        const run = await loader(connectionId, signal);
+        if (!isCurrent()) return;
+        const state = get();
+        const runIds = run.connections.map((connection) => connection.id);
+        set({
+          ...PLAYBACK_RESET,
+          data: run,
+          availableRuns: replaceRun(state.availableRuns, run),
+          simulatedConnectionIds: [...new Set([...state.simulatedConnectionIds, ...runIds])],
+          runStatus: "simulated",
+        });
+      } catch (error) {
+        if (!isCurrent()) return;
+        // Keep the mock run and its playback position; only report the failure.
+        const reason = error instanceof Error ? error.message : String(error);
+        set({ runStatus: "error", runError: reason });
+      }
     },
 
     loadData: (value) => {
@@ -186,12 +269,12 @@ export const usePlaybackStore = create<StationViewStore>(
       }
 
       set({
+        ...PLAYBACK_RESET,
         data,
-        currentTime_s: 0,
-        isPlaying: false,
-        updatedAt_ms: null,
-        anchorTime_s: 0,
         selectedConnectionId: connectionId,
+        // The status describes the run now shown, not the previous selection.
+        runStatus: state.simulatedConnectionIds.includes(connectionId) ? "simulated" : "mock",
+        runError: null,
       });
     },
 
