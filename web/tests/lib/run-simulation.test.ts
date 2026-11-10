@@ -101,6 +101,24 @@ describe("runSimulation", () => {
     await expect(runSimulation(CONNECTION, DEFAULT_RUN_SETTINGS, options)).rejects.toBe(abort);
   });
 
+  it("rethrows an abort that happens while the response body is being read", async () => {
+    const controller = new AbortController();
+    const abort = new DOMException("Aborted", "AbortError");
+    // The headers arrived; the cancel lands while json() is still reading.
+    const response = {
+      ok: true,
+      status: 200,
+      json: async () => {
+        controller.abort();
+        throw abort;
+      },
+    } as unknown as Response;
+    const fetchImpl = vi.fn(async () => response);
+    const options = { baseUrl, fetchImpl, signal: controller.signal };
+
+    await expect(runSimulation(CONNECTION, DEFAULT_RUN_SETTINGS, options)).rejects.toBe(abort);
+  });
+
   it("rejects a response that fails station-view validation", async () => {
     const error = await failure(vi.fn(async () =>
       jsonResponse(200, { ...stationViewData, schema_version: 2 })));
