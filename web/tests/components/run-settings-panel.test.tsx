@@ -193,6 +193,9 @@ describe("Run scenario through the API client", () => {
       connection_id: CONNECTION,
       strategy: "adaptive",
       max_hold_time: 60,
+      error_magnitude: 1,
+      passenger_flow: "Normal",
+      disruption_enabled: false,
       irregularity_threshold: 0.25,
     });
     expect(usePlaybackStore.getState().data?.duration_s).toBe(600);

@@ -7,7 +7,7 @@
  * here, next to the builder, means the sliders, the store and the request can
  * never disagree about what the API accepts.
  */
-import type { RunRequestBody, RunSettings, StrategyName } from "../types/runSettings";
+import type { PassengerFlow, RunRequestBody, RunSettings, StrategyName } from "../types/runSettings";
 
 /** One strategy as shown on a radio card. */
 export interface StrategyOption {
@@ -48,11 +48,20 @@ export const MAX_HOLD_RANGE: SettingRange = { min: 5, max: 300, step: 5 };
 // deviation of 1 means gaps are off by a whole headway on average.
 export const THRESHOLD_RANGE: SettingRange = { min: 0, max: 1, step: 0.05 };
 
+// The API accepts 0 <= error_magnitude <= 3; one decimal is enough for a demo.
+export const ERROR_MAGNITUDE_RANGE: SettingRange = { min: 0, max: 3, step: 0.1 };
+
+/** Passenger flow levels in the order shown, lowest first. */
+export const PASSENGER_FLOWS: readonly PassengerFlow[] = ["Low", "Normal", "High"];
+
 /** Backend defaults, plus the panel's starting threshold for Adaptive. */
 export const DEFAULT_RUN_SETTINGS: RunSettings = {
   strategy: "no_control",
   max_hold_time: 300,
   irregularity_threshold: 0.25,
+  error_magnitude: 1,
+  passenger_flow: "Normal",
+  disruption_enabled: false,
 };
 
 /**
@@ -84,6 +93,15 @@ export function applyRunSettings(current: RunSettings, patch: Partial<RunSetting
     max_hold_time: snapToRange(merged.max_hold_time, MAX_HOLD_RANGE, current.max_hold_time),
     irregularity_threshold: snapToRange(
       merged.irregularity_threshold, THRESHOLD_RANGE, current.irregularity_threshold),
+    error_magnitude: snapToRange(
+      merged.error_magnitude, ERROR_MAGNITUDE_RANGE, current.error_magnitude),
+    // An unknown flow label or a non-boolean toggle keeps the current value.
+    passenger_flow: PASSENGER_FLOWS.includes(merged.passenger_flow)
+      ? merged.passenger_flow
+      : current.passenger_flow,
+    disruption_enabled: typeof merged.disruption_enabled === "boolean"
+      ? merged.disruption_enabled
+      : current.disruption_enabled,
   };
 }
 
@@ -103,6 +121,21 @@ export function formatThreshold(value: number): string {
 }
 
 /**
+ * Error magnitude with one decimal. Zero is labelled as the upper bound: with
+ * no prediction error the strategy has perfect information, so its result is
+ * the best that strategy can do (#183).
+ */
+export function formatErrorMagnitude(value: number): string {
+  const text = value.toFixed(1);
+  return value === 0 ? `${text} · upper bound (perfect information)` : text;
+}
+
+/** "On" or "Off" for the disruption toggle and the run summary. */
+export function formatToggle(enabled: boolean): string {
+  return enabled ? "On" : "Off";
+}
+
+/**
  * Build the exact JSON body for `POST /simulation/run`.
  *
  * `irregularity_threshold` is required for Adaptive and must be left out for
@@ -114,6 +147,9 @@ export function buildRunRequest(connectionId: string, settings: RunSettings): Ru
     connection_id: connectionId,
     strategy: settings.strategy,
     max_hold_time: settings.max_hold_time,
+    error_magnitude: settings.error_magnitude,
+    passenger_flow: settings.passenger_flow,
+    disruption_enabled: settings.disruption_enabled,
   };
   if (settings.strategy === "adaptive") {
     body.irregularity_threshold = settings.irregularity_threshold;
