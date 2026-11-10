@@ -1,10 +1,14 @@
 // AI contribution: 50% or more AI-generated
-/** Run settings: strategy names, defaults and the exact request body the API accepts. */
+/** Run settings: ranges, defaults and the exact request body the API accepts. */
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_RUN_SETTINGS,
+  MAX_HOLD_RANGE,
   STRATEGY_OPTIONS,
+  THRESHOLD_RANGE,
+  applyRunSettings,
   buildRunRequest,
+  snapToRange,
 } from "../../src/lib/run-settings";
 
 // The registry module is the backend's one list of strategies; each class
@@ -34,6 +38,47 @@ describe("strategy options", () => {
     const coordinated = STRATEGY_OPTIONS.find((option) => option.label === "Coordinated");
 
     expect(coordinated?.name).toBe("rolling_horizon");
+  });
+});
+
+describe("snapToRange", () => {
+  it.each([
+    [0, 5],
+    [5, 5],
+    [300, 300],
+    [305, 300],
+    [47, 45],
+    [48, 50],
+  ])("brings a maximum hold of %d s to %d s", (requested, expected) => {
+    expect(snapToRange(requested, MAX_HOLD_RANGE, 300)).toBe(expected);
+  });
+
+  it.each([
+    [-0.1, 0],
+    [0.15, 0.15],
+    [0.26, 0.25],
+    [1.2, 1],
+  ])("brings a threshold of %d to %d without binary noise", (requested, expected) => {
+    expect(snapToRange(requested, THRESHOLD_RANGE, 0.25)).toBe(expected);
+  });
+
+  it("keeps the current value when the input is not a finite number", () => {
+    expect(snapToRange(Number.NaN, MAX_HOLD_RANGE, 120)).toBe(120);
+    expect(snapToRange(Number.POSITIVE_INFINITY, MAX_HOLD_RANGE, 120)).toBe(120);
+  });
+});
+
+describe("applyRunSettings", () => {
+  it("normalises a patched number and leaves the other fields alone", () => {
+    const next = applyRunSettings(DEFAULT_RUN_SETTINGS, { max_hold_time: 47 });
+
+    expect(next).toStrictEqual({ ...DEFAULT_RUN_SETTINGS, max_hold_time: 45 });
+  });
+
+  it("ignores a strategy the backend does not register", () => {
+    const patch = { strategy: "teleport" } as unknown as Partial<typeof DEFAULT_RUN_SETTINGS>;
+
+    expect(applyRunSettings(DEFAULT_RUN_SETTINGS, patch).strategy).toBe("no_control");
   });
 });
 

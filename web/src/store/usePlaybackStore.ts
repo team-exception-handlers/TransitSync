@@ -32,11 +32,14 @@ interface StationViewStore {
   // User-facing reason for the last failed load; null unless status is "error".
   runError: string | null;
   // Fetch the selected connection's run output and show it from time 0.
+  // `rerun` replaces output already loaded (new run settings) instead of
+  // reusing it. Resolves true only when the fetched run is now shown.
   loadConnectionRun: (
     connectionId: string,
     loader: ConnectionRunLoader,
     signal?: AbortSignal,
-  ) => Promise<void>;
+    options?: { rerun?: boolean },
+  ) => Promise<boolean>;
 
   // current position in the run, in seconds
   currentTime_s: number;
@@ -148,14 +151,16 @@ export const usePlaybackStore = create<StationViewStore>(
 
     // Only the latest selection may publish: a response for a connection the
     // user has since left, or for an aborted request, is dropped silently.
-    loadConnectionRun: async (connectionId, loader, signal) => {
+    loadConnectionRun: async (connectionId, loader, signal, options) => {
       const isCurrent = () => !signal?.aborted && get().selectedConnectionId === connectionId;
-      // Output already loaded for this connection is reused, not re-run.
-      if (!isCurrent() || get().simulatedConnectionIds.includes(connectionId)) return;
+      // Output already loaded for this connection is reused, unless the caller
+      // asks for a fresh run with different settings.
+      const reuse = !options?.rerun && get().simulatedConnectionIds.includes(connectionId);
+      if (!isCurrent() || reuse) return false;
       set({ runStatus: "loading", runError: null });
       try {
         const run = await loader(connectionId, signal);
-        if (!isCurrent()) return;
+        if (!isCurrent()) return false;
         const state = get();
         const runIds = run.connections.map((connection) => connection.id);
         set({
@@ -165,11 +170,13 @@ export const usePlaybackStore = create<StationViewStore>(
           simulatedConnectionIds: [...new Set([...state.simulatedConnectionIds, ...runIds])],
           runStatus: "simulated",
         });
+        return true;
       } catch (error) {
-        if (!isCurrent()) return;
-        // Keep the mock run and its playback position; only report the failure.
+        if (!isCurrent()) return false;
+        // Keep the run on screen and its playback position; only report the failure.
         const reason = error instanceof Error ? error.message : String(error);
         set({ runStatus: "error", runError: reason });
+        return false;
       }
     },
 

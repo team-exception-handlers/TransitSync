@@ -154,3 +154,42 @@ describe("loadConnectionRun", () => {
     expect(usePlaybackStore.getState().simulatedConnectionIds).toStrictEqual([]);
   });
 });
+
+describe("loadConnectionRun with rerun (run settings panel)", () => {
+  beforeEach(() => {
+    const store = usePlaybackStore.getState();
+    store.setAvailableRuns(connectionRuns);
+    store.loadData(stationViewData);
+    usePlaybackStore.setState({ runStatus: "mock", runError: null });
+  });
+
+  it("reuses loaded output by default but replaces it when rerun is set", async () => {
+    const store = usePlaybackStore.getState();
+    const first = simulatedRun();
+    const second = simulatedRun();
+    second.duration_s = 900;
+
+    expect(await store.loadConnectionRun(MCGILL, async () => first)).toBe(true);
+    const reused = vi.fn(async () => second);
+    expect(await store.loadConnectionRun(MCGILL, reused)).toBe(false);
+    expect(reused).not.toHaveBeenCalled();
+
+    expect(await store.loadConnectionRun(MCGILL, async () => second, undefined, { rerun: true })).toBe(true);
+    expect(usePlaybackStore.getState().data?.duration_s).toBe(900);
+    expect(usePlaybackStore.getState().simulatedConnectionIds).toStrictEqual([MCGILL]);
+  });
+
+  it("resolves false and keeps the shown run when a rerun fails", async () => {
+    const store = usePlaybackStore.getState();
+    await store.loadConnectionRun(MCGILL, async () => simulatedRun());
+    const shown = usePlaybackStore.getState().data;
+    const failing = async (): Promise<StationViewData> => {
+      throw new Error("The simulation run failed on the server (HTTP 500). Try again in a moment.");
+    };
+
+    expect(await store.loadConnectionRun(MCGILL, failing, undefined, { rerun: true })).toBe(false);
+    expect(usePlaybackStore.getState().data).toBe(shown);
+    expect(usePlaybackStore.getState().runStatus).toBe("error");
+    expect(usePlaybackStore.getState().runError).toContain("HTTP 500");
+  });
+});
