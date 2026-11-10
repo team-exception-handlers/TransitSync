@@ -100,6 +100,12 @@ const PLAYBACK_RESET = {
   anchorTime_s: 0,
 } as const;
 
+// Number of the most recent run load that got past the reuse check. Only that
+// load may publish: two reruns of the same connection both pass the selection
+// check, so without this an older request finishing last would overwrite the
+// newer results. Kept outside the store state because no component renders it.
+let latestLoad = 0;
+
 /**
  * Swap the catalog entry (or entries) sharing a connection with `run` for `run`.
  *
@@ -152,11 +158,15 @@ export const usePlaybackStore = create<StationViewStore>(
     // Only the latest selection may publish: a response for a connection the
     // user has since left, or for an aborted request, is dropped silently.
     loadConnectionRun: async (connectionId, loader, signal, options) => {
-      const isCurrent = () => !signal?.aborted && get().selectedConnectionId === connectionId;
+      const isSelected = () => !signal?.aborted && get().selectedConnectionId === connectionId;
       // Output already loaded for this connection is reused, unless the caller
       // asks for a fresh run with different settings.
       const reuse = !options?.rerun && get().simulatedConnectionIds.includes(connectionId);
-      if (!isCurrent() || reuse) return false;
+      if (!isSelected() || reuse) return false;
+      // Numbered only once it will really load, so a reused call never
+      // cancels a rerun that is still in flight.
+      const load = ++latestLoad;
+      const isCurrent = () => load === latestLoad && isSelected();
       set({ runStatus: "loading", runError: null });
       try {
         const run = await loader(connectionId, signal);
