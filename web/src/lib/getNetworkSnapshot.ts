@@ -4,10 +4,39 @@ import type {
     NetworkSnapshot,
     PassengerPosition,
     PassengerTrack,
+    Point,
     StationViewData,
     TrainAtPlatform,
     TrainMovementEvent,
 } from "../types/stationView";
+
+import { prepareCorridorInterpolation } from "./interpolateAlongCorridor";
+
+type PreparedInterpolation = ReturnType<typeof prepareCorridorInterpolation>;
+
+// Loaded runs are treated as immutable. Weak keys let replaced runs be collected.
+const interpolationByRun = new WeakMap<StationViewData, Map<PassengerTrack, (PreparedInterpolation | undefined)[]>>();
+
+function getPreparedInterpolations(data: StationViewData) {
+    const cached = interpolationByRun.get(data);
+    if (cached) return cached;
+
+    const paths = getCorridorPathByConnection(data);
+    const prepared = new Map(data.passenger_tracks.map((track) => [
+        track,
+        track.samples.map((sample, index) => {
+            const next = track.samples[index + 1];
+            if (sample.phase !== "walking" || !next || next.time_s <= sample.time_s) {
+                return undefined;
+            }
+            return prepareCorridorInterpolation(
+                sample.position, next.position, paths.get(track.connection_id),
+            );
+        }),
+    ]));
+    interpolationByRun.set(data, prepared);
+    return prepared;
+}
 
 function clampTime(
     time_s: number,
@@ -26,6 +55,7 @@ function clampTime(
 function getPassengerPosition(
     track: PassengerTrack,
     time_s: number,
+    interpolations: readonly (PreparedInterpolation | undefined)[],
 ): PassengerPosition | null {
     const samples = track.samples;
 
@@ -73,17 +103,7 @@ function getPassengerPosition(
             (time_s - current.time_s) /
             (next.time_s - current.time_s);
 
-        position = {
-            x:
-                current.position.x +
-                (next.position.x - current.position.x) *
-                fraction,
-
-            y:
-                current.position.y +
-                (next.position.y - current.position.y) *
-                fraction,
-        };
+        position = interpolations[index]!(fraction);
     }
 
     return {
@@ -114,6 +134,29 @@ function compareTrainEvents(
     }
 
     return a.train_id.localeCompare(b.train_id);
+}
+
+function getCorridorPathByConnection(
+    data: StationViewData,
+): Map<string, Point[]> {
+    const corridorById = new Map(
+        data.corridors.map((corridor) => [
+            corridor.id,
+            corridor.path,
+        ]),
+    );
+
+    const result = new Map<string, Point[]>();
+
+    for (const connection of data.connections) {
+        const path = corridorById.get(connection.corridor_id);
+
+        if (path) {
+            result.set(connection.id, path);
+        }
+    }
+
+    return result;
 }
 
 function getTrainsAtTime(
@@ -168,9 +211,15 @@ export function getNetworkSnapshot(
         data.duration_s,
     );
 
+    const interpolations = getPreparedInterpolations(data);
+
     const passengers = data.passenger_tracks
         .map((track) =>
-            getPassengerPosition(track, time_s),
+            getPassengerPosition(
+                track,
+                time_s,
+                interpolations.get(track)!,
+            ),
         )
         .filter(
             (passenger): passenger is PassengerPosition =>
