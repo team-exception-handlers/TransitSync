@@ -1,4 +1,5 @@
 # AI contribution: 50% or more AI-generated
+"""Exercise Issue #63 through real departures, snapshots and control decisions."""
 
 import json
 from unittest.mock import Mock
@@ -6,6 +7,11 @@ from unittest.mock import Mock
 import pytest
 
 from simulator.control.decision import DecisionPipeline
+from simulator.control.decision_audit import (
+    DECISION_SCHEMA_VERSION,
+    KIND_HOLD_SEARCH,
+    KIND_MODE_SWITCH,
+)
 from simulator.control.headway_configuration import validate_headway_configuration
 from simulator.control.rules import OperatingRulesEnforcer
 from simulator.control.strategies import STRATEGIES
@@ -189,9 +195,8 @@ def test_adaptive_run_switches_recovers_and_writes_reproducible_audit(tmp_path):
     records = [
         json.loads(line) for line in first.decisions_path.read_text().splitlines()
     ]
-    switches = [
-        record for record in records if record.get("record_type") == "mode_switch"
-    ]
+    switches = [record for record in records if record.get("kind") == KIND_MODE_SWITCH]
+    assert all(r["schema_version"] == DECISION_SCHEMA_VERSION for r in switches)
     # The 90-second gap triggers regulation at 310. The next 60-second gap
     # restores connection protection at 370, before that decision is audited.
     assert [
@@ -202,9 +207,9 @@ def test_adaptive_run_switches_recovers_and_writes_reproducible_audit(tmp_path):
         (370, "headway_regulation", "connection_protection", 0.0),
     ]
     at_recovery = [record for record in records if record["time_s"] == 370]
-    assert [record.get("record_type") for record in at_recovery] == [
-        "mode_switch",
-        None,
+    assert [record.get("kind") for record in at_recovery] == [
+        KIND_MODE_SWITCH,
+        KIND_HOLD_SEARCH,
     ]
     assert "chosen_hold_s" in at_recovery[1]
     assert all(record["irregularity_threshold"] == 0.25 for record in switches)

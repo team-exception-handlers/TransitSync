@@ -39,10 +39,12 @@ from simulator.engine.event_log import partial_path
 DECISIONS_FILE = "decisions.jsonl"
 # Bump when a record field is added, removed or renamed
 DECISION_SCHEMA_VERSION = 2
-MODE_SWITCH_SCHEMA_VERSION = 1
+
 KIND_HOLD_SEARCH = "hold_search"
 KIND_ESTIMATES = "estimates"
 KIND_ROLLING_HORIZON = "rolling_horizon"
+KIND_MODE_SWITCH = "mode_switch"
+
 # The values the prediction error model changes (#39)
 TRAIN_ESTIMATES = ("predicted_arrival_s", "onboard_load")
 TRANSFER_ESTIMATES = ("passenger_count", "group_size")
@@ -89,8 +91,8 @@ class DecisionAuditLog:
         """Record the transition before evaluating the newly selected policy."""
         self._records.append(
             {
-                "record_type": "mode_switch",
-                "schema_version": MODE_SWITCH_SCHEMA_VERSION,
+                "schema_version": DECISION_SCHEMA_VERSION,
+                "kind": KIND_MODE_SWITCH,
                 "strategy": "adaptive",
                 "time_s": observation.time_s,
                 "train_id": observation.train_id,

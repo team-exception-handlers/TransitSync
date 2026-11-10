@@ -3,6 +3,7 @@
 
 import pytest
 
+from simulator.control.decision_audit import KIND_MODE_SWITCH
 from simulator.control.interface import ObservationSnapshot, PlatformState, TrainState
 from simulator.control.settings import (
     ControlSettings,
@@ -96,7 +97,7 @@ def test_adaptive_switches_only_for_the_deciding_service():
     switches = [
         record
         for record in strategy.decision_records()
-        if record.get("record_type") == "mode_switch"
+        if record.get("kind") == KIND_MODE_SWITCH
     ]
     assert [(record["time_s"], record["to_mode"]) for record in switches] == [
         (110, "headway_regulation"),
