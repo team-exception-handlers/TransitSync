@@ -123,6 +123,20 @@ if value < minimum:
 ### S7519: `dict.fromkeys` for a constant value
 `{key: 0 for key in keys}` becomes `dict.fromkeys(keys, 0)`. Only for immutable values: `dict.fromkeys(keys, [])` shares one list between every key, so keep the comprehension for lists, sets and dicts.
 
+### S8495: every return of a function gives a tuple of the same length (reliability, high)
+Sonar treats tuple literals as fixed-size records, so returning `()` on one path and `(item,)` on another reads as a bug: a caller that unpacks the result would fail. This hit the API and every strategy's `decide()` (5 issues). When the result is really a variable-length collection (`tuple[Action, ...]`), build it one way and convert once:
+```python
+if not enabled:                      # flagged: () here, (injection,) below
+    return ()
+return (injection,)
+
+injections = []                      # clean: one return, any length
+if enabled:
+    injections.append(injection)
+return tuple(injections)
+```
+When the tuple is a fixed record (`tuple[float, str]`), every path must return the same number of items, or use a small dataclass instead.
+
 ## CI and dependencies
 
 ### S8544: install only locked versions
