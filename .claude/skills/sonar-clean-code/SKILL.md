@@ -85,6 +85,7 @@ This was the most common critical issue (8 fixed). Sonar adds 1 for each `if`, `
 - A factory with many optional keyword arguments: bundle them in one frozen dataclass and give each case its own small builder that checks only its own inputs. Shared checks ("X required", "Y only valid for Z") become helpers, so each message is written once
 - Use guard clauses (`if bad: raise`) instead of wrapping the rest of the function in `if`/`else`
 - Never repeat a loop that already exists elsewhere; share one helper (`_check_chronological` in `simulator/trains/train.py`)
+- Per-iteration setup inside a loop (where to start, what carries over) belongs in a small function that returns those values. A ternary that only differs on the first pass (`x if index == 0 else 0.0`) becomes a value set before the inner loop and reset after its first use (`_trip_start` in `simulator/trains/train_component.py`, which was at complexity 18)
 - A nested function (closure) counts toward the function that contains it. Keep closures to a few lines, and move loops that call them into separate helpers (`_seed_single_station_moves` in `simulator/control/bounded_search.py`)
 - Aim for 12 or less so later changes have room
 

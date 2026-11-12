@@ -49,6 +49,21 @@ from simulator.trains.train import ScheduledStop, Train
 Visit = tuple[str, int, int]
 
 
+def _trip_start(
+    train: Train, trip_index: int, delay: float
+) -> tuple[int, float, float]:
+    """Return the first stop, layover recovery and delay at the start of a trip.
+
+    The current trip resumes at the train's current stop with no recovery.
+    A return trip starts at stop 0: its layover slack absorbs delay first, and
+    the slack left over can absorb a hold proposed at that first stop.
+    """
+    if trip_index == train.current_trip_index:
+        return train.current_stop_index, 0.0, delay
+    recovery = max(0.0, train.layover_slack - max(0.0, delay))
+    return 0, recovery, max(0.0, delay - train.layover_slack)
+
+
 class TrainComponent:
     """Own train movement, platform separation and optional passenger queues."""
 
@@ -447,21 +462,13 @@ class TrainComponent:
         for trip_index in range(
             train.current_trip_index, len(self._schedules[train.id])
         ):
-            recovery = 0.0
-            first_stop = (
-                train.current_stop_index
-                if trip_index == train.current_trip_index
-                else 0
-            )
-            if trip_index > train.current_trip_index:
-                recovery = max(0.0, train.layover_slack - max(0.0, delay))
-                delay = max(0.0, delay - train.layover_slack)
+            first_stop, recovery, delay = _trip_start(train, trip_index, delay)
             trip = self._schedules[train.id][trip_index]
             for stop_index in range(first_stop, len(trip)):
                 key = (train.id, trip_index, stop_index)
-                visit = self._future_visit(
-                    key, delay, recovery if stop_index == 0 else 0.0, now_s
-                )
+                visit = self._future_visit(key, delay, recovery, now_s)
+                # Only a return trip's first stop can use the unused layover.
+                recovery = 0.0
                 if not self._retain_future_visit(
                     key, visit, until_s, remaining, visits
                 ):

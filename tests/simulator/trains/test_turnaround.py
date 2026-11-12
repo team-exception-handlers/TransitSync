@@ -8,7 +8,7 @@ from hypothesis import strategies as st
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import TrainArrival, TrainDeparture
 from simulator.trains.train import ScheduledStop, Train
-from simulator.trains.train_component import TrainComponent
+from simulator.trains.train_component import TrainComponent, _trip_start
 
 
 def vehicle(delay_s=0, slack_s=60):
@@ -28,6 +28,25 @@ def vehicle(delay_s=0, slack_s=60):
             ),
         ),
     )
+
+
+# Hand-calculated with 60 s of layover slack: delay is absorbed first, and
+# only the slack left over is available to absorb a hold at the first stop.
+@pytest.mark.parametrize(
+    ("trip_index", "delay_s", "expected"),
+    [
+        (0, 90.0, (1, 0.0, 90.0)),  # current trip: resume at stop 1, no recovery
+        (1, 20.0, (0, 40.0, 0.0)),  # return trip: 20 s absorbed, 40 s left
+        (1, 90.0, (0, 0.0, 30.0)),  # return trip: slack used up, 30 s carried
+        (1, -10.0, (0, 60.0, 0.0)),  # running early leaves all slack unused
+    ],
+)
+def test_trip_start_applies_layover_slack_only_to_return_trips(
+    trip_index, delay_s, expected
+):
+    train = vehicle()
+    train.current_stop_index = 1
+    assert _trip_start(train, trip_index, delay_s) == expected
 
 
 @pytest.mark.parametrize(
