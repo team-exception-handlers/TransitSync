@@ -180,6 +180,12 @@ No front-end issues exist yet. These are the rules Sonar most often raises on Re
 
 Keep simulation state in the Zustand store and keep components presentational. That keeps render functions short (S3776) and avoids context-value churn (S6481).
 
+### S3776 in TypeScript (3 high issues in Release 1)
+The same cognitive complexity rule applies to `.ts` and `.tsx`, and callbacks count toward the function they sit in, including the arrow function passed to `useEffect`.
+- **Canvas drawing in `useEffect`:** one module-level function per drawing step (`sizeCanvas`, `drawCorridors`, `drawPlatforms`, `drawTrains`, `drawPassengerCount` in `web/src/components/station-canvas.tsx`, which was at 16). The effect becomes a short list of calls, and each helper takes the 2D context and only the data it draws
+- Move fallback choices such as `a && a.width > 0 && a.height > 0 ? a : fallback` into a named helper (`chooseView`)
+- Keep the existing canvas tests that mock the 2D context; they check every draw call, so a refactor that changes the picture fails them
+
 ## When the Sonar fix would be wrong
 
 Change the code by default. Mark an issue **Accepted** only when the suggested fix would break a project rule or a test that protects one, as with S8572 on CLI handlers. Never mark a real problem as False Positive to clear the count.

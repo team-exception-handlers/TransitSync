@@ -12,7 +12,13 @@ import { fitLayout } from "../lib/fitLayout";
 import { getNetworkSnapshot } from "../lib/getNetworkSnapshot";
 import { samplePassengers } from "../lib/samplePassengers";
 import { usePlaybackStore } from "../store/usePlaybackStore";
-import type { PassengerPosition, Point } from "../types/stationView";
+import type {
+  PassengerPosition,
+  Platform,
+  Point,
+  TrainAtPlatform,
+  TransferCorridor,
+} from "../types/stationView";
 
 interface ViewSize {
   width: number;
@@ -90,6 +96,95 @@ function drawPassengerMarker(
   }
 }
 
+/**
+ * Use the observed view box when it has a real size; otherwise fall back to
+ * the fixture's own map size, which draws the layout unscaled.
+ */
+function chooseView(viewSize: ViewSize | null, map: ViewSize): ViewSize {
+  if (viewSize && viewSize.width > 0 && viewSize.height > 0) return viewSize;
+  return { width: map.width, height: map.height };
+}
+
+/**
+ * Crisp rendering on high-DPI screens: back the canvas with
+ * devicePixelRatio-scaled pixels while keeping its CSS size at the view box.
+ * The pixel size is only reassigned when it changes, because assigning it
+ * clears the canvas.
+ */
+function sizeCanvas(canvas: HTMLCanvasElement, view: ViewSize, dpr: number) {
+  const pixelWidth = Math.max(1, Math.round(view.width * dpr));
+  const pixelHeight = Math.max(1, Math.round(view.height * dpr));
+  if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
+  if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
+  canvas.style.width = `${view.width}px`;
+  canvas.style.height = `${view.height}px`;
+}
+
+/** Draw every transfer corridor, shading the selected connection's corridor darker. */
+function drawCorridors(
+  context: CanvasRenderingContext2D,
+  corridors: readonly TransferCorridor[],
+  highlightedId: string | undefined,
+) {
+  for (const corridor of corridors) {
+    context.beginPath();
+    corridor.path.forEach((point, index) => {
+      if (index === 0) context.moveTo(point.x, point.y);
+      else context.lineTo(point.x, point.y);
+    });
+    context.strokeStyle = corridor.id === highlightedId ? "#d8dbd5" : "#ecede9";
+    context.lineWidth = 24;
+    context.stroke();
+  }
+}
+
+/** Platform positions and line colors come from the validated mapping adapter. */
+function drawPlatforms(context: CanvasRenderingContext2D, platforms: readonly Platform[]) {
+  context.font = "12px Arial";
+  for (const platform of platforms) {
+    context.fillStyle = platform.color;
+    context.fillRect(platform.position.x - 135, platform.position.y - 10, 270, 20);
+    context.fillStyle = "#16191d";
+    context.fillText(`${platform.line_id.toUpperCase()} → ${platform.direction_label}`,
+      platform.position.x - 135, platform.position.y + 30);
+  }
+}
+
+/** Draw a dark bar on each platform that has a train standing at it now. */
+function drawTrains(
+  context: CanvasRenderingContext2D,
+  platforms: readonly Platform[],
+  trains: readonly TrainAtPlatform[],
+) {
+  for (const train of trains) {
+    const platform = platforms.find((item) => item.platform_id === train.platform_id);
+    if (!platform) continue;
+    context.fillStyle = "#16191d";
+    context.fillRect(platform.position.x - 100, platform.position.y - 8, 200, 16);
+  }
+}
+
+/**
+ * The true count is always labeled, even when the drawn markers are a sample.
+ * Drawn in screen space, after the fit transform is dropped: the label is
+ * chrome, so it must not scale or drift with the map.
+ */
+function drawPassengerCount(
+  context: CanvasRenderingContext2D,
+  dpr: number,
+  shown: number,
+  trueCount: number,
+) {
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.scale(dpr, dpr);
+  context.fillStyle = "#16191d";
+  context.font = "12px Arial";
+  const label = shown < trueCount
+    ? `Passengers: ${trueCount} (showing ${shown})`
+    : `Passengers: ${trueCount}`;
+  context.fillText(label, 12, 20);
+}
+
 /** Draw recorded map coordinates; seeking rebuilds rather than mutating sprites. */
 export function StationCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -122,25 +217,19 @@ export function StationCanvas() {
     return () => observer.disconnect();
   }, [data]);
 
+  // Redraw the whole frame from the recorded snapshot whenever the data, time,
+  // selection or view size changes. Each drawing step is its own function below.
   useEffect(() => {
     const canvas = canvasRef.current;
     const context = canvas?.getContext("2d");
     if (!context || !canvas || !data) return;
 
-    const fallback = { width: data.map.width, height: data.map.height };
-    const view = viewSize && viewSize.width > 0 && viewSize.height > 0 ? viewSize : fallback;
+    const view = chooseView(viewSize, data.map);
     const { scale, offsetX, offsetY } = fitLayout(data.map, view);
-
-    // Crisp rendering on high-DPI screens: back the canvas with
-    // devicePixelRatio-scaled pixels while keeping CSS size at the view box.
     const dpr = window.devicePixelRatio || 1;
-    const pixelWidth = Math.max(1, Math.round(view.width * dpr));
-    const pixelHeight = Math.max(1, Math.round(view.height * dpr));
-    if (canvas.width !== pixelWidth) canvas.width = pixelWidth;
-    if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
-    canvas.style.width = `${view.width}px`;
-    canvas.style.height = `${view.height}px`;
+    sizeCanvas(canvas, view, dpr);
 
+    // Map space: device pixels, then the fit offset and scale.
     context.setTransform(1, 0, 0, 1, 0, 0);
     context.clearRect(0, 0, canvas.width, canvas.height);
     context.scale(dpr, dpr);
@@ -148,35 +237,11 @@ export function StationCanvas() {
     context.scale(scale, scale);
 
     const snapshot = getNetworkSnapshot(data, time);
-
     // The selected corridor is derived from the same shared selection as the UI.
     const connection = data.connections.find((item) => item.id === selected);
-    for (const corridor of data.corridors) {
-      context.beginPath();
-      corridor.path.forEach((point, index) => {
-        if (index === 0) context.moveTo(point.x, point.y);
-        else context.lineTo(point.x, point.y);
-      });
-      context.strokeStyle = corridor.id === connection?.corridor_id ? "#d8dbd5" : "#ecede9";
-      context.lineWidth = 24;
-      context.stroke();
-    }
-
-    // Platform positions and line colors come from the validated mapping adapter.
-    context.font = "12px Arial";
-    for (const platform of data.platforms) {
-      context.fillStyle = platform.color;
-      context.fillRect(platform.position.x - 135, platform.position.y - 10, 270, 20);
-      context.fillStyle = "#16191d";
-      context.fillText(`${platform.line_id.toUpperCase()} → ${platform.direction_label}`,
-        platform.position.x - 135, platform.position.y + 30);
-    }
-    for (const train of snapshot.trains_at_platforms) {
-      const platform = data.platforms.find((item) => item.platform_id === train.platform_id);
-      if (!platform) continue;
-      context.fillStyle = "#16191d";
-      context.fillRect(platform.position.x - 100, platform.position.y - 8, 200, 16);
-    }
+    drawCorridors(context, data.corridors, connection?.corridor_id);
+    drawPlatforms(context, data.platforms);
+    drawTrains(context, data.platforms, snapshot.trains_at_platforms);
 
     // No incremental passenger state: pause and backward seeking stay exact.
     const connectionPassengers = snapshot.passengers.filter(
@@ -186,20 +251,7 @@ export function StationCanvas() {
     for (const passenger of sampled) {
       drawPassengerMarker(context, passenger.position, passenger.phase);
     }
-
-    // The true count is always labeled, even when the drawn markers are a sample.
-    // Drawn in screen space, after the fit transform is dropped: the label is
-    // chrome, so it must not scale or drift with the map.
-    if (selected) {
-      context.setTransform(1, 0, 0, 1, 0, 0);
-      context.scale(dpr, dpr);
-      context.fillStyle = "#16191d";
-      context.font = "12px Arial";
-      const label = sampled.length < trueCount
-        ? `Passengers: ${trueCount} (showing ${sampled.length})`
-        : `Passengers: ${trueCount}`;
-      context.fillText(label, 12, 20);
-    }
+    if (selected) drawPassengerCount(context, dpr, sampled.length, trueCount);
   }, [data, time, selected, viewSize]);
 
   if (!data) return <p className="station-message">Choose a connection to load a mock run.</p>;
