@@ -83,6 +83,7 @@ This was the most common critical issue (8 fixed). Sonar adds 1 for each `if`, `
 - Replace `if kind == A ... elif kind == B ...` chains with a lookup table of small functions (`_FIELD_CHECKS` in `simulator/engine/events.py`)
 - Use guard clauses (`if bad: raise`) instead of wrapping the rest of the function in `if`/`else`
 - Never repeat a loop that already exists elsewhere; share one helper (`_check_chronological` in `simulator/trains/train.py`)
+- A nested function (closure) counts toward the function that contains it. Keep closures to a few lines, and move loops that call them into separate helpers (`_seed_single_station_moves` in `simulator/control/bounded_search.py`)
 - Aim for 12 or less so later changes have room
 
 ### S8707: path traversal from command-line or request input
