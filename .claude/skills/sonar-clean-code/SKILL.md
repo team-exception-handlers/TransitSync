@@ -184,6 +184,7 @@ Keep simulation state in the Zustand store and keep components presentational. T
 The same cognitive complexity rule applies to `.ts` and `.tsx`, and callbacks count toward the function they sit in, including the arrow function passed to `useEffect`.
 - **Canvas drawing in `useEffect`:** one module-level function per drawing step (`sizeCanvas`, `drawCorridors`, `drawPlatforms`, `drawTrains`, `drawPassengerCount` in `web/src/components/station-canvas.tsx`, which was at 16). The effect becomes a short list of calls, and each helper takes the 2D context and only the data it draws
 - Move fallback choices such as `a && a.width > 0 && a.height > 0 ? a : fallback` into a named helper (`chooseView`)
+- **Data builders and adapters:** same rule as the Python mapping code. The loop collects and checks what needs shared state (duplicates); one helper checks and builds a single item; header checks and "every X is used" checks get their own functions. `web/src/lib/buildStationViewData.ts` went from 28 to a four-line entry function this way (`checkMockHeader`, `collectPlatforms`, `toPlatform`, `checkEveryLayoutIsMapped`)
 - Keep the existing canvas tests that mock the 2D context; they check every draw call, so a refactor that changes the picture fails them
 
 ## When the Sonar fix would be wrong
