@@ -16,6 +16,7 @@ from simulator.control.interface import (
     DecisionController,
     HoldAction,
     ObservationSnapshot,
+    as_actions,
 )
 
 
@@ -58,14 +59,15 @@ class ConnectionProtectionStrategy(DecisionController):
         """
         platform_id = observation.platform_id
         if platform_id not in self.searches:
-            return ()
+            return as_actions(None)
         inputs = HoldInputs.from_observation(observation, self.headways_s[platform_id])
         result = self.searches[platform_id].run(inputs)
         # Keep the reason even when the train should leave without a hold.
         self.audit.record(result)
-        if result.chosen is None:
-            return ()
-        return (HoldAction(observation.train_id, result.hold_s, result.reason),)
+        hold = None
+        if result.chosen is not None:
+            hold = HoldAction(observation.train_id, result.hold_s, result.reason)
+        return as_actions(hold)
 
     def decision_records(self) -> tuple[dict[str, Any], ...]:
         """Return copies of the logged decisions, oldest first."""

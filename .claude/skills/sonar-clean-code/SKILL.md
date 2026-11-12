@@ -137,6 +137,8 @@ return tuple(injections)
 ```
 When the tuple is a fixed record (`tuple[float, str]`), every path must return the same number of items, or use a small dataclass instead.
 
+Strategies: never return `()` or `(HoldAction(...),)` from `evaluate`. Build the hold (or `None`) and return `as_actions(hold)` from `simulator/control/interface.py`.
+
 ## CI and dependencies
 
 ### S8544: install only locked versions
