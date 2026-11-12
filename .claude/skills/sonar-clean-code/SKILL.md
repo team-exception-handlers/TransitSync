@@ -139,6 +139,17 @@ When the tuple is a fixed record (`tuple[float, str]`), every path must return t
 
 Strategies: when `evaluate` can either hold or not, never mix `return ()` with `return (HoldAction(...),)`. Build the hold (or `None`) and return `as_actions(hold)` from `simulator/control/interface.py`. A strategy that never holds (`NoControlStrategy`) may return `()` on its only path.
 
+### S1192: the same string literal written three or more times (maintainability, high)
+Sonar flags any string repeated 3+ times in a file, which usually means an error message copied into several `raise` statements of one validator (`simulator/trains/door_throughput.py`). Put it in one module constant next to the imports, with a short comment saying which checks share it:
+```python
+# One message for every invalid scheduled dwell, so the type, overflow and
+# range checks in DoorThroughput.budget report the same error.
+_INVALID_DWELL = "scheduled_dwell_s must be finite and non-negative"
+...
+raise ValueError(_INVALID_DWELL)
+```
+Better still, when several checks reject the same field with the same message, combine them into one condition or one helper so the message appears once naturally. Dictionary keys and event field names repeated across a file count too; use the constants that already exist (for example in `simulator/control/decision_audit.py`) instead of retyping them.
+
 ## CI and dependencies
 
 ### S8544: install only locked versions
