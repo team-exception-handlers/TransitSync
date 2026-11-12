@@ -1,6 +1,7 @@
 # AI contribution: 50% or more AI-generated
 """Tests for control settings parsing (US-2.3 #45, US-2.2 #43)."""
 
+import re
 from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
@@ -159,6 +160,55 @@ def test_operating_rules_unknown_rule_key_raises_error():
         match="operating_rules.rule_action_map.max_hold_exceded: unknown rule",
     ):
         parse_operating_rules({"rule_action_map": {"max_hold_exceded": "REFUSE"}})
+
+
+def test_operating_rules_accept_zero_gap_and_store_seconds_as_float():
+    config = parse_operating_rules({"max_hold_time": 90, "min_safe_gap": 0})
+    assert config.max_hold_time == 90.0
+    assert isinstance(config.max_hold_time, float)
+    assert config.min_safe_gap == 0.0
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        ([], "operating_rules: must be an object"),
+        ({"max_hold": 60}, "operating_rules.max_hold: unknown field"),
+        (
+            {"max_hold_time": 0},
+            "operating_rules.max_hold_time: expected positive number",
+        ),
+        (
+            {"max_hold_time": True},
+            "operating_rules.max_hold_time: expected positive number",
+        ),
+        (
+            {"min_safe_gap": -1},
+            "operating_rules.min_safe_gap: expected non-negative number",
+        ),
+        (
+            {"min_safe_gap": "30"},
+            "operating_rules.min_safe_gap: expected non-negative number",
+        ),
+        (
+            {"rule_action_map": ["CLAMP"]},
+            "operating_rules.rule_action_map: must be an object",
+        ),
+        (
+            {"rule_action_map": {"headway_violation": "IGNORE"}},
+            "operating_rules.rule_action_map.headway_violation: "
+            "action must be CLAMP or REFUSE",
+        ),
+        # Both fields are bad: the hold limit is checked before the gap.
+        (
+            {"max_hold_time": -5, "min_safe_gap": -1},
+            "operating_rules.max_hold_time: expected positive number",
+        ),
+    ],
+)
+def test_operating_rules_reject_invalid_values(value, message):
+    with pytest.raises(OperatingRulesError, match=f"^{re.escape(message)}$"):
+        parse_operating_rules(value)
 
 
 def test_prediction_error_defaults_to_published_level():
