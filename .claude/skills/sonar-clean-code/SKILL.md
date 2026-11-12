@@ -137,7 +137,7 @@ return tuple(injections)
 ```
 When the tuple is a fixed record (`tuple[float, str]`), every path must return the same number of items, or use a small dataclass instead.
 
-Strategies: never return `()` or `(HoldAction(...),)` from `evaluate`. Build the hold (or `None`) and return `as_actions(hold)` from `simulator/control/interface.py`.
+Strategies: when `evaluate` can either hold or not, never mix `return ()` with `return (HoldAction(...),)`. Build the hold (or `None`) and return `as_actions(hold)` from `simulator/control/interface.py`. A strategy that never holds (`NoControlStrategy`) may return `()` on its only path.
 
 ## CI and dependencies
 

@@ -10,6 +10,7 @@ from simulator.control.interface import (
     DecisionController,
     HoldAction,
     ObservationSnapshot,
+    as_actions,
 )
 
 
@@ -21,6 +22,8 @@ class ScheduleBasedHoldingStrategy(DecisionController):
     def evaluate(self, observation: ObservationSnapshot) -> tuple[HoldAction, ...]:
         """Return one hold for remaining seconds, or no action if on time or late."""
         hold_s = observation.scheduled_departure_s - observation.time_s
-        if hold_s <= 0:
-            return ()
-        return (HoldAction(observation.train_id, hold_s, self.name),)
+        # A train that is on time or late leaves without a hold.
+        hold = None
+        if hold_s > 0:
+            hold = HoldAction(observation.train_id, hold_s, self.name)
+        return as_actions(hold)
