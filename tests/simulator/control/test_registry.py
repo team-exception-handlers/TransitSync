@@ -1,6 +1,8 @@
 # AI contribution: 50% or more AI-generated
 """Tests for strategy registration and selection by name (US-2.3, #49)."""
 
+import re
+
 import pytest
 
 from simulator.control.interface import DecisionController, HoldAction
@@ -10,6 +12,7 @@ from simulator.control.strategies.no_control import NoControlStrategy
 from simulator.control.strategies.schedule_based_holding import (
     ScheduleBasedHoldingStrategy,
 )
+from simulator.control.walking_cdf import ShiftedExponentialCdf
 
 
 class FakeHoldStrategy(DecisionController):
@@ -89,3 +92,99 @@ def test_invalid_strategy_class_is_rejected(strategy_class, message):
     classes = (strategy_class,)
     with pytest.raises(ValueError, match=message):
         StrategyRegistry(classes)
+
+
+# One platform's inputs, valid for every strategy that needs them
+WALKING = {"P": ShiftedExponentialCdf(120, 30)}
+HEADWAYS = {"P": 60.0}
+ADAPTIVE = {
+    "target_headways_s": HEADWAYS,
+    "irregularity_threshold": 0.25,
+    "walking_by_platform": WALKING,
+    "connection_headways_s": HEADWAYS,
+}
+
+
+@pytest.mark.parametrize(
+    ("name", "inputs"),
+    [
+        ("adaptive", ADAPTIVE),
+        (
+            "connection_protection",
+            {"walking_by_platform": WALKING, "connection_headways_s": HEADWAYS},
+        ),
+        ("headway_regulation", {"target_headways_s": HEADWAYS}),
+        ("rolling_horizon", {"walking_by_platform": WALKING}),
+        ("no_control", {}),
+        ("schedule_based", {}),
+    ],
+)
+def test_build_returns_the_named_strategy_from_its_inputs(name, inputs):
+    assert STRATEGIES.build(name, **inputs).name == name
+
+
+# Several cases pass two bad inputs to pin which error is reported first.
+@pytest.mark.parametrize(
+    ("name", "inputs", "message"),
+    [
+        (
+            "adaptive",
+            {"target_headways_s": HEADWAYS},
+            "target_headways_s and irregularity_threshold required for adaptive",
+        ),
+        (
+            "adaptive",
+            {"target_headways_s": HEADWAYS, "irregularity_threshold": 0.25},
+            "walking_by_platform and connection_headways_s required for adaptive",
+        ),
+        (
+            "connection_protection",
+            {"irregularity_threshold": 0.25, "target_headways_s": HEADWAYS},
+            "irregularity_threshold only valid for adaptive",
+        ),
+        (
+            "connection_protection",
+            {"target_headways_s": HEADWAYS},
+            "target_headways_s only valid for headway_regulation",
+        ),
+        (
+            "connection_protection",
+            {"walking_by_platform": WALKING},
+            "walking_by_platform and connection_headways_s required for "
+            "connection_protection",
+        ),
+        (
+            "headway_regulation",
+            {"connection_headways_s": HEADWAYS},
+            "connection_headways_s only valid for connection_protection",
+        ),
+        (
+            "headway_regulation",
+            {},
+            "target_headways_s required for headway_regulation",
+        ),
+        (
+            "rolling_horizon",
+            {"target_headways_s": HEADWAYS},
+            "target_headways_s only valid for headway_regulation",
+        ),
+        (
+            "rolling_horizon",
+            {},
+            "walking_by_platform required for rolling_horizon",
+        ),
+        (
+            "no_control",
+            {"connection_headways_s": HEADWAYS, "target_headways_s": HEADWAYS},
+            "connection_headways_s only valid for connection_protection",
+        ),
+        (
+            "schedule_based",
+            {"irregularity_threshold": 0.25, "target_headways_s": HEADWAYS},
+            "irregularity_threshold only valid for adaptive",
+        ),
+    ],
+)
+def test_build_rejects_missing_or_unused_inputs(name, inputs, message):
+    with pytest.raises(ValueError, match=f"^{re.escape(message)}$"):
+        STRATEGIES.build(name, **inputs)

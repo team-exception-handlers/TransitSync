@@ -80,7 +80,8 @@ monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://test")
 This was the most common critical issue (8 fixed). Sonar adds 1 for each `if`, `elif`, `else`, loop, `except`, ternary and run of `and`/`or`, plus 1 more for every level the structure is nested. A check inside a loop inside another loop is expensive.
 - Keep at most two levels of nesting inside a loop. When a third appears, move the inner block into a helper
 - Validate one item per helper: the loop collects, the helper checks (`_service_window`, `_check_platform_stop`, `_check_stop_time`, `_mapping_platform` in `scripts/`)
-- Replace `if kind == A ... elif kind == B ...` chains with a lookup table of small functions (`_FIELD_CHECKS` in `simulator/engine/events.py`)
+- Replace `if kind == A ... elif kind == B ...` chains with a lookup table of small functions (`_FIELD_CHECKS` in `simulator/engine/events.py`). The same works for `if issubclass(cls, A) ... if issubclass(cls, B)` chains: one builder per class in an ordered table (`_builders()` in `simulator/control/registry.py`, which was at complexity 27)
+- A factory with many optional keyword arguments: bundle them in one frozen dataclass and give each case its own small builder that checks only its own inputs. Shared checks ("X required", "Y only valid for Z") become helpers, so each message is written once
 - Use guard clauses (`if bad: raise`) instead of wrapping the rest of the function in `if`/`else`
 - Never repeat a loop that already exists elsewhere; share one helper (`_check_chronological` in `simulator/trains/train.py`)
 - A nested function (closure) counts toward the function that contains it. Keep closures to a few lines, and move loops that call them into separate helpers (`_seed_single_station_moves` in `simulator/control/bounded_search.py`)
