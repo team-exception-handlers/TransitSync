@@ -19,7 +19,7 @@ export function PlaybackControls() {
   const label = playing ? "Pause" : "Play";
 
   return (
-    <div className="playback-controls" role="group" aria-label="Playback controls">
+    <fieldset className="playback-controls" aria-label="Playback controls">
       <button type="button" className="playback-button rewind" aria-label="Rewind 30 seconds"
         title="Rewind 30 seconds" disabled={!data || atStart} onClick={rewind}>
         <img src="/playback/rewind.svg" alt="" width="18" height="18" />
@@ -30,6 +30,6 @@ export function PlaybackControls() {
         onClick={playing ? pause : play}>
         <img src={`/playback/${playing ? "pause" : "play"}.svg`} alt="" width="18" height="18" />
       </button>
-    </div>
+    </fieldset>
   );
 }

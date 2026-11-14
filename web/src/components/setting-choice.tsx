@@ -27,14 +27,15 @@ export function SettingChoice<Value extends string | boolean>({
     <div className="setting">
       <div className="setting-top">
         <span className="setting-label" id={labelId}>{label}</span>
-        <div className="segmented-control setting-choice" role="group" aria-labelledby={labelId}>
+        {/* A <fieldset> is a native group, so no ARIA role is needed. */}
+        <fieldset className="segmented-control setting-choice" aria-labelledby={labelId}>
           {options.map((option) => (
             <button key={String(option)} type="button" aria-pressed={option === value}
               onClick={() => onChange(option)}>
               {format(option)}
             </button>
           ))}
-        </div>
+        </fieldset>
       </div>
       {note !== undefined && <p className="setting-note">{note}</p>}
     </div>

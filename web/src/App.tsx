@@ -165,9 +165,10 @@ export default function App({
             <div className="station-heading">
               <span className="clock-heading">Selected connection</span>
               <h1>{selectedConnection?.label ?? "Choose a connection"}</h1>
-              <small role="status" title={runError ?? undefined}>
+              {/* <output> is natively a live status region, so no ARIA role is needed. */}
+              <output className="station-status" title={runError ?? undefined}>
                 {statusText}
-              </small>
+              </output>
               <RunSummary />
             </div>
             <StationCanvas />

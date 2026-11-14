@@ -18,13 +18,14 @@ export function SpeedSelector() {
   return (
     <div className="speed-selector">
       <span className="clock-heading" id={labelId}>Speed</span>
-      <div className="segmented-control" role="group" aria-labelledby={labelId}>
+      {/* A <fieldset> is a native group, so no ARIA role is needed. */}
+      <fieldset className="segmented-control" aria-labelledby={labelId}>
         {PLAYBACK_SPEEDS.map((factor) => (
           <button key={factor} type="button" disabled={!data}
             aria-label={`${factor}× speed`} aria-pressed={factor === speed}
             onClick={() => setSpeed(factor)}>{factor}×</button>
         ))}
-      </div>
+      </fieldset>
     </div>
   );
 }

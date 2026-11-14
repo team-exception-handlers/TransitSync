@@ -17,7 +17,7 @@ export function ConnectionSelector() {
   if (runs.length === 0 && data) runs = [data];
 
   return (
-    <div className="connection-selector segmented-control" role="group" aria-label="Station connection">
+    <fieldset className="connection-selector segmented-control" aria-label="Station connection">
       {runs.flatMap((run) => run.connections.map((connection) => {
         const metro = run.platforms.find((item) => item.platform_id === connection.to_platform_id);
         const isSelected = selected === connection.id;
@@ -35,6 +35,6 @@ export function ConnectionSelector() {
           </button>
         );
       }))}
-    </div>
+    </fieldset>
   );
 }

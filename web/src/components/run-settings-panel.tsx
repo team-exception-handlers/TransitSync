@@ -118,8 +118,10 @@ export function RunSettingsPanel({ runner }: Readonly<RunSettingsPanelProps>) {
               <input type="radio" name={strategyGroup} value={option.name}
                 checked={draft.strategy === option.name}
                 onChange={() => update({ strategy: option.name })} />
-              <span>
-                <b>{option.label}</b>
+              {/* Name text sits directly in the span (no <b>) so the label's
+                  text stays within the depth accessibility checkers read. */}
+              <span className="strategy-text">
+                {option.label}
                 <small>{option.description}</small>
               </span>
             </label>

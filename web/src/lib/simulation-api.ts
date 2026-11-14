@@ -51,7 +51,10 @@ export function configuredApiUrl(
   value: string | undefined = import.meta.env.VITE_API_URL,
 ): string | null {
   const trimmed = value?.trim() ?? "";
-  return trimmed === "" ? null : trimmed.replace(/\/+$/, "");
+  if (trimmed === "") return null;
+  let end = trimmed.length;
+  while (end > 0 && trimmed[end - 1] === "/") end -= 1;
+  return trimmed.slice(0, end);
 }
 
 /** Read FastAPI's `detail` from an error body; null when there is none. */
