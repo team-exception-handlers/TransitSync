@@ -17,7 +17,6 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import Future
 from copy import deepcopy
 from dataclasses import replace
-from datetime import date
 from pathlib import Path
 from threading import RLock
 from typing import Literal
@@ -295,7 +294,7 @@ class SimulationRunService:
         uses_targets = request.strategy in TARGET_HEADWAY_STRATEGIES
         uses_connections = request.strategy in CONNECTION_HEADWAY_STRATEGIES
         headways = (
-            _headway_targets(self._network, scenario.service_date)
+            _headway_targets(self._network, scenario)
             if uses_targets or uses_connections
             else {}
         )
@@ -328,16 +327,22 @@ class SimulationRunService:
         )
 
 
-def _headway_targets(network: NetworkConfig, service_date: date) -> dict[str, float]:
+def _headway_targets(network: NetworkConfig, scenario: Scenario) -> dict[str, float]:
     """Use each platform's median scheduled gap, in seconds, as its target.
 
+    Only departures inside the scenario's own window count. A whole-day median
+    mixes peak and off-peak service, so a peak-hour run would aim for the wider
+    off-peak gap and hold every train (300 s target against 180 s service).
     Departures are grouped by platform so the strategy receives platform keys.
     Platforms without two departures receive the conservative 300-second target.
     """
+    start_s = scenario_start_clock_s(scenario)
+    end_s = start_s + scenario.duration_s
     departures: dict[str, list[int]] = defaultdict(list)
-    for trip in network.trips_for_date(service_date):
+    for trip in network.trips_for_date(scenario.service_date):
         for visit in trip.visits:
-            if visit.outgoing_passenger_service:
+            in_window = start_s <= visit.departure_s < end_s
+            if visit.outgoing_passenger_service and in_window:
                 departures[visit.platform_id].append(visit.departure_s)
     targets = {}
     for platform in network.platforms:
@@ -446,9 +451,12 @@ def _build_train_component(
             hold_search=scenario.control.hold_search,
             weights=scenario.control.weights,
         )
+    # Every strategy sees the incoming transfer groups, not only adaptive:
+    # connection protection and rolling horizon hold for them, and identical
+    # observations keep strategy comparisons on the same random draws.
     decision = DecisionPipeline(
         strategy,
-        builder=ObservationBuilder([transfers]) if adaptive else None,
+        builder=ObservationBuilder([transfers]),
         enforcer=OperatingRulesEnforcer(scenario.operating_rules),
         error_model=PredictionErrorModel(
             scenario.control.prediction_error,
