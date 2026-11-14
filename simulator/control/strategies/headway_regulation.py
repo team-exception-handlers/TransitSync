@@ -17,6 +17,7 @@ from simulator.control.interface import (
     DecisionController,
     HoldAction,
     ObservationSnapshot,
+    as_actions,
 )
 
 
@@ -60,12 +61,14 @@ class HeadwayRegulationStrategy(DecisionController):
             raise ValueError(f"Missing target for platform {platform_id!r}")
         # A departure at zero is valid; None means no previous departure.
         if platform.last_departure_s is None:
-            return ()
+            return as_actions(None)
         gap_s = observation.time_s - platform.last_departure_s
         hold_s = self.target_headways_s[platform_id] - gap_s
-        if hold_s <= 0:
-            return ()
-        return (HoldAction(observation.train_id, hold_s, self.name),)
+        # Only a gap shorter than the target needs a hold.
+        hold = None
+        if hold_s > 0:
+            hold = HoldAction(observation.train_id, hold_s, self.name)
+        return as_actions(hold)
 
 
 def _check_target(platform_id: str, target_s: float) -> float:

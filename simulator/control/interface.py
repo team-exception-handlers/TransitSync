@@ -49,6 +49,17 @@ class HoldAction:
             )
 
 
+def as_actions(hold: HoldAction | None) -> tuple[HoldAction, ...]:
+    """Return ``hold`` as the action tuple that ``evaluate`` gives back.
+
+    ``None`` means the strategy does not want to hold, which gives ``()``.
+    Every strategy returns through this helper, so all of them return the
+    same kind of value whether or not they hold.
+    """
+    holds = [] if hold is None else [hold]
+    return tuple(holds)
+
+
 @dataclass(frozen=True, slots=True)
 class TrainState:
     """One train as a strategy sees it; times may carry prediction error (#39).

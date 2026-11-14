@@ -120,3 +120,83 @@ describe("parseStationViewData", () => {
         expect(Array.isArray(result.passengers)).toBe(true);
     });
 });
+
+describe("parseStationViewData input checks", () => {
+    type Data = typeof stationViewData;
+    // Each case breaks one part of a valid copy of the McGill data and expects
+    // the exact error. Cases are in the order the checks run.
+    const cases: [string, (data: Data) => unknown, string][] = [
+        ["a non-object", () => null, "Station view data must be an object"],
+        [
+            "a missing interchange name",
+            (data) => ({ ...data, interchange: { id: "mcgill" } }),
+            "Invalid interchange",
+        ],
+        [
+            "a collection that is not a list",
+            (data) => ({ ...data, corridors: {} }),
+            "Invalid station view collections",
+        ],
+        [
+            "a station without a position",
+            (data) => {
+                data.stations[0] = { ...data.stations[0], position: { x: 1 } as never };
+                return data;
+            },
+            "Invalid station",
+        ],
+        [
+            "a repeated station",
+            (data) => ({ ...data, stations: [...data.stations, data.stations[0]] }),
+            "Duplicate station: rem_mcgill",
+        ],
+        [
+            "a platform on an unknown station",
+            (data) => {
+                data.platforms[0] = { ...data.platforms[0], station_id: "nowhere" };
+                return data;
+            },
+            "Invalid platform",
+        ],
+        [
+            "a corridor with a one-point path",
+            (data) => {
+                data.corridors[0] = { ...data.corridors[0], path: [data.corridors[0].path[0]] };
+                return data;
+            },
+            "Invalid corridor: mcgill_rem_green_transfer",
+        ],
+        [
+            "a repeated corridor",
+            (data) => ({ ...data, corridors: [...data.corridors, data.corridors[0]] }),
+            "Duplicate corridor: mcgill_rem_green_transfer",
+        ],
+        [
+            "a connection on an unknown corridor",
+            (data) => {
+                data.connections[0] = { ...data.connections[0], corridor_id: "nowhere" };
+                return data;
+            },
+            "Invalid connection: mcgill-rem-green",
+        ],
+        [
+            "a repeated connection",
+            (data) => ({ ...data, connections: [...data.connections, data.connections[0]] }),
+            "Duplicate connection: mcgill-rem-green",
+        ],
+        [
+            "a repeated passenger",
+            (data) => ({
+                ...data,
+                passenger_tracks: [...data.passenger_tracks, data.passenger_tracks[0]],
+            }),
+            "Duplicate passenger: p-001",
+        ],
+    ];
+
+    it.each(cases)("rejects %s", (_label, breakData, message) => {
+        const invalid = breakData(structuredClone(stationViewData));
+        // An Error argument makes Vitest compare the whole message exactly.
+        expect(() => parseStationViewData(invalid)).toThrow(new Error(message));
+    });
+});

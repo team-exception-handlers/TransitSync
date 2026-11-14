@@ -3,9 +3,11 @@
 
 from copy import deepcopy
 from dataclasses import asdict, replace
+from types import SimpleNamespace
 
 import pytest
 
+from simulator.control.bounded_search import search_grid
 from simulator.control.hold_search import HoldSearchSettings
 from simulator.control.planning import RollingHorizonSettings
 from simulator.control.rolling_horizon import RollingHorizonPlanner
@@ -119,6 +121,21 @@ def test_approximation_is_deterministic_and_respects_tight_budget():
     assert len(first.decisions) == 7
     assert len(first.alternatives) == 13
     assert first.net_ps >= 0
+
+
+def test_approximate_search_scores_zero_plan_then_one_station_at_a_time():
+    scored = []
+
+    def evaluate(holds):
+        scored.append(holds)
+        return SimpleNamespace(net_ps=0.0)
+
+    # 2 x 3 = 6 combinations exceed the budget of 4, so the search is
+    # approximate and the budget only covers the single-station moves.
+    _, count, exact, total = search_grid(((0.0, 30.0), (0.0, 30.0, 60.0)), 4, evaluate)
+    assert exact is False
+    assert (count, total) == (4, 6)
+    assert scored == [(0.0, 0.0), (30.0, 0.0), (0.0, 30.0), (0.0, 60.0)]
 
 
 def test_budget_too_small_to_explore_each_station_fails_before_scoring(monkeypatch):

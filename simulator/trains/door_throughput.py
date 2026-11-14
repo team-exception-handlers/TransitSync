@@ -10,6 +10,10 @@ from dataclasses import dataclass
 from fractions import Fraction
 from numbers import Integral, Real
 
+# One message for every invalid scheduled dwell, so the type, overflow and
+# range checks in DoorThroughput.budget report the same error.
+_INVALID_DWELL = "scheduled_dwell_s must be finite and non-negative"
+
 
 @dataclass(frozen=True)
 class DoorThroughput:
@@ -53,15 +57,13 @@ class DoorThroughput:
         if isinstance(scheduled_dwell_s, bool) or not isinstance(
             scheduled_dwell_s, Real
         ):
-            raise ValueError("scheduled_dwell_s must be finite and non-negative")
+            raise ValueError(_INVALID_DWELL)
         try:
             dwell = float(scheduled_dwell_s)
         except OverflowError as exc:
-            raise ValueError(
-                "scheduled_dwell_s must be finite and non-negative"
-            ) from exc
+            raise ValueError(_INVALID_DWELL) from exc
         if not math.isfinite(dwell) or dwell < 0:
-            raise ValueError("scheduled_dwell_s must be finite and non-negative")
+            raise ValueError(_INVALID_DWELL)
         return int(
             Fraction(str(self.passengers_per_second_per_door))
             * Fraction(str(dwell))

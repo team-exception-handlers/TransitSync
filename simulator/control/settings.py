@@ -304,44 +304,54 @@ def parse_operating_rules(value: object) -> OperatingRulesConfig:
     if unknown:
         raise OperatingRulesError(f"operating_rules.{unknown[0]}: unknown field")
 
+    # Fields are checked in this order, so the first bad one is reported.
     kwargs = {}
     if "max_hold_time" in value:
-        val = value["max_hold_time"]
-        if isinstance(val, bool) or not isinstance(val, int | float) or val <= 0:
-            raise OperatingRulesError(
-                "operating_rules.max_hold_time: expected positive number"
-            )
-        kwargs["max_hold_time"] = float(val)
-
+        kwargs["max_hold_time"] = _rule_seconds(
+            value["max_hold_time"], "max_hold_time", allow_zero=False
+        )
     if "min_safe_gap" in value:
-        val = value["min_safe_gap"]
-        if isinstance(val, bool) or not isinstance(val, int | float) or val < 0:
-            raise OperatingRulesError(
-                "operating_rules.min_safe_gap: expected non-negative number"
-            )
-        kwargs["min_safe_gap"] = float(val)
-
+        kwargs["min_safe_gap"] = _rule_seconds(
+            value["min_safe_gap"], "min_safe_gap", allow_zero=True
+        )
     if "rule_action_map" in value:
-        ram = value["rule_action_map"]
-        if not isinstance(ram, Mapping):
-            raise OperatingRulesError(
-                "operating_rules.rule_action_map: must be an object"
-            )
-
-        defaults = OperatingRulesConfig().rule_action_map
-        unknown_rules = sorted(ram.keys() - defaults.keys())
-        if unknown_rules:
-            raise OperatingRulesError(
-                f"operating_rules.rule_action_map.{unknown_rules[0]}: unknown rule"
-            )
-
-        for k, v in ram.items():
-            if v not in ("CLAMP", "REFUSE"):
-                raise OperatingRulesError(
-                    f"operating_rules.rule_action_map.{k}: "
-                    "action must be CLAMP or REFUSE"
-                )
-
-        kwargs["rule_action_map"] = {**defaults, **ram}
-
+        kwargs["rule_action_map"] = _parse_rule_action_map(value["rule_action_map"])
     return OperatingRulesConfig(**kwargs)
+
+
+def _rule_seconds(value: object, field_name: str, *, allow_zero: bool) -> float:
+    """Return an operating-rule duration in seconds as a float.
+
+    The hold limit must be positive; the safe gap may be zero. ``bool`` is
+    rejected explicitly because it is a subclass of ``int``.
+    """
+    expected = "non-negative number" if allow_zero else "positive number"
+    message = f"operating_rules.{field_name}: expected {expected}"
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        raise OperatingRulesError(message)
+    if value < 0 or (value == 0 and not allow_zero):
+        raise OperatingRulesError(message)
+    return float(value)
+
+
+def _parse_rule_action_map(value: object) -> dict[str, str]:
+    """Merge the scenario's rule actions over the defaults after checking them.
+
+    Every key must be a known rule and every action CLAMP or REFUSE; rules the
+    scenario leaves out keep their default action.
+    """
+    if not isinstance(value, Mapping):
+        raise OperatingRulesError("operating_rules.rule_action_map: must be an object")
+    defaults = OperatingRulesConfig().rule_action_map
+    unknown_rules = sorted(value.keys() - defaults.keys())
+    if unknown_rules:
+        raise OperatingRulesError(
+            f"operating_rules.rule_action_map.{unknown_rules[0]}: unknown rule"
+        )
+    for rule, action in value.items():
+        if action not in ("CLAMP", "REFUSE"):
+            raise OperatingRulesError(
+                f"operating_rules.rule_action_map.{rule}: "
+                "action must be CLAMP or REFUSE"
+            )
+    return {**defaults, **value}
