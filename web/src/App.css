@@ -222,7 +222,14 @@ body {
 .station-message { padding: 20px; color: #5b6168; }
 .station-heading { padding: 16px 20px; border-bottom: 1px solid #e4e6e1; }
 .station-heading h1 { font-size: 20px; margin: 6px 0; }
-.station-heading small { color: #5b6168; }
+.station-heading .station-status { color: #5b6168; font-size: smaller; }
+
+:where(fieldset.segmented-control, fieldset.playback-controls) {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
 
 /* Segmented controls share Figma's 52px group and 44px touch targets. */
 .segmented-control {
@@ -279,12 +286,6 @@ button:disabled { cursor: default; opacity: 0.45; }
   gap: 16px;
 }
 
-/* BOTTOM REGION */
-
-.playback-region {
-  grid-column: 1 / -1;
-}
-
 /* SIMULATION CLOCK */
 
 .clock-panel {
@@ -313,7 +314,7 @@ button:disabled { cursor: default; opacity: 0.45; }
   letter-spacing: -0.5px;
 }
 
-/* PLAYBACK TIMELINE */
+/* BOTTOM REGION: playback controls, speed and the timeline */
 
 .playback-region {
   grid-column: 1 / -1;
@@ -336,9 +337,8 @@ button:disabled { cursor: default; opacity: 0.45; }
 .speed-selector { display: flex; align-items: center; gap: 10px; }
 .speed-selector .segmented-control { width: 208px; flex-shrink: 0; }
 .speed-selector button { flex: 1; padding: 0 12px; }
-.playback-timeline { min-width: 0; }
-
 .playback-timeline {
+  min-width: 0;
   flex: 1;
   height: 100%;
 

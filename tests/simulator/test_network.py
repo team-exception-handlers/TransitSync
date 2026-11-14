@@ -132,22 +132,25 @@ def test_membership_records_are_immutable(field, identity, attribute, value):
 
 
 def test_empty_topology_is_rejected():
+    config = config_for(())
     with pytest.raises(ValueError, match="platforms.*empty"):
-        build_network(config_for(()))
+        build_network(config)
 
 
 def test_duplicate_platform_id_is_rejected_before_it_can_overwrite_a_record():
     platforms = interchange()
     duplicate = replace(platforms[0], interchange_id="b")
+    config = config_for(platforms + (duplicate,))
     with pytest.raises(ValueError, match="a-rem-0.*duplicate"):
-        build_network(config_for(platforms + (duplicate,)))
+        build_network(config)
 
 
 def test_duplicate_directional_membership_names_complex_line_and_platform():
     platforms = interchange()
     duplicate = replace(platforms[0], platform_id="duplicate")
+    config = config_for(platforms + (duplicate,))
     with pytest.raises(ValueError, match="a.*rem.*duplicate.*direction 0"):
-        build_network(config_for(platforms + (duplicate,)))
+        build_network(config)
 
 
 @pytest.mark.parametrize("missing_index", range(4))
@@ -155,15 +158,17 @@ def test_incomplete_directional_group_is_rejected(missing_index):
     platforms = interchange()
     missing = platforms[missing_index]
     incomplete = tuple(p for p in platforms if p is not missing)
+    config = config_for(incomplete)
     with pytest.raises(ValueError, match=rf"a.*{missing.line_id}.*directions 0 and 1"):
-        build_network(config_for(incomplete))
+        build_network(config)
 
 
 @pytest.mark.parametrize("remaining_line", ["rem", "green"])
 def test_missing_corridor_side_is_rejected(remaining_line):
     platforms = tuple(p for p in interchange() if p.line_id == remaining_line)
+    config = config_for(platforms)
     with pytest.raises(ValueError, match="a.*one REM.*one Métro"):
-        build_network(config_for(platforms))
+        build_network(config)
 
 
 @pytest.mark.parametrize("misspelled_id", ["REM", "remm"])
@@ -172,8 +177,9 @@ def test_misspelled_rem_line_id_reports_expected_and_found_ids(misspelled_id):
         replace(p, line_id=misspelled_id) if p.line_id == "rem" else p
         for p in interchange()
     )
+    config = config_for(platforms)
     with pytest.raises(ValueError) as exc_info:
-        build_network(config_for(platforms))
+        build_network(config)
 
     assert str(exc_info.value) == (
         "complex a: expected one REM and one Métro line group "
@@ -183,8 +189,9 @@ def test_misspelled_rem_line_id_reports_expected_and_found_ids(misspelled_id):
 
 def test_extra_line_group_cannot_be_silently_dropped():
     extra = tuple(p for p in interchange(metro_line="blue") if p.line_id == "blue")
+    config = config_for(interchange() + extra)
     with pytest.raises(ValueError, match="a.*one REM.*one Métro"):
-        build_network(config_for(interchange() + extra))
+        build_network(config)
 
 
 def test_two_metro_lines_cannot_form_a_rem_metro_corridor():
@@ -194,20 +201,24 @@ def test_two_metro_lines_cannot_form_a_rem_metro_corridor():
         for p in interchange(metro_line=line)
         if p.line_id != "rem"
     )
+    config = config_for(platforms)
     with pytest.raises(ValueError, match="a.*one REM.*one Métro"):
-        build_network(config_for(platforms))
+        build_network(config)
 
 
 def test_invalid_complex_prevents_returning_a_partial_network():
+    config = config_for(interchange() + interchange("b", "blue")[1:])
     with pytest.raises(ValueError, match="b.*rem.*directions 0 and 1"):
-        build_network(config_for(interchange() + interchange("b", "blue")[1:]))
+        build_network(config)
 
 
 def test_construction_logs_one_completion_summary_and_no_success_on_failure(caplog):
+    valid = config_for(interchange())
+    invalid = config_for(interchange()[1:])
     with caplog.at_level(logging.INFO, logger="simulator.network"):
-        build_network(config_for(interchange()))
+        build_network(valid)
         with pytest.raises(ValueError):
-            build_network(config_for(interchange()[1:]))
+            build_network(invalid)
 
     assert len(caplog.records) == 1
     assert caplog.records[0].getMessage() == (

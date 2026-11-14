@@ -273,10 +273,10 @@ def _checked_schedule(day: dict, attribution: list):
         raise ValueError("schedule timezone mismatch")
     service_date = _date(day["service_date"], "service_date")
     platforms, trips = parse_timetable(day)
-    credits = _texts(day["attribution"], "attribution")
+    credit_lines = _texts(day["attribution"], "attribution")
     if (
         any(feed["agency"].upper() == "REM" for feed in day["feeds"])
-        and REM_ATTRIBUTION not in credits
+        and REM_ATTRIBUTION not in credit_lines
     ):
         raise ValueError("REM attribution: required source credit is missing")
     expected = summarize_headways(platforms, trips)
@@ -284,7 +284,7 @@ def _checked_schedule(day: dict, attribution: list):
         expected, sort_keys=True
     ):
         raise ValueError("headways: saved summaries disagree with visits")
-    if not set(credits).issubset(attribution):
+    if not set(credit_lines).issubset(attribution):
         raise ValueError("schedule attribution missing from config")
     source = sorted(
         (

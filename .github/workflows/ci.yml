@@ -54,5 +54,3 @@ jobs:
         with:
           args: >
             -Dsonar.python.coverage.reportPaths=coverage.xml
-            -Dsonar.organization=team-exception-handlers
-            -Dsonar.projectKey=team-exception-handlers_TransitSync

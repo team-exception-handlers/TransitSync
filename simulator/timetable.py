@@ -18,8 +18,11 @@ def require_text(value: object, field: str) -> str:
 
 def require_integer(value: object, field: str, minimum: int = 0) -> int:
     """Require an integer >= minimum; reject bool."""
-    if type(value) is not int or value < minimum:
-        raise ValueError(f"{field} must be an integer >= {minimum}")
+    message = f"{field} must be an integer >= {minimum}"
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError(message)
+    if value < minimum:
+        raise ValueError(message)
     return value
 
 

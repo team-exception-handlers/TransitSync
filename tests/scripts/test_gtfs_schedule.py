@@ -79,9 +79,12 @@ def test_full_trip_context_survives_trimming_to_first_modeled_visit(platform):
     assert len(train.visits) == 1
     stop = train.visits[0]
     assert (stop.arrival_s, stop.departure_s, stop.stop_sequence) == (150, 180, 20)
-    assert stop.incoming_passenger_service and stop.outgoing_passenger_service
-    assert stop.boarding_allowed and stop.alighting_allowed
-    assert stop.has_earlier_boarding and stop.has_later_alighting
+    assert stop.incoming_passenger_service
+    assert stop.outgoing_passenger_service
+    assert stop.boarding_allowed
+    assert stop.alighting_allowed
+    assert stop.has_earlier_boarding
+    assert stop.has_later_alighting
     assert (stop.pickup_type, stop.drop_off_type) == (0, 0)
     with pytest.raises(FrozenInstanceError):
         stop.arrival_s = 0
@@ -112,7 +115,8 @@ def test_permission_checks_use_all_earlier_and_later_stops_not_just_neighbors(pl
         visit("DOWN", 5, 260),
     ]
     stop = extract(platform, rows)[0].visits[0]
-    assert stop.incoming_passenger_service and stop.outgoing_passenger_service
+    assert stop.incoming_passenger_service
+    assert stop.outgoing_passenger_service
     rows[0]["pickup_type"] = 1
     rows[-1]["drop_off_type"] = 1
     stop = extract(platform, rows)[0].visits[0]
@@ -127,7 +131,8 @@ def test_local_permissions_override_existing_upstream_and_downstream_service(pla
         visit("DOWN", 3, 200),
     ]
     stop = extract(platform, rows)[0].visits[0]
-    assert stop.has_earlier_boarding and stop.has_later_alighting
+    assert stop.has_earlier_boarding
+    assert stop.has_later_alighting
     assert not stop.incoming_passenger_service
     assert not stop.outgoing_passenger_service
 
@@ -193,17 +198,22 @@ def test_padded_source_route_ids_fail_instead_of_silently_dropping_service(
 
 
 def test_duplicate_sequence_and_backwards_trip_times_are_rejected(platform):
+    duplicate_rows = [visit("UP", 1, 100), visit("MCG", 1, 150)]
+    backwards_rows = [visit("UP", 1, 200), visit("MCG", 2, 100)]
     with pytest.raises(ValueError, match="duplicate.*stop_sequence"):
-        extract(platform, [visit("UP", 1, 100), visit("MCG", 1, 150)])
+        extract(platform, duplicate_rows)
     with pytest.raises(ValueError, match="chronological"):
-        extract(platform, [visit("UP", 1, 200), visit("MCG", 2, 100)])
+        extract(platform, backwards_rows)
 
 
 def test_mapping_mismatch_is_actionable(platform):
+    rows = [visit("MCG", 1, 100)]
+    wrong_name = replace(platform, stop_name="Wrong")
+    wrong_route = replace(platform, route_ids=("missing",))
     with pytest.raises(ValueError, match="mapping.*stop_name"):
-        extract(replace(platform, stop_name="Wrong"), [visit("MCG", 1, 100)])
+        extract(wrong_name, rows)
     with pytest.raises(ValueError, match="mapping.*route"):
-        extract(replace(platform, route_ids=("missing",)), [visit("MCG", 1, 100)])
+        extract(wrong_route, rows)
 
 
 @pytest.mark.parametrize(
@@ -216,8 +226,9 @@ def test_mapping_mismatch_is_actionable(platform):
 )
 def test_mapped_stop_must_exist_and_be_a_passenger_platform(platform, stop, message):
     row = dict(feed_id="rem", stop_id="MCG", stop_name="McGill quai 2") | stop
+    rows = [visit(row["stop_id"], 1, 100)]
     with pytest.raises(ValueError, match=f"mapping rem-mcgill-1: {message}"):
-        extract(platform, [visit(row["stop_id"], 1, 100)], stops=[row])
+        extract(platform, rows, stops=[row])
 
 
 def test_opposite_directions_with_one_source_stop_stay_separate(platform):
@@ -259,8 +270,9 @@ def test_other_feed_and_inactive_trip_rows_do_not_contaminate_selected_schedule(
 
 
 def test_no_active_services_are_rejected(platform):
+    services = iter(())
     with pytest.raises(ValueError, match="feed 'rem'.*no active services"):
-        extract(platform, [], services=iter(()))
+        extract(platform, [], services=services)
 
 
 def test_distinct_identical_trains_are_preserved(platform):
@@ -280,10 +292,11 @@ def test_distinct_identical_trains_are_preserved(platform):
 
 
 def test_missing_complete_trip_rows_or_unknown_stops_fail(platform):
+    unknown_rows = [visit("unknown", 1, 100)]
     with pytest.raises(ValueError, match="stop_times"):
         extract(platform, [])
     with pytest.raises(ValueError, match="stop_id"):
-        extract(platform, [visit("unknown", 1, 100)])
+        extract(platform, unknown_rows)
 
 
 def test_visit_contract_rejects_inconsistent_or_missing_facts():
@@ -303,8 +316,9 @@ def test_visit_contract_rejects_inconsistent_or_missing_facts():
 
 def test_mapping_cannot_silently_drop_a_reversed_source_direction(platform):
     wrong_direction = replace(platform, direction_id=0)
+    rows = [visit("MCG", 1, 100)]
     with pytest.raises(ValueError, match="mapping.*direction"):
-        extract(wrong_direction, [visit("MCG", 1, 100)])
+        extract(wrong_direction, rows)
 
 
 def test_duplicate_source_trip_or_stop_identifiers_fail(platform):

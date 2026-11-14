@@ -136,6 +136,22 @@ if value < minimum:
     raise ValueError(f"{field} must be >= {minimum}")
 ```
 
+### S5886: `dataclasses.replace` loses the return type
+`replace()` is typed as returning a generic dataclass, so returning its result from a function annotated `-> TrainState` (or any other frozen dataclass) is flagged. This hit 6 places in `simulator/control/`, because the simulator copies frozen dataclasses everywhere. Wrap the call so the concrete type comes back:
+```python
+def plan(...) -> HorizonPlan:
+    return replace(best, exact=exact)                     # flagged
+
+# Clean: a module that copies several record types (prediction_error.py)
+def _updated[Record](record: Record, **changes: object) -> Record:
+    """Copy a frozen dataclass with ``changes``, keeping its own type."""
+    return replace(record, **changes)
+
+# Clean: a single call (rolling_horizon.py)
+return cast(HorizonPlan, replace(best, exact=exact))
+```
+Use the `_updated` helper when a module has more than one `replace`; a `cast` is fine for a lone call.
+
 ### S7519: `dict.fromkeys` for a constant value
 `{key: 0 for key in keys}` becomes `dict.fromkeys(keys, 0)`. Only for immutable values: `dict.fromkeys(keys, [])` shares one list between every key, so keep the comprehension for lists, sets and dicts.
 
@@ -173,9 +189,28 @@ Better still, when several checks reject the same field with the same message, c
 - Front end: commit `package-lock.json` and install with `npm ci`, never `npm install`, in CI
 - Pin GitHub Actions to a release tag (`actions/setup-node@v4`), never a branch
 
+### S6505: `npm ci --ignore-scripts` everywhere
+A plain `npm ci` runs every dependency's `preinstall`/`postinstall` script, so one compromised package can run code in CI or the image build. Flagged in both `.github/workflows/web.yml` and `web/Dockerfile`.
+```
+npm ci                    # flagged
+npm ci --ignore-scripts   # clean
+```
+Apply it to every install line (workflows and Dockerfiles). If a new package really needs its install script, run that one step explicitly (`npm rebuild <package>`) and say why in a comment.
+
 ## TypeScript and React (front end starting in Iteration 3)
 
-These are the rules Sonar most often raises on React code; write to them from the first commit. The only front-end issues so far were the 3 S3776 issues in Release 1 (section below).
+These are the rules Sonar raises on React code; write to them from the first commit.
+
+### S6819: use the native element, not an ARIA role
+The most common front-end issue (5 fixed). Sonar flags `role="..."` whenever an HTML element already has that meaning built in, because native elements work on more screen readers.
+
+| Avoid | Write instead |
+|---|---|
+| `<div role="group" aria-label="Speed">` (segmented controls, button groups) | `<fieldset aria-label="Speed">` |
+| `<small role="status">{statusText}</small>` | `<output>{statusText}</output>` |
+| `<div role="img">` around a canvas or picture | `<img alt="...">` or `<canvas aria-label="...">` |
+
+`<fieldset>` brings a default border, padding and `min-width`, so reset them once in CSS (see `:where(fieldset.segmented-control, ...)` in `web/src/App.css`) rather than per component. Add a short comment where the element replaces a role, so nobody adds the role back.
 
 | Rule | Avoid | Write instead |
 |---|---|---|
@@ -236,6 +271,7 @@ Intentional. <What the code catches or does, and why that case is expected.> <Th
 - [ ] Every `assert` checks one condition
 - [ ] Tests change globals only through `monkeypatch`
 - [ ] Paths from users are resolved and checked against an allowed folder
-- [ ] Front end: `npm run typecheck`, `npm run lint` and `npm test` pass; the TypeScript table above was checked by hand; React keys are stable IDs
-- [ ] Refactoring an existing issue: every error branch has an exact-message test that passed on the old code
+- [ ] Functions that return a copied frozen dataclass keep its type (`_updated` helper or `cast`)
+- [ ] Every `npm ci` in CI and Dockerfiles has `--ignore-scripts`
+- [ ] Front end: ESLint with `eslint-plugin-sonarjs` is clean; React keys are stable IDs; no `role` where a native element exists
 - [ ] After the PR scan, the SonarQube PR decoration shows 0 new issues; fix any before asking for review

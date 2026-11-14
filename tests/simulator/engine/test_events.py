@@ -226,8 +226,9 @@ def test_integer_seconds_are_stored_as_float():
 
 
 def test_events_are_immutable():
+    event = _arrival(time_s=10)
     with pytest.raises(dataclasses.FrozenInstanceError):
-        SAMPLE_EVENTS[0].time_s = 0.0
+        event.time_s = 0.0
 
 
 @pytest.mark.parametrize("bad_time", [-0.5, math.nan, math.inf, "10", True])

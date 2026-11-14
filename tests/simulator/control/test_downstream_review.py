@@ -71,7 +71,8 @@ def test_left_behind_queue_is_costed_at_next_train(next_arrival, expected_cost):
     # B at 600 is unaffected. B at 120 is blocked until just after A leaves
     # at 140: its departure moves 130 -> 150, costing 30 * 20 * 2 = 1200.
     assert cost.waiting_ps == pytest.approx(expected_cost, abs=1e-9)
-    assert (component.trains, component.platform_states(), seen) == before
+    after = (component.trains, component.platform_states(), seen)
+    assert after == before
     assert scheduler.pending == pending
     assert scheduler.now == now
     scheduler.run_until(700, process)
