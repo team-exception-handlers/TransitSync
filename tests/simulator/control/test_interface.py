@@ -14,6 +14,7 @@ from simulator.control.interface import (
     ObservationSnapshot,
     PlatformState,
     TrainState,
+    as_actions,
 )
 
 TRAIN = TrainState(
@@ -109,6 +110,12 @@ def test_strategy_returns_requested_hold():
     snapshot = make_snapshot()
     actions = FixedHoldStrategy().evaluate(snapshot)
     assert actions == (HoldAction("rem_0001", 30.0, "test hold"),)
+
+
+def test_as_actions_wraps_one_hold_or_returns_no_action():
+    hold = HoldAction("rem_0001", 30.0, "test hold")
+    assert as_actions(hold) == (hold,)
+    assert as_actions(None) == ()
 
 
 def test_strategy_without_evaluate_cannot_be_created():

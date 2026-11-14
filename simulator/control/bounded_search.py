@@ -50,13 +50,23 @@ def search_grid(choices, budget, evaluate):
         for holds in product(*choices):
             consider(holds)
     else:
-        zero = (0.0,) * len(choices)
-        consider(zero)
-        for index, grid in enumerate(choices):
-            for hold in grid[1:]:
-                consider((*zero[:index], hold, *zero[index + 1 :]))
+        _seed_single_station_moves(choices, consider)
         _refine(choices, states, visited, budget, consider)
     return states, len(visited), exact, total
+
+
+def _seed_single_station_moves(choices, consider):
+    """Score the zero plan, then each non-zero hold at one station at a time.
+
+    These are exactly the ``minimum`` combinations ``search_grid`` checked
+    against the budget, so every station is explored before refinement.
+    """
+    zero = (0.0,) * len(choices)
+    consider(zero)
+    for index, grid in enumerate(choices):
+        # grid[0] is the zero hold, already covered by the zero plan above.
+        for hold in grid[1:]:
+            consider((*zero[:index], hold, *zero[index + 1 :]))
 
 
 def _refine(choices, states, visited, budget, consider):

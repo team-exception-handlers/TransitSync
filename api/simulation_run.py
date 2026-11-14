@@ -470,16 +470,19 @@ def _delay_injections(
 
     The injection is scheduled at 120 seconds of relative simulation time.
     """
-    if not request.disruption_enabled:
-        return ()
-    return (
-        DelayInjection(
-            disruption_id="demo-rem-delay",
-            time_s=120,
-            delay_s=60,
-            platform_id=connection.from_platform_id,
-        ),
-    )
+    # Collected in a list and converted once, so every path returns the same
+    # kind of value: a sequence of injections that may be empty.
+    injections = []
+    if request.disruption_enabled:
+        injections.append(
+            DelayInjection(
+                disruption_id="demo-rem-delay",
+                time_s=120,
+                delay_s=60,
+                platform_id=connection.from_platform_id,
+            )
+        )
+    return tuple(injections)
 
 
 def _build_trains(network: NetworkConfig, scenario: Scenario) -> list[Train]:

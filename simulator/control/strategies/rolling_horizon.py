@@ -16,6 +16,7 @@ from simulator.control.interface import (
     DecisionController,
     HoldAction,
     ObservationSnapshot,
+    as_actions,
 )
 from simulator.control.rolling_horizon import RollingHorizonPlanner
 
@@ -65,9 +66,11 @@ class RollingHorizonStrategy(DecisionController):
                 "reason": reason,
             }
         )
-        if plan.hold_s <= 0:
-            return ()
-        return (HoldAction(observation.train_id, plan.hold_s, reason),)
+        # A zero-second plan means the train leaves on time with no hold.
+        hold = None
+        if plan.hold_s > 0:
+            hold = HoldAction(observation.train_id, plan.hold_s, reason)
+        return as_actions(hold)
 
     def decision_records(self) -> tuple[dict, ...]:
         """Return detached records for the existing decisions.jsonl writer."""
