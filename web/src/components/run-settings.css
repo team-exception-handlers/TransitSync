@@ -22,7 +22,8 @@
 .strategy-option:has(input:checked) { border-color: #16191d; }
 .strategy-option:focus-within { outline: 3px solid #4b96dd; outline-offset: 2px; }
 .strategy-option input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: #16191d; flex-shrink: 0; }
-.strategy-option small { display: block; margin-top: 2px; color: #5b6168; font-size: 13px; }
+.strategy-text { font-weight: 700; }
+.strategy-option small { display: block; margin-top: 2px; color: #5b6168; font-size: 13px; font-weight: 400; }
 .strategy-list .setting { grid-column: 1 / -1; border-top: 0; padding-top: 4px; }
 .setting { display: flex; flex-direction: column; gap: 8px; padding: 14px 0; border-top: 1px solid #e4e6e1; }
 .setting:first-child { border-top: 0; padding-top: 0; }
