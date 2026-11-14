@@ -64,7 +64,8 @@ def test_bounded_planning_keeps_later_services_separate_and_detached():
         component.headway_visits(100, 400, frozenset({"P1", "P2"}))
         == seen.headway_visits
     )
-    assert (component.trains, scheduler.now, scheduler.pending) == before
+    after = (component.trains, scheduler.now, scheduler.pending)
+    assert after == before
     scheduler.run_until(1300, lambda event: component.handle(event, scheduler))
     assert [v.departure_s for v in seen.headway_visits] == [1110, 1220]
     with pytest.raises(FrozenInstanceError):

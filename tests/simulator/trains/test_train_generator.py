@@ -90,7 +90,9 @@ def test_deterministic_generation(route):
             line_id="green",
         )
 
-    assert generate() == generate()
+    first = generate()
+    second = generate()
+    assert first == second
 
 
 def test_invalid_headway(route):
