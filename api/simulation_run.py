@@ -60,6 +60,7 @@ from simulator.passengers import (
 )
 from simulator.passengers.platform_queue import PlatformQueue
 from simulator.scenario import Scenario, load_scenario_file
+from simulator.timetable import ScheduledVisit
 from simulator.trains.disruption import DelayInjection
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
@@ -81,6 +82,9 @@ WALKING_MIN_S = 30.0
 CORRIDOR_CAPACITY_PER_MINUTE = 60.0
 DEMAND_RATES_PER_MINUTE = {"Low": 6.0, "Normal": 12.0, "High": 24.0}
 MAX_CACHED_RUNS = 8
+# The STM GTFS feed gives every metro stop the same arrival and departure time,
+# so trains would open their doors for 0 s. Assumed dwell until it is measured.
+MIN_STOP_DWELL_S = 30.0
 
 
 class SimulationRunRequest(BaseModel):
@@ -487,6 +491,7 @@ def _build_trains(network: NetworkConfig, scenario: Scenario) -> list[Train]:
 
     A stop remains active when its departure is at or after the scenario start.
     Scheduled timestamps are shifted to seconds relative to that start clock.
+    A stop the timetable lists with no dwell gets ``MIN_STOP_DWELL_S``.
     """
     start_clock_s = scenario_start_clock_s(scenario)
     trains = []
@@ -501,7 +506,7 @@ def _build_trains(network: NetworkConfig, scenario: Scenario) -> list[Train]:
                 station_id=visit.stop_id,
                 platform_id=visit.platform_id,
                 arrival_s=max(0.0, visit.arrival_s - start_clock_s),
-                departure_s=visit.departure_s - start_clock_s,
+                departure_s=_departure_with_dwell(visit) - start_clock_s,
             )
             for visit in active_visits
         )
@@ -514,6 +519,13 @@ def _build_trains(network: NetworkConfig, scenario: Scenario) -> list[Train]:
             )
         )
     return trains
+
+
+def _departure_with_dwell(visit: ScheduledVisit) -> float:
+    """Return the timetable departure, moved later only for a zero-dwell stop."""
+    if visit.departure_s == visit.arrival_s:
+        return visit.arrival_s + MIN_STOP_DWELL_S
+    return visit.departure_s
 
 
 def _read_json_lines(path: Path) -> list[dict[str, object]]:
