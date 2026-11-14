@@ -39,6 +39,16 @@ ARRIVAL_SIGMA_OFFSET_MIN = 1.4
 COUNT_RELATIVE_SIGMA = 0.10
 
 
+def _updated[Record](record: Record, **changes: object) -> Record:
+    """Copy a frozen dataclass with ``changes``, keeping its own type.
+
+    ``dataclasses.replace`` is typed as returning a generic dataclass, so
+    static checkers lose the concrete type (``TrainState``, ``FutureVisit``,
+    ...). This wrapper restores it for every copy made in this module.
+    """
+    return replace(record, **changes)
+
+
 def arrival_sigma_s(horizon_s: float) -> float:
     """sigma(tau) in seconds; grows with the horizon tau, in seconds.
 
@@ -106,7 +116,7 @@ class PredictionErrorModel:
         )
         transfers = tuple(self._transfer(group) for group in truth.incoming_transfers)
         if not truth.future_visits and not truth.headway_visits:
-            return replace(truth, trains=trains, incoming_transfers=transfers)
+            return _updated(truth, trains=trains, incoming_transfers=transfers)
         departures: dict[str, float] = {}
         visits = self._visits(truth.future_visits, truth.time_s, arrival_z, departures)
         headways = self._visits(
@@ -120,7 +130,7 @@ class PredictionErrorModel:
                     (visit.train_id, visit.platform_id), visit.arrival_s
                 )
         trains = tuple(
-            replace(
+            _updated(
                 train,
                 predicted_arrival_s=next_arrivals.get(
                     (train.train_id, train.next_platform_id), train.predicted_arrival_s
@@ -128,7 +138,7 @@ class PredictionErrorModel:
             )
             for train in trains
         )
-        return replace(
+        return _updated(
             truth,
             trains=trains,
             incoming_transfers=transfers,
@@ -176,7 +186,7 @@ class PredictionErrorModel:
         if self.settings.arrival_kappa:
             arrival = max(arrival, now_s, previous_s, visit.earliest_arrival_s)
         shift = arrival - visit.arrival_s
-        return replace(
+        return _updated(
             visit,
             arrival_s=arrival,
             departure_s=visit.departure_s + shift,
@@ -187,19 +197,19 @@ class PredictionErrorModel:
     ) -> TrainState:
         load = self._count(train.onboard_load, self.settings.load_kappa)
         if train.predicted_arrival_s is None:
-            return replace(train, onboard_load=load)
+            return _updated(train, onboard_load=load)
         sigma = arrival_sigma_s(train.predicted_arrival_s - now_s)
         z = float(self._stream.standard_normal())
         arrival_z[train.train_id] = z
         error_s = sigma * z
         arrival_s = train.predicted_arrival_s + self.settings.arrival_kappa * error_s
-        return replace(train, predicted_arrival_s=arrival_s, onboard_load=load)
+        return _updated(train, predicted_arrival_s=arrival_s, onboard_load=load)
 
     def _transfer(self, group: IncomingTransfer) -> IncomingTransfer:
         # One draw scales both counts, so still walking <= group size holds
         z = float(self._stream.standard_normal())
         kappa = self.settings.transfer_kappa
-        return replace(
+        return _updated(
             group,
             passenger_count=_scaled(group.passenger_count, kappa, z),
             group_size=_scaled(group.group_size, kappa, z),

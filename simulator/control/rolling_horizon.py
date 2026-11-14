@@ -11,6 +11,7 @@ import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from types import MappingProxyType
+from typing import cast
 
 from simulator.control.bounded_search import plan_rank, search_grid
 from simulator.control.break_even import BreakEvenWeights, evaluate_hold
@@ -113,16 +114,19 @@ class RollingHorizonPlanner:
             choices, self.settings.max_combinations, evaluate
         )
         _, best = max(states.values(), key=lambda pair: plan_rank(*pair))
-        return replace(
-            best,
-            combinations_evaluated=count,
-            exact=exact,
-            total_combinations=total,
-            alternatives=tuple(
-                HorizonAlternative(
-                    h, r.local_net_ps, r.downstream_cost_ps, r.net_ps, exact
-                )
-                for h, (_, r) in sorted(states.items())
+        return cast(
+            HorizonPlan,
+            replace(
+                best,
+                combinations_evaluated=count,
+                exact=exact,
+                total_combinations=total,
+                alternatives=tuple(
+                    HorizonAlternative(
+                        h, r.local_net_ps, r.downstream_cost_ps, r.net_ps, exact
+                    )
+                    for h, (_, r) in sorted(states.items())
+                ),
             ),
         )
 
