@@ -5,7 +5,7 @@ import rawMapping from "../../src/data/interchange_mapping.json";
 import rawMock from "../../src/data/mock-interchange.json";
 import { buildStationViewData } from "../../src/lib/buildStationViewData";
 
-import type { InterchangeMapping, MockInterchangeData } from "../../src/types/stationView";
+import type { InterchangeMapping, LineId, MockInterchangeData } from "../../src/types/stationView";
 
 const mapping = rawMapping as unknown as InterchangeMapping;
 const mock = rawMock as unknown as MockInterchangeData;
@@ -197,3 +197,69 @@ it("correctly derives passenger movement start time, end time, path, and status"
     });
 });
 
+
+describe("buildStationViewData input checks", () => {
+    // Each case breaks one part of the McGill fixture and expects its exact error.
+    it("rejects an unsupported mock schema version", () => {
+        const invalidMock = {
+            ...structuredClone(mock),
+            schema_version: 2,
+        } as unknown as MockInterchangeData;
+        expect(() => buildStationViewData(mapping, invalidMock)).toThrow(
+            /^Invalid mock interchange$/,
+        );
+    });
+
+    it("rejects a feed whose platforms are not a list", () => {
+        const invalidMapping = {
+            ...structuredClone(mapping),
+            broken_feed: {},
+        } as unknown as InterchangeMapping;
+        expect(() => buildStationViewData(invalidMapping, mock)).toThrow(
+            /^Invalid feed: broken_feed$/,
+        );
+    });
+
+    it("rejects a layout that points to an unknown station", () => {
+        const invalidMock = structuredClone(mock);
+        invalidMock.platform_layouts["rem_mcgill_0"].station_id = "nowhere";
+        expect(() => buildStationViewData(mapping, invalidMock)).toThrow(
+            /^Unknown station for platform rem_mcgill_0$/,
+        );
+    });
+
+    // Give the McGill REM platforms in the mapping a different line.
+    function withMcgillRemLine(line: LineId): InterchangeMapping {
+        const changed = structuredClone(mapping);
+        changed["rem_20260520"] = changed["rem_20260520"].map((entry) =>
+            entry.interchange_id === "mcgill" ? { ...entry, line_id: line } : entry,
+        );
+        return changed;
+    }
+
+    it("rejects a platform whose line differs from its station's line", () => {
+        expect(() => buildStationViewData(withMcgillRemLine("green"), mock)).toThrow(
+            /^Platform line mismatch: rem_mcgill_\d$/,
+        );
+    });
+
+    it("rejects a line that has no map color", () => {
+        // The station and platform agree on the line, but the line is unknown.
+        const invalidMapping = withMcgillRemLine("purple" as LineId);
+        const invalidMock = structuredClone(mock);
+        const station = invalidMock.stations.find((item) => item.id === "rem_mcgill");
+        if (!station) throw new Error("Expected the McGill REM station");
+        station.line_id = "purple" as LineId;
+        expect(() => buildStationViewData(invalidMapping, invalidMock)).toThrow(
+            /^Unknown line: purple$/,
+        );
+    });
+
+    it("rejects an interchange with no mapped platforms", () => {
+        const invalidMock = structuredClone(mock);
+        invalidMock.interchange = { ...invalidMock.interchange, id: "nowhere" };
+        expect(() => buildStationViewData(mapping, invalidMock)).toThrow(
+            /^No platforms for interchange nowhere$/,
+        );
+    });
+});
