@@ -3,7 +3,8 @@
  * Mirrors simulator/control/decision.py HoldDecision plus the train/station
  * context recorded on the Hold event (simulator/engine/events.py), for
  * US-2.5 Task 2.5.2, and the "estimates" record of decisions.jsonl (US-2.1,
- * #39). No HTTP endpoint serves these yet; see web/src/data/decisions.ts.
+ * #39). Simulated runs carry hold decisions in `decisions`
+ * (lib/runDecisions.ts); estimates only exist in web/src/data/decisions.ts.
  */
 
 /** Outcome of a hold decision once operating rules were applied. */

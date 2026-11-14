@@ -140,4 +140,40 @@ describe("DecisionView", () => {
     expect(row?.textContent).toContain(`requested ${refused!.requested_s}s`);
     expect(row?.textContent).toContain(`applied ${refused!.applied_s}s`);
   });
+
+  /** Load the McGill view as a simulated run carrying these decisions. */
+  const loadSimulated = (decisions: unknown[]) => {
+    usePlaybackStore.getState().loadData({ ...stationViewData, decisions });
+    usePlaybackStore.getState().seek(stationViewData.duration_s);
+  };
+
+  it("shows no decisions for a simulated run that never held a train", () => {
+    // No control returns an empty list; the fixture must not fill the gap
+    loadSimulated([]);
+    render(<DecisionView />);
+
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
+  });
+
+  it("shows a simulated run's own holds, rounded, without fixture estimates", () => {
+    loadSimulated([
+      {
+        time_s: 60,
+        train_id: "stm:T9",
+        station_id: "32",
+        platform_id: "green_mcgill_0",
+        requested_s: 269.9999999999999,
+        applied_s: 269.9999999999999,
+        reason: "headway_regulation",
+      },
+    ]);
+    render(<DecisionView />);
+
+    const [row] = screen.getAllByRole("listitem");
+    expect(row.textContent).toContain("stm:T9");
+    expect(row.textContent).toContain("270s");
+    expect(row.textContent).not.toContain("269.99");
+    expect(within(row).queryByRole("table")).toBeNull();
+    expect(screen.queryByText("T-101")).toBeNull();
+  });
 });
