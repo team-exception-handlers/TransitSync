@@ -9,6 +9,8 @@ SonarQube Cloud scans every PR (`team-exception-handlers_TransitSync`). Iteratio
 
 Snapshot on 2026-10-31: 68 open issues. 49 are S5778 and 13 are S9073, all in tests. Fixed or accepted so far: S3776 (8), S8572 (4), S8707 (2), S7519 (2), S8544 (1).
 
+Release 1 high issues (2026-11): all 13 fixed. S8495 (5), S1192 (1), S3776 in Python (4) and S3776 in TypeScript (3).
+
 **Scope:** apply these rules to code you write or change. Do not fix existing issues in untouched code as part of an unrelated task; existing issues are cleaned up in dedicated refactoring work. If a task touches a function that already has an issue, mention it at the end instead of fixing it, unless the task is that refactoring.
 
 ## Run before every commit
@@ -29,7 +31,17 @@ Ruff catches several Sonar rules locally. They are not in `pyproject.toml`, so r
 
 Ruff's C901 limit of 15 is cyclomatic complexity, which ignores nesting. Sonar's S3776 is cognitive complexity, which adds a point for every level of nesting. Passing C901 does not mean passing S3776; follow the S3776 rules below.
 
-For the front end, add `eslint-plugin-sonarjs` (recommended config) to the `web/` ESLint setup so the TypeScript rules below show in the editor.
+For the front end, run these from `web/`:
+
+```
+npm run typecheck
+npm run lint
+npm test
+```
+
+- `eslint-plugin-sonarjs` is **not installed yet**, so ESLint does not catch the Sonar rules below. Until it is added (in its own PR, with a Library Comparisons wiki entry as `CLAUDE.md` requires), check the TypeScript table by hand and read the SonarQube PR scan
+- Windows: run Vitest from a path that starts with an uppercase `C:\`. A lowercase `c:\` path makes Vitest load twice and fail with "Cannot read properties of undefined (reading 'config')"
+- A local `web/.env` that sets `VITE_API_URL` makes 2 API tests fail on your machine only. Stash your change and rerun: if they still fail, they are not yours, and CI (no `.env`) decides
 
 ## Python tests (most of the open issues)
 
@@ -77,7 +89,7 @@ monkeypatch.setenv("SUPABASE_DB_URL", "postgresql://test")
 ## Python source code
 
 ### S3776: cognitive complexity at most 15
-This was the most common critical issue (8 fixed). Sonar adds 1 for each `if`, `elif`, `else`, loop, `except`, ternary and run of `and`/`or`, plus 1 more for every level the structure is nested. A check inside a loop inside another loop is expensive.
+This is the most common critical issue (8 fixed before Release 1, 4 more in the Release 1 cleanup). Sonar adds 1 for each `if`, `elif`, `else`, loop, `except`, ternary and run of `and`/`or`, plus 1 more for every level the structure is nested. A check inside a loop inside another loop is expensive.
 - Keep at most two levels of nesting inside a loop. When a third appears, move the inner block into a helper
 - Validate one item per helper: the loop collects, the helper checks (`_service_window`, `_check_platform_stop`, `_check_stop_time`, `_mapping_platform` in `scripts/`)
 - A parser that checks several fields in a row: one helper per field or per kind of field, so the parser is a flat list of `if "x" in value: kwargs["x"] = _parse_x(...)`. Two fields with the same check and a small difference share one helper with a keyword flag (`_rule_seconds(..., allow_zero=True)` and `_parse_rule_action_map` in `simulator/control/settings.py`, which was at complexity 21)
@@ -163,7 +175,7 @@ Better still, when several checks reject the same field with the same message, c
 
 ## TypeScript and React (front end starting in Iteration 3)
 
-No front-end issues exist yet. These are the rules Sonar most often raises on React code; write to them from the first commit.
+These are the rules Sonar most often raises on React code; write to them from the first commit. The only front-end issues so far were the 3 S3776 issues in Release 1 (section below).
 
 | Rule | Avoid | Write instead |
 |---|---|---|
@@ -188,6 +200,19 @@ The same cognitive complexity rule applies to `.ts` and `.tsx`, and callbacks co
 - **Validators with one loop per collection:** when several loops repeat "check the item, reject a duplicate ID, collect the IDs for the next step", write that once as a generic helper (`collectUniqueIds` in `web/src/lib/validateStationView.ts`, which was at 41) and give each item type a small `isValidX` predicate. A long `a && b && c` chain inside a predicate is cheap; nesting it inside loops and `if`s is what costs
 - Keep the existing canvas tests that mock the 2D context; they check every draw call, so a refactor that changes the picture fails them
 
+## Fixing an existing issue (refactoring work)
+
+The Release 1 cleanup used this process. Behaviour must not change, so prove it with tests rather than by reading the code:
+1. **Find untested branches first.** Before splitting a validator or factory, list every `raise`/`throw` in it and check that each has a test
+2. **Add exact-message tests and run them on the old code.** Commit them with the refactor, but see them pass before you change anything. Match the whole message, because a partial match passes even if the refactor changes which check fires first:
+   - pytest: `pytest.raises(ValueError, match=f"^{re.escape(message)}$")`
+   - Vitest: `expect(fn).toThrow(new Error(message))`. Passing a string to `toThrow` only checks for a substring
+   - Use `@pytest.mark.parametrize` or `it.each` with one row per error, in the order the checks run. Add a case where two inputs are wrong, to pin which error wins
+3. **Keep the same checks, the same order and the same messages.** Moving a check into a helper must not move it before or after another check
+4. **One issue per commit.** It keeps reviews small and gives one Refactoring Type row (Refactoring Type | Commit | Reason) per commit for the report
+5. **Log any new design pattern** (for example, the lookup table of builders in `registry.py`) on the Design Patterns wiki page in the same PR, as `CLAUDE.md` requires
+6. **Log the rule here.** Add the rule, what triggered it and the fix, so new code avoids it
+
 ## When the Sonar fix would be wrong
 
 Change the code by default. Mark an issue **Accepted** only when the suggested fix would break a project rule or a test that protects one, as with S8572 on CLI handlers. Never mark a real problem as False Positive to clear the count.
@@ -204,10 +229,13 @@ Intentional. <What the code catches or does, and why that case is expected.> <Th
 
 - [ ] `ruff check . --extend-select PT012,PT018,A001,A002,C420,TRY400` is clean for new and changed files
 - [ ] `ruff format --check .` and `pytest` pass
-- [ ] No function has more than two levels of nesting inside a loop
+- [ ] No function has more than two levels of nesting inside a loop, counting closures and `useEffect` callbacks
+- [ ] Every return of a function gives a tuple of the same length (no `()` on one path and `(x,)` on another)
+- [ ] No string literal appears 3 or more times in a file
 - [ ] Every `pytest.raises` block contains one call; its arguments are built before the block
 - [ ] Every `assert` checks one condition
 - [ ] Tests change globals only through `monkeypatch`
 - [ ] Paths from users are resolved and checked against an allowed folder
-- [ ] Front end: ESLint with `eslint-plugin-sonarjs` is clean; React keys are stable IDs
+- [ ] Front end: `npm run typecheck`, `npm run lint` and `npm test` pass; the TypeScript table above was checked by hand; React keys are stable IDs
+- [ ] Refactoring an existing issue: every error branch has an exact-message test that passed on the old code
 - [ ] After the PR scan, the SonarQube PR decoration shows 0 new issues; fix any before asking for review
