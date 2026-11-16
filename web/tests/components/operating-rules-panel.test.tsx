@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import { OperatingRulesPanel } from "../../src/components/operating-rules-panel";
 import { operatingRulesConfig } from "../../src/data/operating-rules";
+import { stationViewData } from "../../src/data/stationViewData";
+import { usePlaybackStore } from "../../src/store/usePlaybackStore";
 
 describe("OperatingRulesPanel", () => {
   afterEach(() => {
@@ -58,5 +60,50 @@ describe("OperatingRulesPanel", () => {
     const actions = Object.values(operatingRulesConfig.rule_action_map);
     expect(actions).toContain("CLAMP");
     expect(actions).toContain("REFUSE");
+  });
+});
+
+/** Rules as the run endpoint returns them for a 60 s maximum hold. */
+const runRules = {
+  operating_rules: {
+    max_hold_time: 60,
+    min_safe_gap: 60,
+    rule_action_map: {
+      max_hold_exceeded: "CLAMP",
+      headway_violation: "REFUSE",
+      one_hop_violation: "REFUSE",
+    },
+  },
+  rules: [
+    {
+      name: "max_hold_exceeded",
+      action: "CLAMP",
+      description: "Requested hold exceeds the maximum hold time of 60s",
+    },
+  ],
+};
+
+describe("OperatingRulesPanel with a simulated run", () => {
+  afterEach(() => {
+    cleanup();
+    // Back to mock playback, which has no rules of its own
+    usePlaybackStore.getState().loadData(stationViewData);
+  });
+
+  it("shows the maximum hold the run used instead of the 300 s default", () => {
+    usePlaybackStore.getState().loadData({ ...stationViewData, ...runRules });
+    render(<OperatingRulesPanel />);
+
+    expect(screen.getAllByText("60s")).toHaveLength(2);
+    expect(screen.queryByText("300s")).toBeNull();
+    expect(screen.getByText(runRules.rules[0].description)).toBeDefined();
+  });
+
+  it("falls back to the fixture when the run's limits are unusable", () => {
+    const broken = { ...runRules.operating_rules, max_hold_time: "60" };
+    usePlaybackStore.getState().loadData({ ...stationViewData, ...runRules, operating_rules: broken });
+    render(<OperatingRulesPanel />);
+
+    expect(screen.getByText(`${operatingRulesConfig.max_hold_time}s`)).toBeDefined();
   });
 });
