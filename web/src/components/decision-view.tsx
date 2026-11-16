@@ -7,11 +7,14 @@
  * the true value, with the gap (US-2.1 demo steps 1 to 3, #39). Numbers are
  * rounded to whole seconds or passengers.
  *
- * Data is a fixture (web/src/data/decisions.ts) mirroring
- * simulator/control/decision.py HoldDecision and the Hold event, pending a
- * backend endpoint that serves recorded decisions for a run.
+ * A simulated run supplies its own decisions and estimates (see
+ * lib/runDecisions.ts), so each strategy shows what it really did, No
+ * control shows nothing, and the seen-versus-true gaps follow the error
+ * magnitude. Mock playback uses the fixture in web/src/data/decisions.ts.
  */
+import { useMemo } from "react";
 import { decisionRecords, estimateRecords } from "../data/decisions";
+import { runDecisions, runEstimates } from "../lib/runDecisions";
 import { decisionStatus, estimatesFor } from "../types/decision";
 import type {
   EstimatesRecord,
@@ -107,15 +110,16 @@ function DecisionRow({
         {wasChanged ? (
           <>
             <span className="decision-requested">
-              requested {decision.requested_s}s
+              requested {Math.round(decision.requested_s)}s
             </span>
             {" → "}
             <span className="decision-applied">
-              applied {decision.applied_s}s
+              applied {Math.round(decision.applied_s)}s
             </span>
           </>
         ) : (
-          <span className="decision-applied">{decision.applied_s}s</span>
+          // Simulated holds can carry float noise such as 269.9999999999999
+          <span className="decision-applied">{Math.round(decision.applied_s)}s</span>
         )}
       </span>
       <small className="decision-reason">{decision.reason}</small>
@@ -132,9 +136,15 @@ export function DecisionView() {
   const time = usePlaybackStore((state) => state.currentTime_s);
   const selected = usePlaybackStore((state) => state.selectedConnectionId);
   const connection = data?.connections.find((item) => item.id === selected);
+  // A simulated run's own lists (possibly empty); only mock runs, which have
+  // no decisions list, fall back to the fixture and its estimates
+  const recorded = useMemo(() => runDecisions(data), [data]);
+  const recordedEstimates = useMemo(() => runEstimates(data), [data]);
+  const decisions = recorded ?? decisionRecords;
+  const estimates = recorded === null ? estimateRecords : (recordedEstimates ?? []);
   // Reached by playback, inside the run, at either platform of the selected
   // connection, and at a platform that belongs to the station it names
-  const visibleDecisions = decisionRecords.filter((decision) =>
+  const visibleDecisions = decisions.filter((decision) =>
     data && decision.time_s <= time && decision.time_s <= data.duration_s &&
     (decision.platform_id === connection?.from_platform_id ||
       decision.platform_id === connection?.to_platform_id) &&
@@ -151,7 +161,7 @@ export function DecisionView() {
             key={`${decision.train_id}-${decision.time_s}`}
             decision={decision}
             // The estimates taken at this same decision, if the run kept them
-            estimates={estimatesFor(decision, estimateRecords)}
+            estimates={estimatesFor(decision, estimates)}
           />
         ))}
       </ul>
