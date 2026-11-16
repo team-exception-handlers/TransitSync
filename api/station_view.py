@@ -18,7 +18,7 @@ from api.station_layout import (
     StationLayoutResponse,
 )
 from api.time_utils import scenario_start_clock_s
-from simulator.control.decision_audit import KIND_MODE_SWITCH
+from simulator.control.decision_audit import KIND_ESTIMATES, KIND_MODE_SWITCH
 from simulator.control.settings import OperatingRulesConfig
 from simulator.engine.events import EventType
 from simulator.passengers.transfer_component import TransferComponent
@@ -120,6 +120,54 @@ class ModeSwitchResponse(BaseModel):
     irregularity_threshold: float = Field(ge=0, allow_inf_nan=False)
 
 
+class SeenTrueResponse(BaseModel):
+    """A value as the strategy saw it (with prediction error) and its truth.
+
+    Both are null when there was nothing to predict.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    seen: float | None = Field(allow_inf_nan=False)
+    true: float | None = Field(allow_inf_nan=False)
+
+
+class EstimatedTrainResponse(BaseModel):
+    """The held train's estimated arrival and onboard load."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    train_id: str = Field(min_length=1)
+    predicted_arrival_s: SeenTrueResponse
+    onboard_load: SeenTrueResponse
+
+
+class EstimatedTransferResponse(BaseModel):
+    """One transfer group's still-walking count and its total size."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    group_id: str = Field(min_length=1)
+    passenger_count: SeenTrueResponse
+    group_size: SeenTrueResponse
+
+
+class EstimatesResponse(BaseModel):
+    """What the strategy saw at one shown hold, next to the true values (#39).
+
+    The gap between seen and true grows with the run's error magnitude.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    time_s: float = Field(ge=0, allow_inf_nan=False)
+    train_id: str = Field(min_length=1)
+    station_id: str = Field(min_length=1)
+    platform_id: str = Field(min_length=1)
+    trains: list[EstimatedTrainResponse]
+    transfers: list[EstimatedTransferResponse]
+
+
 class OperatingRuleResponse(BaseModel):
     """One named operating rule and the action configured for it.
 
@@ -162,6 +210,8 @@ class SimulationRunResponse(StationLayoutResponse):
     # because older clients ignore the extra key and the default keeps cached
     # payloads without it valid.
     mode_switches: list[ModeSwitchResponse] = Field(default_factory=list)
+    # One per shown decision; optional for the same reason as mode_switches
+    estimates: list[EstimatesResponse] = Field(default_factory=list)
     rules: list[OperatingRuleResponse]
     operating_rules: OperatingRulesResponse
 
@@ -178,11 +228,12 @@ def build_station_view_response(
 
     The validated response combines playback records with static map geometry.
     Passenger positions are interpolated along the selected connection corridor.
-    ``decision_records`` are the run's decision-audit records; only adaptive
-    mode switches are read from them.
+    ``decision_records`` are the run's decision-audit records; adaptive mode
+    switches and the estimates behind each shown decision are read from them.
     """
     platform_by_id = {platform.platform_id: platform for platform in layout.platforms}
     shown_platforms = {connection.from_platform_id, connection.to_platform_id}
+    decisions = _decision_records(event_records, shown_platforms)
     response = SimulationRunResponse(
         **layout.model_dump(),
         schema_version=1,
@@ -197,8 +248,9 @@ def build_station_view_response(
             float(scenario.duration_s),
         ),
         train_events=_train_events(event_records, shown_platforms, platform_by_id),
-        decisions=_decision_records(event_records, shown_platforms),
+        decisions=decisions,
         mode_switches=_mode_switch_records(decision_records, shown_platforms),
+        estimates=_estimate_records(decision_records, decisions),
         rules=_rule_records(scenario.operating_rules),
         operating_rules=scenario.operating_rules.to_dict(),
     )
@@ -282,6 +334,43 @@ def _mode_switch_records(
         and record.get("platform_id") in platform_ids
     ]
     return sorted(switches, key=lambda switch: cast(float, switch["time_s"]))
+
+
+def _estimate_records(
+    records: Sequence[dict[str, object]], decisions: Sequence[dict[str, object]]
+) -> list[dict[str, object]]:
+    """Keep the estimates taken at each shown decision, cut to that decision.
+
+    The pipeline records every train in the network at every decision (often
+    over a thousand), so each record is cut to the held train and the
+    transfer groups walking to its platform. The held train is at the
+    platform, so only its load is kept: its next arrival is outside the view.
+    """
+    shown = {
+        (decision["time_s"], decision["train_id"], decision["platform_id"])
+        for decision in decisions
+    }
+    kept = []
+    for record in records:
+        key = (record.get("time_s"), record.get("train_id"), record.get("platform_id"))
+        if record.get("kind") != KIND_ESTIMATES or key not in shown:
+            continue
+        trains = cast(list[dict[str, object]], record["trains"])
+        kept.append(
+            {
+                "time_s": record["time_s"],
+                "train_id": record["train_id"],
+                "station_id": record["station_id"],
+                "platform_id": record["platform_id"],
+                "trains": [
+                    {**train, "predicted_arrival_s": {"seen": None, "true": None}}
+                    for train in trains
+                    if train["train_id"] == record["train_id"]
+                ],
+                "transfers": record["transfers"],
+            }
+        )
+    return kept
 
 
 def _rule_records(rules: OperatingRulesConfig) -> list[dict[str, str]]:
