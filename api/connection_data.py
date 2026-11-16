@@ -8,7 +8,13 @@ built once at startup, so requests never search or parse the catalog.
 
 from collections.abc import Mapping
 
-from api.station_layout import Connection, StationLayoutResponse, StrictModel
+from api.station_layout import (
+    Connection,
+    Interchange,
+    NonEmptyText,
+    StationLayoutResponse,
+    StrictModel,
+)
 
 
 class ConnectionDataResponse(StrictModel):
@@ -21,6 +27,19 @@ class ConnectionDataResponse(StrictModel):
 
     connection: Connection
     station_layout: StationLayoutResponse
+
+
+class ConnectionSummary(StrictModel):
+    """One selectable connection's identity, metro line, and interchange (#76).
+
+    This is the catalog-listing view: enough for the station-connection
+    selector to render every choice without the interchange's full map data.
+    """
+
+    id: NonEmptyText
+    label: NonEmptyText
+    metro_line_id: NonEmptyText
+    interchange: Interchange
 
 
 def index_connections(
@@ -48,3 +67,37 @@ def index_connections(
                 connection=connection, station_layout=layout
             )
     return connections
+
+
+def list_connections(
+    connections: Mapping[str, ConnectionDataResponse],
+) -> list[ConnectionSummary]:
+    """Summarize every indexed connection for the catalog-listing endpoint.
+
+    Reuses `index_connections`'s lookup table rather than the raw catalog, so
+    the list can never name a connection `/connections/{id}` would reject.
+    The metro line comes from the connection's metro-side platform
+    (`to_platform_id`), the same platform the front end's selector already
+    reads to show each connection's line.
+
+    Args:
+        connections: the lookup table built by `index_connections`.
+
+    Returns:
+        One summary per connection, in the same order as `connections`.
+    """
+    summaries = []
+    for data in connections.values():
+        platforms_by_id = {
+            platform.platform_id: platform for platform in data.station_layout.platforms
+        }
+        metro_platform = platforms_by_id[data.connection.to_platform_id]
+        summaries.append(
+            ConnectionSummary(
+                id=data.connection.id,
+                label=data.connection.label,
+                metro_line_id=metro_platform.line_id,
+                interchange=data.station_layout.interchange,
+            )
+        )
+    return summaries

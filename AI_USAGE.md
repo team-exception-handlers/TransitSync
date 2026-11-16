@@ -304,6 +304,22 @@ hand-written platform IDs, unknown IDs and duplicate IDs at startup, and that
 the simulation-run service shares the same connection index; no new external
 library was added.
 
+Display the three available connections (#76): Claude (Claude Code,
+Anthropic), 50% or more AI-generated. New or substantially changed code:
+`api/connection_data.py`, `api/main.py`, `web/src/lib/simulation-api.ts`,
+`web/src/store/usePlaybackStore.ts`, `web/src/components/connection-selector.tsx`,
+`web/src/App.tsx`, `tests/api/test_connection_data.py`, `tests/api/test_main.py`,
+`web/tests/lib/simulation-api.test.ts`, `web/tests/store/usePlaybackStore.test.ts`,
+`web/tests/components/connection-selector.test.tsx`,
+`web/tests/components/App.test.tsx`. Adds `GET /connections`, reusing
+`connection_data.py`'s existing connection index so the list and each
+connection's detail can never disagree, and a frontend catalog loader that
+populates the selector from it when an API URL is configured, falling back to
+the bundled fixture catalog otherwise. Tests check all three connections are
+listed with their metro line, an invalid or unreachable catalog response
+leaves the fixture catalog shown, and the catalog and single-connection
+lookup never drift apart; no new external library was added.
+
 Development examples:
 
 - Station layout API (#74): Task: serve the static station/connection map data.

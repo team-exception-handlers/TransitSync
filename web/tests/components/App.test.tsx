@@ -1,12 +1,13 @@
 // AI contribution: 50% or more AI-generated
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import App from "../../src/App";
 import { stationViewData } from "../../src/data/stationViewData";
 import { parseStationViewData } from "../../src/lib/validateStationView";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
 import type { StationViewData } from "../../src/types/stationView";
+import type { ConnectionSummary } from "../../src/lib/simulation-api";
 
 describe("TransitSync application shell", () => {
     beforeEach(() => {
@@ -17,6 +18,7 @@ describe("TransitSync application shell", () => {
             currentTime_s: 0,
             selectedConnectionId: null,
             availableRuns: [],
+            availableConnections: null,
         });
     });
 
@@ -159,6 +161,7 @@ describe("Selected connection to simulation run (#79)", () => {
             currentTime_s: 0,
             selectedConnectionId: null,
             availableRuns: [],
+            availableConnections: null,
             simulatedConnectionIds: [],
             runStatus: "mock",
             runError: null,
@@ -210,6 +213,75 @@ describe("Selected connection to simulation run (#79)", () => {
             .toBe("Showing mock playback · simulation run unavailable"));
         expect(screen.getByRole("status").getAttribute("title")).toBe("Simulation run failed");
         expect(usePlaybackStore.getState().data?.interchange.id).toBe("mcgill");
+    });
+});
+
+describe("Backend connection catalog in the selector (#76)", () => {
+    const CATALOG: ConnectionSummary[] = [
+        {
+            id: "gare_centrale_bonaventure-rem-orange",
+            label: "Gare Centrale Catalog",
+            metro_line_id: "orange",
+            interchange: { id: "gare_centrale_bonaventure", name: "Gare Centrale ↔ Bonaventure" },
+        },
+        {
+            id: "mcgill-rem-green",
+            label: "McGill Catalog",
+            metro_line_id: "green",
+            interchange: { id: "mcgill", name: "McGill" },
+        },
+        {
+            id: "edouard_montpetit-rem-blue",
+            label: "Édouard-Montpetit Catalog",
+            metro_line_id: "blue",
+            interchange: { id: "edouard_montpetit", name: "Édouard-Montpetit" },
+        },
+    ];
+
+    beforeEach(() => {
+        vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
+        usePlaybackStore.setState({
+            data: null,
+            currentTime_s: 0,
+            selectedConnectionId: null,
+            availableRuns: [],
+            availableConnections: null,
+        });
+    });
+
+    afterEach(() => {
+        cleanup();
+        vi.restoreAllMocks();
+    });
+
+    it("populates the selector from the backend connection catalog when configured", async () => {
+        const catalogLoader = vi.fn(async () => CATALOG);
+        render(<App runLoader={null} connectionCatalogLoader={catalogLoader} />);
+
+        await waitFor(() => expect(catalogLoader).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(
+            screen.getByRole("button", { name: /McGill Catalog.*green line/ }),
+        ).toBeDefined());
+        const selector = screen.getByRole("group", { name: "Station connection" });
+        expect(within(selector).getAllByRole("button")).toHaveLength(3);
+    });
+
+    it("keeps the bundled fixture catalog when the connection list request fails", async () => {
+        const catalogLoader = vi.fn(async (): Promise<ConnectionSummary[]> => {
+            throw new Error("boom");
+        });
+        render(<App runLoader={null} connectionCatalogLoader={catalogLoader} />);
+
+        await waitFor(() => expect(catalogLoader).toHaveBeenCalledTimes(1));
+        // Still showing the mock fixture's own connection, not a catalog entry.
+        expect(screen.getByRole("button", { name: /McGill.*green line/ })).toBeDefined();
+        expect(usePlaybackStore.getState().availableConnections).toBeNull();
+    });
+
+    it("does not fetch a connection catalog when none is configured", () => {
+        render(<App runLoader={null} connectionCatalogLoader={null} />);
+
+        expect(usePlaybackStore.getState().availableConnections).toBeNull();
     });
 });
 

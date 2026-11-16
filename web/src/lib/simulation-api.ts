@@ -11,6 +11,7 @@
  * settings) and `runSimulation`, which sends the run settings panel's values
  * and turns every failure into a sentence a user can act on.
  */
+import type { LineId } from "../types/stationView";
 import type { RunSettings } from "../types/runSettings";
 import type { StationViewData } from "../types/stationView";
 import { buildRunRequest } from "./run-settings";
@@ -21,6 +22,57 @@ export type ConnectionRunLoader = (
   connectionId: string,
   signal?: AbortSignal,
 ) => Promise<StationViewData>;
+
+/**
+ * One backend-listed connection: identity, metro line, and interchange (#76).
+ * Matches the shape of `GET /connections`; field names stay snake_case so the
+ * JSON maps onto this type without renaming.
+ */
+export interface ConnectionSummary {
+  id: string;
+  label: string;
+  metro_line_id: LineId;
+  interchange: { id: string; name: string };
+}
+
+/** Loads the backend's full connection catalog; the store accepts any function of this shape. */
+export type ConnectionCatalogLoader = (signal?: AbortSignal) => Promise<ConnectionSummary[]>;
+
+const KNOWN_LINE_IDS: readonly LineId[] = ["rem", "orange", "green", "blue"];
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function isConnectionSummary(value: unknown): value is ConnectionSummary {
+  if (typeof value !== "object" || value === null) return false;
+  const item = value as Record<string, unknown>;
+  const interchange = item.interchange;
+  if (typeof interchange !== "object" || interchange === null) return false;
+  const interchangeFields = interchange as Record<string, unknown>;
+  return (
+    isNonEmptyString(item.id) &&
+    isNonEmptyString(item.label) &&
+    KNOWN_LINE_IDS.includes(item.metro_line_id as LineId) &&
+    isNonEmptyString(interchangeFields.id) &&
+    isNonEmptyString(interchangeFields.name)
+  );
+}
+
+/**
+ * Validate the `/connections` list response. Throws if the body is not an
+ * array or any entry is missing a field or names an unknown metro line, so
+ * the selector never renders a connection it cannot describe.
+ */
+export function parseConnectionSummaries(value: unknown): ConnectionSummary[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Connection list response is not an array");
+  }
+  if (value.some((item) => !isConnectionSummary(item))) {
+    throw new Error("Invalid connection summary in catalog response");
+  }
+  return value as ConnectionSummary[];
+}
 
 /**
  * Runs the selected connection with the panel's settings; the panel accepts
@@ -117,6 +169,27 @@ export function createConnectionRunLoader(
       );
     }
     return checkedRun(await response.json(), connectionId);
+  };
+}
+
+/**
+ * Build a loader that GETs `${baseUrl}/connections` (#76) and returns the
+ * validated catalog. `fetchImpl` is for tests. Throws `SimulationRunError`
+ * on an HTTP failure; validation and network errors pass through.
+ */
+export function createConnectionCatalogLoader(
+  baseUrl: string,
+  fetchImpl: typeof fetch = fetch,
+): ConnectionCatalogLoader {
+  return async (signal) => {
+    const response = await fetchImpl(`${baseUrl}/connections`, { signal });
+    if (!response.ok) {
+      throw new SimulationRunError(
+        `Could not load the connection list (HTTP ${response.status}).`,
+        response.status,
+      );
+    }
+    return parseConnectionSummaries(await response.json());
   };
 }
 
