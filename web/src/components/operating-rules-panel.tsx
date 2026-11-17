@@ -4,13 +4,20 @@
  * which rules clamp vs refuse a hold that violates them (US-2.5,
  * Task 2.5.1, #57).
  *
- * Data is a fixture (web/src/data/operating-rules.ts) mirroring
- * simulator/control/settings.py OperatingRulesConfig, pending a backend
- * endpoint that serves the active scenario's rules.
+ * A simulated run supplies the rules it used (lib/runOperatingRules.ts), so
+ * the limits match the run settings, such as the chosen maximum hold. Mock
+ * playback uses the fixture in web/src/data/operating-rules.ts.
  */
+import { useMemo } from "react";
 import { operatingRules, operatingRulesConfig } from "../data/operating-rules";
+import { runOperatingRules } from "../lib/runOperatingRules";
+import { usePlaybackStore } from "../store/usePlaybackStore";
 
 export function OperatingRulesPanel() {
+  const data = usePlaybackStore((state) => state.data);
+  const fromRun = useMemo(() => runOperatingRules(data), [data]);
+  const config = fromRun?.config ?? operatingRulesConfig;
+  const rules = fromRun?.rules ?? operatingRules;
   return (
     <section className="panel operating-rules-panel" aria-label="Operating rules">
       <span className="clock-heading">Operating rules</span>
@@ -18,16 +25,16 @@ export function OperatingRulesPanel() {
       <dl className="operating-rules-values">
         <div>
           <dt>Max hold time</dt>
-          <dd>{operatingRulesConfig.max_hold_time}s</dd>
+          <dd>{config.max_hold_time}s</dd>
         </div>
         <div>
           <dt>Min safe gap</dt>
-          <dd><span>{operatingRulesConfig.min_safe_gap}s</span> <small>Not enforced yet</small></dd>
+          <dd><span>{config.min_safe_gap}s</span> <small>Not enforced yet</small></dd>
         </div>
       </dl>
 
       <ul className="operating-rules-list">
-        {operatingRules.map((rule) => (
+        {rules.map((rule) => (
           <li
             key={rule.name}
             className={`operating-rule operating-rule--${rule.action.toLowerCase()}`}

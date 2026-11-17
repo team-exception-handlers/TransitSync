@@ -1,8 +1,8 @@
 // AI contribution: 50% or more AI-generated
 /**
  * Fixture mirroring simulator/control/settings.py OperatingRulesConfig
- * defaults (US-2.5, Task 2.5.1). No backend HTTP endpoint serves the active
- * scenario's operating rules yet; this fixture stands in until it exists.
+ * defaults (US-2.5, Task 2.5.1). Shown only for mock playback; a simulated
+ * run brings the rules it used (lib/runOperatingRules.ts).
  */
 import type {
   OperatingRule,

@@ -21,6 +21,8 @@ describe("ConnectionSelector", () => {
   beforeEach(() => {
     usePlaybackStore.getState().setAvailableRuns([stationViewData, parsedSecond]);
     usePlaybackStore.getState().loadData(stationViewData);
+    // No test in this file exercises the backend catalog unless it sets one.
+    usePlaybackStore.getState().setAvailableConnections(null);
   });
   afterEach(cleanup);
   it("loads the selected run, resets time and shows its active indicator", () => {
@@ -76,6 +78,49 @@ describe("ConnectionSelector", () => {
       expect(usePlaybackStore.getState().data?.interchange.id).toBe(interchange);
       expect(button.getAttribute("aria-pressed")).toBe("true");
     }
+  });
+
+  it("renders from the backend connection catalog when one is set, keeping each metro line (#76)", () => {
+    // availableRuns stays on the mock fixture: the catalog only drives what
+    // is shown and selectable, not the run data behind each connection.
+    usePlaybackStore.getState().setAvailableRuns(connectionRuns);
+    usePlaybackStore.getState().setAvailableConnections([
+      {
+        id: "gare_centrale_bonaventure-rem-orange",
+        label: "Gare Centrale Catalog",
+        metro_line_id: "orange",
+        interchange: { id: "gare_centrale_bonaventure", name: "Gare Centrale ↔ Bonaventure" },
+      },
+      {
+        id: "mcgill-rem-green",
+        label: "McGill Catalog",
+        metro_line_id: "green",
+        interchange: { id: "mcgill", name: "McGill" },
+      },
+      {
+        id: "edouard_montpetit-rem-blue",
+        label: "Édouard-Montpetit Catalog",
+        metro_line_id: "blue",
+        interchange: { id: "edouard_montpetit", name: "Édouard-Montpetit" },
+      },
+    ]);
+    render(<ConnectionSelector />);
+
+    expect(screen.getAllByRole("button")).toHaveLength(3);
+    // Labels come from the catalog, not the fixture, proving the catalog drives display.
+    const button = screen.getByRole("button", { name: /McGill Catalog.*green line/ });
+    fireEvent.click(button);
+    expect(usePlaybackStore.getState().selectedConnectionId).toBe("mcgill-rem-green");
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("falls back to the run catalog when the backend connection list is unavailable", () => {
+    usePlaybackStore.getState().setAvailableRuns(connectionRuns);
+    usePlaybackStore.getState().setAvailableConnections(null);
+    render(<ConnectionSelector />);
+
+    // Labels come from the mock fixture (buildMockRun's labels), not a catalog entry.
+    expect(screen.getByRole("button", { name: /McGill.*green line/ })).toBeDefined();
   });
 });
 

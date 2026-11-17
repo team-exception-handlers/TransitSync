@@ -3,7 +3,8 @@
 
 Keep the simulator and component construction real. Observe the registry and
 passenger routes to verify settings reach the strategy used by the train engine.
-The three committed demo destinations have service gaps of 300, 300 and 360 s.
+The three committed demo destinations have service gaps of 240, 180 and 270 s
+during the scenario hour.
 Expected gaps are fixed reference values rather than calls to the API's own
 headway helper, so an incorrect platform lookup cannot validate itself.
 """
@@ -57,10 +58,10 @@ def observed_components(monkeypatch, request):
         (
             "gare_centrale_bonaventure-rem-orange",
             "orange_gare_centrale_bonaventure_0",
-            300,
+            240,
         ),
-        ("mcgill-rem-green", "green_mcgill_0", 300),
-        ("edouard_montpetit-rem-blue", "blue_edouard_montpetit_0", 360),
+        ("mcgill-rem-green", "green_mcgill_0", 180),
+        ("edouard_montpetit-rem-blue", "blue_edouard_montpetit_0", 270),
     ],
 )
 @pytest.mark.parametrize("max_hold_s", [5, 120])
@@ -73,8 +74,8 @@ def test_connection_protection_runs_with_destination_settings(
     parameters used to generate passengers. Audit records prove decisions ran,
     even if the best choice was no hold. Safety limits still cap applied holds.
     The 5 s bound leaves one positive candidate on the default grid; 120 s
-    exercises a larger search. Blue's 360 s gap catches a hard-coded 300 s
-    headway that would otherwise pass for the orange and green destinations.
+    exercises a larger search. The three gaps differ and none is 300 s, so a
+    hard-coded or whole-day headway fails for every destination.
     """
     client = TestClient(create_app())
     response = client.post(

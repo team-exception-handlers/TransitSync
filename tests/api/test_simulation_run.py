@@ -447,3 +447,79 @@ def test_non_adaptive_run_returns_no_mode_switches() -> None:
 
     assert response.status_code == 200
     assert response.json()["mode_switches"] == []
+
+
+def _timetable_trip(trip_id: str, *visits: tuple[float, float]) -> SimpleNamespace:
+    """Build a one-platform trip whose visits are (arrival, departure) clock seconds."""
+    return SimpleNamespace(
+        feed_id="feed",
+        trip_id=trip_id,
+        route_id="route",
+        visits=tuple(
+            SimpleNamespace(
+                stop_id="32",
+                platform_id="green_mcgill_0",
+                arrival_s=arrival_s,
+                departure_s=departure_s,
+            )
+            for arrival_s, departure_s in visits
+        ),
+    )
+
+
+def _build_trains_from(monkeypatch, *trips: SimpleNamespace) -> dict:
+    """Run ``_build_trains`` on fake trips with the scenario starting at 07:00."""
+    monkeypatch.setattr(simulation_run, "scenario_start_clock_s", lambda _: 25200)
+    network = SimpleNamespace(trips_for_date=lambda _: trips)
+    scenario = SimpleNamespace(service_date=None)
+    # No trip ends at this platform, so no onward stop is added
+    trains = simulation_run._build_trains(network, scenario, "unused_platform")
+    return {train.id: train.schedule for train in trains}
+
+
+def test_zero_dwell_timetable_stop_gets_the_minimum_dwell(monkeypatch) -> None:
+    """STM stops list arrival == departure; REM stops keep their own dwell."""
+    schedules = _build_trains_from(
+        monkeypatch,
+        _timetable_trip("metro", (25260, 25260)),
+        _timetable_trip("rem", (25366, 25408)),
+    )
+
+    metro, rem = schedules["feed:metro"][0], schedules["feed:rem"][0]
+    assert (metro.arrival_s, metro.departure_s) == (60, 60 + 30)
+    assert (rem.arrival_s, rem.departure_s) == (166, 208)
+
+
+def test_zero_dwell_stop_at_the_scenario_start_is_kept_and_extended(
+    monkeypatch,
+) -> None:
+    """A train passing exactly at 07:00 is still in the run, with doors open 30 s."""
+    schedules = _build_trains_from(
+        monkeypatch,
+        _timetable_trip("at_start", (25200, 25200)),
+        _timetable_trip("before_start", (25199, 25199)),
+    )
+
+    assert set(schedules) == {"feed:at_start"}
+    stop = schedules["feed:at_start"][0]
+    assert (stop.arrival_s, stop.departure_s) == (0, 30)
+
+
+def test_metro_trains_stay_at_the_platform_without_any_hold() -> None:
+    """With no control, each Green Line train is at its platform for 30 s or more."""
+    payload = (
+        TestClient(create_app())
+        .post("/simulation/run", json={**RUN_SETTINGS, "strategy": "no_control"})
+        .json()
+    )
+    arrivals, dwells = {}, []
+    for event in payload["train_events"]:
+        if not event["platform_id"].startswith("green_"):
+            continue
+        if event["event_type"] == "train_arrival":
+            arrivals[event["train_id"]] = event["time_s"]
+        else:
+            dwells.append(event["time_s"] - arrivals.pop(event["train_id"]))
+
+    assert dwells
+    assert min(dwells) >= simulation_run.MIN_STOP_DWELL_S

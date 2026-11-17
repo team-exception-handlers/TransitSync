@@ -15,7 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from api import station_layout
-from api.connection_data import index_connections
+from api.connection_data import index_connections, list_connections
 from api.main import create_app
 
 
@@ -141,3 +141,50 @@ def test_index_connections_maps_each_connection_in_a_layout_to_that_layout() -> 
     assert index["mcgill-second"].connection == second
     assert index["mcgill-rem-green"].connection == first
     assert index["mcgill-second"].station_layout == two_connections
+
+
+def test_list_connections_names_each_connections_metro_line_and_interchange() -> None:
+    """Every real connection's summary names its own metro line (#76).
+
+    Built from the real committed catalog so this also checks the join
+    between `index_connections` and `list_connections` end to end, not a
+    layout built only for this test.
+    """
+    layouts = station_layout.load_station_layouts()
+    connections = index_connections(layouts)
+
+    summaries = list_connections(connections)
+
+    by_id = {summary.id: summary for summary in summaries}
+    assert by_id.keys() == connections.keys()
+    assert by_id["gare_centrale_bonaventure-rem-orange"].metro_line_id == "orange"
+    assert (
+        by_id["gare_centrale_bonaventure-rem-orange"].interchange.id
+        == "gare_centrale_bonaventure"
+    )
+    assert by_id["mcgill-rem-green"].metro_line_id == "green"
+    assert by_id["mcgill-rem-green"].interchange.id == "mcgill"
+    assert (
+        by_id["mcgill-rem-green"].label
+        == connections["mcgill-rem-green"].connection.label
+    )
+    assert by_id["edouard_montpetit-rem-blue"].metro_line_id == "blue"
+    assert by_id["edouard_montpetit-rem-blue"].interchange.id == "edouard_montpetit"
+
+
+def test_list_connections_never_names_a_connection_the_index_does_not_have() -> None:
+    """The listing can only describe IDs `/connections/{id}` would accept.
+
+    Built from a layout with a second connection on one interchange, so this
+    also checks a catalog where a connection count does not match interchange
+    count.
+    """
+    layout = station_layout.load_station_layouts()["mcgill"]
+    first = layout.connections[0]
+    second = first.model_copy(update={"id": "mcgill-second"})
+    two_connections = layout.model_copy(update={"connections": [first, second]})
+    connections = index_connections({"mcgill": two_connections})
+
+    summaries = list_connections(connections)
+
+    assert {summary.id for summary in summaries} == set(connections)

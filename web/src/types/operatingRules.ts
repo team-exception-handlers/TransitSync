@@ -1,8 +1,8 @@
 // AI contribution: 50% or more AI-generated
 /**
  * Mirrors simulator/control/settings.py OperatingRulesConfig (US-2.4, US-2.5,
- * Task 2.5.1, #53, #57, #58). The backend has no HTTP endpoint for this yet;
- * see web/src/data/operating-rules.ts for the fixture pending it.
+ * Task 2.5.1, #53, #57, #58). Simulated runs carry these in `operating_rules`
+ * and `rules` (lib/runOperatingRules.ts); mock playback uses the fixture.
  */
 
 /** What an operating rule does when its condition is triggered. */

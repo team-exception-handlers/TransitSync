@@ -5,7 +5,9 @@ import { stationViewData } from "../../src/data/stationViewData";
 import {
   SimulationRunError,
   configuredApiUrl,
+  createConnectionCatalogLoader,
   createConnectionRunLoader,
+  parseConnectionSummaries,
 } from "../../src/lib/simulation-api";
 
 // Minimal Response stand-in: the client only reads ok, status and json().
@@ -83,5 +85,95 @@ describe("createConnectionRunLoader", () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, stationViewData));
     await expect(createConnectionRunLoader("http://api.test", fetchImpl)("edouard_montpetit-rem-blue"))
       .rejects.toThrow("Run does not contain connection: edouard_montpetit-rem-blue");
+  });
+});
+
+// The backend's connection catalog, used to populate the selector (#76).
+const CONNECTION_CATALOG = [
+  {
+    id: "gare_centrale_bonaventure-rem-orange",
+    label: "Gare Centrale ↔ Bonaventure",
+    metro_line_id: "orange",
+    interchange: { id: "gare_centrale_bonaventure", name: "Gare Centrale ↔ Bonaventure" },
+  },
+  {
+    id: "mcgill-rem-green",
+    label: "McGill",
+    metro_line_id: "green",
+    interchange: { id: "mcgill", name: "McGill" },
+  },
+  {
+    id: "edouard_montpetit-rem-blue",
+    label: "Édouard-Montpetit",
+    metro_line_id: "blue",
+    interchange: { id: "edouard_montpetit", name: "Édouard-Montpetit" },
+  },
+];
+
+describe("parseConnectionSummaries", () => {
+  it("accepts the three documented connections with their metro line", () => {
+    expect(parseConnectionSummaries(CONNECTION_CATALOG)).toStrictEqual(CONNECTION_CATALOG);
+  });
+
+  it("rejects a response that is not an array", () => {
+    expect(() => parseConnectionSummaries({ id: "mcgill-rem-green" }))
+      .toThrow("Connection list response is not an array");
+  });
+
+  it("rejects an entry missing a required field", () => {
+    const missingLabel = [{ ...CONNECTION_CATALOG[1], label: "" }];
+    expect(() => parseConnectionSummaries(missingLabel))
+      .toThrow("Invalid connection summary in catalog response");
+  });
+
+  it("rejects an entry naming an unknown metro line", () => {
+    const badLine = [{ ...CONNECTION_CATALOG[1], metro_line_id: "purple" }];
+    expect(() => parseConnectionSummaries(badLine))
+      .toThrow("Invalid connection summary in catalog response");
+  });
+
+  it("rejects an entry with an incomplete interchange", () => {
+    const badInterchange = [{ ...CONNECTION_CATALOG[1], interchange: { id: "mcgill" } }];
+    expect(() => parseConnectionSummaries(badInterchange))
+      .toThrow("Invalid connection summary in catalog response");
+  });
+});
+
+describe("createConnectionCatalogLoader", () => {
+  it("GETs /connections and returns the validated catalog", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, CONNECTION_CATALOG));
+    const catalog = await createConnectionCatalogLoader("http://api.test", fetchImpl)();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const [url] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("http://api.test/connections");
+    expect(catalog).toStrictEqual(CONNECTION_CATALOG);
+  });
+
+  it("passes the abort signal through to fetch", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, CONNECTION_CATALOG));
+    const controller = new AbortController();
+    await createConnectionCatalogLoader("http://api.test", fetchImpl)(controller.signal);
+
+    const init = (fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(init.signal).toBe(controller.signal);
+  });
+
+  it("reports an HTTP failure with the status code", async () => {
+    const fetchImpl = vi.fn(async () => new Response("server error", { status: 500 }));
+    const error = await createConnectionCatalogLoader("http://api.test", fetchImpl)()
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(SimulationRunError);
+    expect((error as SimulationRunError).status).toBe(500);
+    expect((error as SimulationRunError).message).toBe(
+      "Could not load the connection list (HTTP 500).",
+    );
+  });
+
+  it("rejects a response with an invalid connection summary", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, [{ id: "x" }]));
+    await expect(createConnectionCatalogLoader("http://api.test", fetchImpl)())
+      .rejects.toThrow("Invalid connection summary in catalog response");
   });
 });

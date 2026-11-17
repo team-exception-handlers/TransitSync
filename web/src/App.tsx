@@ -22,8 +22,10 @@ import { DecisionView } from "./components/decision-view";
 import { startPlaybackClock } from "./lib/playback-clock";
 import {
   configuredApiUrl,
+  createConnectionCatalogLoader,
   createConnectionRunLoader,
   runSimulation,
+  type ConnectionCatalogLoader,
   type ConnectionRunLoader,
   type ScenarioRunner,
 } from "./lib/simulation-api";
@@ -42,6 +44,11 @@ const defaultScenarioRunner: ScenarioRunner | null = apiUrl === null
   ? null
   : (connectionId, settings, signal) =>
       runSimulation(connectionId, settings, { baseUrl: apiUrl, signal });
+// Lists the backend's real connections for the selector (#76); null keeps
+// the selector on the bundled fixture catalog, as before this endpoint.
+const defaultConnectionCatalogLoader: ConnectionCatalogLoader | null = apiUrl === null
+  ? null
+  : createConnectionCatalogLoader(apiUrl);
 
 // Subtitle under the heading, so viewers always know whether they are looking
 // at simulator output or synthetic data.
@@ -59,11 +66,14 @@ interface AppProps {
   runLoader?: ConnectionRunLoader | null;
   // Injectable for tests; null disables "Run scenario".
   scenarioRunner?: ScenarioRunner | null;
+  // Injectable for tests; null keeps the selector on the bundled fixture catalog.
+  connectionCatalogLoader?: ConnectionCatalogLoader | null;
 }
 
 export default function App({
   runLoader = defaultRunLoader,
   scenarioRunner = defaultScenarioRunner,
+  connectionCatalogLoader = defaultConnectionCatalogLoader,
 }: Readonly<AppProps>) {
   useEffect(startPlaybackClock, []);
   const runStatus = usePlaybackStore((state) => state.runStatus);
@@ -93,6 +103,24 @@ export default function App({
       store.loadData(stationViewData);
     }
   }, []);
+
+  // Replace the bundled fixture catalog with the backend's real connection
+  // list (#76) once it loads. A failed request leaves the fixture catalog
+  // shown; per-connection run errors are reported separately via runStatus.
+  useEffect(() => {
+    if (connectionCatalogLoader === null) return;
+    const controller = new AbortController();
+    connectionCatalogLoader(controller.signal)
+      .then((connections) => {
+        if (!controller.signal.aborted) {
+          usePlaybackStore.getState().setAvailableConnections(connections);
+        }
+      })
+      .catch(() => {
+        // Keep the bundled fixture catalog shown; nothing to report here.
+      });
+    return () => controller.abort();
+  }, [connectionCatalogLoader]);
 
   // Each selection change requests that connection's run output. Leaving the
   // connection aborts the request so its late response cannot replace the
