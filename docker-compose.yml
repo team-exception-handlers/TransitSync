@@ -1,3 +1,4 @@
+# AI contribution: Below 50% AI-generated
 services:
   backend:
     build:
@@ -23,14 +24,15 @@ services:
       context: ./web
       dockerfile: Dockerfile
     ports:
-      - "5173:80"
+      # nginx runs as a non-root user, so it listens on 8080 instead of 80.
+      - "5173:8080"
     healthcheck:
       test:
         - CMD
         - wget
         - --quiet
         - --spider
-        - http://127.0.0.1/
+        - http://127.0.0.1:8080/
       interval: 30s
       timeout: 5s
       retries: 3

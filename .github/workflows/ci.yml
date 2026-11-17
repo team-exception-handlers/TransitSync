@@ -1,3 +1,4 @@
+# AI contribution: Below 50% AI-generated
 name: Continuous Integration
 
 on:
@@ -31,6 +32,17 @@ jobs:
           source .venv/bin/activate
           python -m pip install --only-binary :all: -r requirements-dev.txt
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      # The Docker image installs from requirements.lock, so a pin changed only
+      # in requirements.txt would never reach it. Regenerating the lock keeps
+      # existing pins, so any diff means the lock is out of date.
+      - name: Check requirements.lock matches requirements.txt
+        run: |
+          pip-compile --quiet --allow-unsafe --generate-hashes --no-emit-index-url --output-file=requirements.lock --pip-args='--only-binary :all:' --strip-extras requirements.txt
+          git diff --exit-code requirements.lock || {
+            echo "::error file=requirements.lock::requirements.lock is out of date. Regenerate it with the command at the top of requirements.txt."
+            exit 1
+          }
 
       - name: Run tests with coverage
         run: pytest -v --cov --cov-report=xml
