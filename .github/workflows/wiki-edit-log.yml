@@ -1,0 +1,33 @@
+PR title: ci: log every wiki edit to a "Wiki edit log" issue
+
+## Summary
+
+Adds `.github/workflows/wiki-edit-log.yml`. GitHub wikis have no review step or per-page locks, so this workflow runs on every wiki create or edit (the `gollum` event) and comments on a "Wiki edit log" issue with who edited which page, plus links to that revision and the page history. The issue is created automatically the first time. Subscribe to it to get notified of every wiki change.
+
+## How it was tested
+
+- YAML parses, and the job only asks for `contents: read` and `issues: write`
+- After merging: make one small wiki edit and check that the comment appears on the "Wiki edit log" issue and that the revision link opens the right version
+
+- [ ] `ruff check .` passes (no Python changed)
+- [ ] `ruff format --check .` passes (no Python changed)
+- [ ] `pytest` passes, including the determinism test (no Python changed)
+
+## AI declaration
+
+AI contribution: 50% or more AI-generated
+
+AI-assisted files:
+- .github/workflows/wiki-edit-log.yml
+
+How the AI-generated code was verified:
+Drafted with help from Claude (Anthropic). Reviewed by Samuel, YAML checked, and tested with a wiki edit after merge.
+
+- [x] File headers match the level of each file listed above
+- [x] AI_USAGE.md updated for this feature or fix
+
+---
+
+Line to add under "## Features and fixes" in AI_USAGE.md:
+
+Wiki edit log workflow (no issue): Claude (Claude Code, Anthropic), 50% or more AI-generated.
