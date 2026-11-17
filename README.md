@@ -17,9 +17,9 @@ Every pull request to `main` runs three GitHub Actions workflows:
 
 | Release | Demo video | Release notes |
 |---|---|---|
-| Release 1 | [Recorded Presentation](https://1drv.ms/v/c/44ad8ea29acb7bf5/IQAXPbx3spOTSbwqgY7HggGNASzoGT_PsayHJIYYqBVG5Lc?e=xyOg6G) | [Google Slides Presentation ](https://docs.google.com/presentation/d/10ll2VH4cBHSkHh4KYiL8QeMqWpek6zDXyl2MctDgDbE/edit?usp=sharing) |
+| Release 1 | [Recorded Presentation](https://1drv.ms/v/c/44ad8ea29acb7bf5/IQAXPbx3spOTSbwqgY7HggGNASzoGT_PsayHJIYYqBVG5Lc?e=xyOg6G) | [Release 1 notes](https://github.com/team-exception-handlers/TransitSync/releases/tag/Release_1) · [Slides](https://docs.google.com/presentation/d/10ll2VH4cBHSkHh4KYiL8QeMqWpek6zDXyl2MctDgDbE/edit?usp=sharing) |
 
-Iteration release notes: [Iteration 2](https://github.com/team-exception-handlers/TransitSync/releases/tag/Iteration_2), [Iteration 3](https://github.com/team-exception-handlers/TransitSync/releases/tag/Iteration_3).
+Iteration release notes: [Iteration 1](https://github.com/team-exception-handlers/TransitSync/releases/tag/Iteration_1), [Iteration 2](https://github.com/team-exception-handlers/TransitSync/releases/tag/Iteration_2), [Iteration 3](https://github.com/team-exception-handlers/TransitSync/releases/tag/Iteration_3).
 
 ## Project summary
 
@@ -130,7 +130,7 @@ The same run can be started without the front end from the Swagger page with `PO
 }
 ```
 
-Valid connection IDs are `gare_centrale_bonaventure-rem-orange`, `mcgill-rem-green` and `edouard_montpetit-rem-blue`. Valid strategies are `no_control`, `schedule_based`, `headway_regulation`, `connection_protection`, `rolling_horizon` and `adaptive`.
+Valid connection IDs are `gare_centrale_bonaventure-rem-orange`, `mcgill-rem-green` and `edouard_montpetit-rem-blue`, and `GET /connections` lists them. Valid strategies are `no_control`, `schedule_based`, `headway_regulation`, `connection_protection`, `rolling_horizon` and `adaptive`.
 
 ### 4. Environment variables
 
