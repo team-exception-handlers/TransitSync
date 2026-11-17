@@ -1,3 +1,4 @@
+# AI contribution: 50% or more AI-generated
 """Spike #195: Verify that post-run validation detects unsafe hold decisions."""
 
 import json
