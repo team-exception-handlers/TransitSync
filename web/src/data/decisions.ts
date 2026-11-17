@@ -2,8 +2,8 @@
 /**
  * Fixture hold decisions mirroring simulator/control/decision.py
  * HoldDecision and the Hold event (simulator/engine/events.py), for US-2.5
- * Task 2.5.2. No backend HTTP endpoint serves recorded decisions for a run
- * yet; this fixture stands in until it exists.
+ * Task 2.5.2. Shown only for mock playback; a simulated run brings its own
+ * decisions from the run endpoint (lib/runDecisions.ts).
  */
 import type {
   EstimatesRecord,
