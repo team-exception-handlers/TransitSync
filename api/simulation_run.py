@@ -17,7 +17,6 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import Future
 from copy import deepcopy
 from dataclasses import replace
-from datetime import date
 from pathlib import Path
 from threading import RLock
 from typing import Literal
@@ -60,6 +59,7 @@ from simulator.passengers import (
 )
 from simulator.passengers.platform_queue import PlatformQueue
 from simulator.scenario import Scenario, load_scenario_file
+from simulator.timetable import ScheduledVisit
 from simulator.trains.disruption import DelayInjection
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
@@ -81,6 +81,13 @@ WALKING_MIN_S = 30.0
 CORRIDOR_CAPACITY_PER_MINUTE = 60.0
 DEMAND_RATES_PER_MINUTE = {"Low": 6.0, "Normal": 12.0, "High": 24.0}
 MAX_CACHED_RUNS = 8
+# The STM GTFS feed gives every metro stop the same arrival and departure time,
+# so trains would open their doors for 0 s. Assumed dwell until it is measured.
+MIN_STOP_DWELL_S = 30.0
+# Passengers already on board each train (L in the break-even cost). With 0,
+# holding looked free and connection protection always held the maximum.
+# Assumed, as no load data exists yet.
+ONBOARD_LOAD = 300
 
 
 class SimulationRunRequest(BaseModel):
@@ -291,7 +298,7 @@ class SimulationRunService:
         uses_targets = request.strategy in TARGET_HEADWAY_STRATEGIES
         uses_connections = request.strategy in CONNECTION_HEADWAY_STRATEGIES
         headways = (
-            _headway_targets(self._network, scenario.service_date)
+            _headway_targets(self._network, scenario)
             if uses_targets or uses_connections
             else {}
         )
@@ -324,16 +331,22 @@ class SimulationRunService:
         )
 
 
-def _headway_targets(network: NetworkConfig, service_date: date) -> dict[str, float]:
+def _headway_targets(network: NetworkConfig, scenario: Scenario) -> dict[str, float]:
     """Use each platform's median scheduled gap, in seconds, as its target.
 
+    Only departures inside the scenario's own window count. A whole-day median
+    mixes peak and off-peak service, so a peak-hour run would aim for the wider
+    off-peak gap and hold every train (300 s target against 180 s service).
     Departures are grouped by platform so the strategy receives platform keys.
     Platforms without two departures receive the conservative 300-second target.
     """
+    start_s = scenario_start_clock_s(scenario)
+    end_s = start_s + scenario.duration_s
     departures: dict[str, list[int]] = defaultdict(list)
-    for trip in network.trips_for_date(service_date):
+    for trip in network.trips_for_date(scenario.service_date):
         for visit in trip.visits:
-            if visit.outgoing_passenger_service:
+            in_window = start_s <= visit.departure_s < end_s
+            if visit.outgoing_passenger_service and in_window:
                 departures[visit.platform_id].append(visit.departure_s)
     targets = {}
     for platform in network.platforms:
@@ -394,7 +407,8 @@ def _build_transfer_route(
                 ),
             )
         ),
-        transfer_fractions={f"{connecting.stop_id}-destination": 1.0},
+        # Transfers ride on past the interchange, so they can board (#100)
+        transfer_fractions={_onward_station_id(connecting.platform_id): 1.0},
         corridor=CorridorQueue(CORRIDOR_CAPACITY_PER_MINUTE),
         walking_mean_s=WALKING_MEAN_S,
         walking_min_s=WALKING_MIN_S,
@@ -415,7 +429,7 @@ def _build_train_component(
     Prediction errors use their dedicated named stream for reproducible runs.
     The platform queue and walking estimate both use the connection's metro side.
     """
-    trains = _build_trains(network, scenario)
+    trains = _build_trains(network, scenario, route.connecting_platform_id)
     platform_ids = [p.platform_id for p in network.platforms]
     adaptive = scenario.control.strategy == AdaptiveStrategy.name
     if adaptive:
@@ -442,9 +456,12 @@ def _build_train_component(
             hold_search=scenario.control.hold_search,
             weights=scenario.control.weights,
         )
+    # Every strategy sees the incoming transfer groups, not only adaptive:
+    # connection protection and rolling horizon hold for them, and identical
+    # observations keep strategy comparisons on the same random draws.
     decision = DecisionPipeline(
         strategy,
-        builder=ObservationBuilder([transfers]) if adaptive else None,
+        builder=ObservationBuilder([transfers]),
         enforcer=OperatingRulesEnforcer(scenario.operating_rules),
         error_model=PredictionErrorModel(
             scenario.control.prediction_error,
@@ -485,11 +502,16 @@ def _delay_injections(
     return tuple(injections)
 
 
-def _build_trains(network: NetworkConfig, scenario: Scenario) -> list[Train]:
+def _build_trains(
+    network: NetworkConfig, scenario: Scenario, connecting_platform_id: str
+) -> list[Train]:
     """Convert remaining timetable visits to second-based simulation trains.
 
     A stop remains active when its departure is at or after the scenario start.
     Scheduled timestamps are shifted to seconds relative to that start clock.
+    A stop the timetable lists with no dwell gets ``MIN_STOP_DWELL_S``.
+    Every train starts with ``ONBOARD_LOAD`` passengers. A trip that ends at
+    the connecting platform gets an onward stop (see ``_onward_stop``).
     """
     start_clock_s = scenario_start_clock_s(scenario)
     trains = []
@@ -504,19 +526,53 @@ def _build_trains(network: NetworkConfig, scenario: Scenario) -> list[Train]:
                 station_id=visit.stop_id,
                 platform_id=visit.platform_id,
                 arrival_s=max(0.0, visit.arrival_s - start_clock_s),
-                departure_s=visit.departure_s - start_clock_s,
+                departure_s=_departure_with_dwell(visit) - start_clock_s,
             )
             for visit in active_visits
         )
+        if stops[-1].platform_id == connecting_platform_id:
+            stops = (*stops, _onward_stop(stops[-1], scenario.duration_s))
         trains.append(
             Train(
                 id=f"{trip.feed_id}:{trip.trip_id}",
                 capacity=TRAIN_CAPACITY,
                 schedule=stops,
                 line_id=trip.route_id,
+                onboard_load=ONBOARD_LOAD,
             )
         )
     return trains
+
+
+def _onward_station_id(platform_id: str) -> str:
+    """Name the unmodelled rest of the line beyond a connecting platform."""
+    return f"{platform_id}-onward"
+
+
+def _onward_stop(last: ScheduledStop, duration_s: float) -> ScheduledStop:
+    """Stand for the rest of the connecting line, which is not modelled.
+
+    The reference network has only the interchange stops, so a metro trip has
+    no later stop and passengers could never board it: boarding needs the
+    passenger's destination among the train's later stops. Transfers ride to
+    this stop instead. It reuses the platform, which every strategy already
+    knows, and is reached one whole run after leaving, so it never happens
+    during the run: no extra arrivals, decisions or alightings.
+    """
+    arrival_s = last.departure_s + duration_s
+    return ScheduledStop(
+        station_id=_onward_station_id(last.platform_id),
+        platform_id=last.platform_id,
+        arrival_s=arrival_s,
+        departure_s=arrival_s,
+    )
+
+
+def _departure_with_dwell(visit: ScheduledVisit) -> float:
+    """Return the timetable departure, moved later only for a zero-dwell stop."""
+    if visit.departure_s == visit.arrival_s:
+        return visit.arrival_s + MIN_STOP_DWELL_S
+    return visit.departure_s
 
 
 def _read_json_lines(path: Path) -> list[dict[str, object]]:

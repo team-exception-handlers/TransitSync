@@ -1,15 +1,24 @@
 # AI contribution: 50% or more AI-generated
-"""Unit tests for the station-view adapter's mode-switch records (#60).
+"""Unit tests for the station-view adapter's audit-derived records.
 
-Records are hand-built in the shape written by
-``DecisionAuditLog.record_mode_switch``, so the filter can be checked without
-running a simulation.
+Mode switches (#60) and decision estimates (#39) are hand-built in the shape
+written by ``DecisionAuditLog``, so the filters can be checked without running
+a simulation.
 """
 
 import pytest
 
-from api.station_view import ModeSwitchResponse, _mode_switch_records
-from simulator.control.decision_audit import KIND_HOLD_SEARCH, KIND_MODE_SWITCH
+from api.station_view import (
+    EstimatesResponse,
+    ModeSwitchResponse,
+    _estimate_records,
+    _mode_switch_records,
+)
+from simulator.control.decision_audit import (
+    KIND_ESTIMATES,
+    KIND_HOLD_SEARCH,
+    KIND_MODE_SWITCH,
+)
 
 SHOWN = {"rem_mcgill_0", "green_mcgill_0"}
 
@@ -86,3 +95,64 @@ def test_model_rejects_a_mode_adaptive_cannot_switch_to(mode: str) -> None:
 
     with pytest.raises(ValueError, match="to_mode"):
         ModeSwitchResponse.model_validate(record)
+
+
+def _estimates(time_s: float, train_id: str, platform_id: str) -> dict[str, object]:
+    """Return one audit record of kind ``estimates`` naming three trains."""
+    return {
+        "schema_version": 2,
+        "kind": KIND_ESTIMATES,
+        "time_s": time_s,
+        "train_id": train_id,
+        "station_id": "32",
+        "platform_id": platform_id,
+        "trains": [
+            {
+                "train_id": other,
+                "predicted_arrival_s": {"seen": 181.0, "true": 165.0},
+                "onboard_load": {"seen": 249, "true": 394},
+            }
+            for other in ("T0", train_id, "T9")
+        ],
+        "transfers": [
+            {
+                "group_id": "G1",
+                "passenger_count": {"seen": 38.0, "true": 42.0},
+                "group_size": {"seen": 54.0, "true": 60.0},
+            }
+        ],
+    }
+
+
+def _decision(time_s: float, train_id: str, platform_id: str) -> dict[str, object]:
+    """Return a shown decision with only the fields used for matching."""
+    return {"time_s": time_s, "train_id": train_id, "platform_id": platform_id}
+
+
+def test_estimates_are_kept_only_for_shown_decisions_and_cut_to_the_held_train():
+    """One record per shown decision; other trains are dropped.
+
+    The held train is at the platform, so its arrival is cleared while its
+    seen and true load stay. Transfer groups are kept unchanged.
+    """
+    records = [
+        _estimates(120.0, "T1", "green_mcgill_0"),
+        _estimates(240.0, "T2", "green_mcgill_0"),  # no decision at 240 s
+        _estimates(120.0, "T1", "green_mcgill_1"),  # same time, other platform
+        {"kind": KIND_HOLD_SEARCH, "time_s": 120.0, "train_id": "T1"},
+    ]
+
+    (kept,) = _estimate_records(records, [_decision(120.0, "T1", "green_mcgill_0")])
+
+    assert [train["train_id"] for train in kept["trains"]] == ["T1"]
+    (held,) = kept["trains"]
+    assert held["predicted_arrival_s"] == {"seen": None, "true": None}
+    assert held["onboard_load"] == {"seen": 249, "true": 394}
+    assert kept["transfers"][0]["passenger_count"] == {"seen": 38.0, "true": 42.0}
+    assert "kind" not in kept
+    assert EstimatesResponse.model_validate(kept).platform_id == "green_mcgill_0"
+
+
+def test_no_decisions_means_no_estimates():
+    """No control holds nobody, so even recorded estimates are not returned."""
+    assert _estimate_records([_estimates(120.0, "T1", "green_mcgill_0")], []) == []
