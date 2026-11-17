@@ -6,6 +6,7 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { StationCanvas } from "../../src/components/station-canvas";
 import { stationViewData } from "../../src/data/stationViewData";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
+import { startPlaybackClock } from "../../src/lib/playback-clock";
 import type { StationViewData } from "../../src/types/stationView";
 
 describe("StationCanvas", () => {
@@ -251,5 +252,124 @@ describe("StationCanvas scaling", () => {
     const labelIndex = fillTextSpy.mock.invocationCallOrder.at(-1) ?? 0;
     const lastReset = setTransformSpy.mock.invocationCallOrder.at(-1) ?? 0;
     expect(lastReset).toBeLessThan(labelIndex);
+  });
+});
+
+describe("StationCanvas station layout (#65 item 1: platforms and connections)", () => {
+  const arc = vi.fn();
+  const fillRect = vi.fn();
+  const moveTo = vi.fn();
+  const lineTo = vi.fn();
+  const stroke = vi.fn();
+
+  beforeEach(() => {
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      clearRect: vi.fn(), arc, beginPath: vi.fn(), moveTo, lineTo,
+      stroke, fillRect, fillText: vi.fn(), fill: vi.fn(),
+      strokeRect: vi.fn(), closePath: vi.fn(),
+      setTransform: vi.fn(), scale: vi.fn(), translate: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    usePlaybackStore.getState().loadData(stationViewData);
+  });
+  afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.clearAllMocks(); });
+
+  it("draws a platform rectangle at every recorded platform position", () => {
+    render(<StationCanvas />);
+
+    for (const platform of stationViewData.platforms) {
+      expect(fillRect).toHaveBeenCalledWith(
+        platform.position.x - 135,
+        platform.position.y - 10,
+        270,
+        20,
+      );
+    }
+  });
+
+  it("traces every corridor polyline through all of its recorded points", () => {
+    render(<StationCanvas />);
+
+    for (const corridor of stationViewData.corridors) {
+      const [first, ...rest] = corridor.path;
+      expect(moveTo).toHaveBeenCalledWith(first.x, first.y);
+      for (const point of rest) {
+        expect(lineTo).toHaveBeenCalledWith(point.x, point.y);
+      }
+    }
+    expect(stroke).toHaveBeenCalled();
+  });
+
+  it("renders a corridor for every connection in the data, keyed by corridor_id", () => {
+    render(<StationCanvas />);
+
+    for (const connection of stationViewData.connections) {
+      const corridor = stationViewData.corridors.find(
+        (item) => item.id === connection.corridor_id,
+      );
+      expect(corridor).toBeDefined();
+      const [first] = corridor.path;
+      expect(moveTo).toHaveBeenCalledWith(first.x, first.y);
+    }
+  });
+});
+
+describe("StationCanvas playback movement (#65 AC: selected connection + playing -> passengers move)", () => {
+  const arc = vi.fn();
+  let now = 0;
+  let nextId = 0;
+  let stop: () => void;
+  const frames = new Map<number, FrameRequestCallback>();
+
+  const frameAt = (timestamp: number) => {
+    now = timestamp;
+    const pending = [...frames.values()];
+    frames.clear();
+    pending.forEach((callback) => callback(now));
+  };
+
+  beforeEach(() => {
+    now = 0;
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue({
+      clearRect: vi.fn(), arc, beginPath: vi.fn(), moveTo: vi.fn(), lineTo: vi.fn(),
+      stroke: vi.fn(), fillRect: vi.fn(), fillText: vi.fn(), fill: vi.fn(),
+      strokeRect: vi.fn(), closePath: vi.fn(),
+      setTransform: vi.fn(), scale: vi.fn(), translate: vi.fn(),
+    } as unknown as CanvasRenderingContext2D);
+    vi.spyOn(performance, "now").mockImplementation(() => now);
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.set(++nextId, callback);
+      return nextId;
+    });
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => frames.delete(id));
+    usePlaybackStore.getState().loadData(stationViewData);
+    stop = startPlaybackClock();
+  });
+  afterEach(() => {
+    stop();
+    frames.clear();
+    cleanup();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("draws the passenger at a new interpolated position each frame while playing, with no seek or re-selection", () => {
+    render(<StationCanvas />);
+    expect(usePlaybackStore.getState().selectedConnectionId).toBe(
+      stationViewData.connections[0].id,
+    );
+
+    act(() => usePlaybackStore.getState().play());
+    expect(usePlaybackStore.getState().isPlaying).toBe(true);
+
+    act(() => frameAt(85_000));
+    expect(arc).toHaveBeenCalledWith(389, 135, 4, 0, 2 * Math.PI);
+    expect(usePlaybackStore.getState().isPlaying).toBe(true);
+    arc.mockClear();
+
+    act(() => frameAt(95_000));
+    expect(arc).toHaveBeenCalledWith(405, 135, 4, 0, 2 * Math.PI);
+    expect(arc).not.toHaveBeenCalledWith(389, 135, 4, 0, 2 * Math.PI);
+    expect(usePlaybackStore.getState().isPlaying).toBe(true);
+    expect(usePlaybackStore.getState().currentTime_s).toBe(95);
   });
 });
