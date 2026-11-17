@@ -41,6 +41,8 @@ py -3.12 -m venv .venv                   # once; project targets Python 3.12+
 .\.venv\Scripts\python.exe -m ruff check .            # lint
 .\.venv\Scripts\python.exe -m ruff format --check .   # format check
 python scripts/load_gtfs.py data/rem --agency REM --dry-run
+# after changing requirements.txt, regenerate the hashed lock the Docker image uses
+.\.venv\Scripts\pip-compile.exe --allow-unsafe --generate-hashes --no-emit-index-url --output-file=requirements.lock --pip-args='--only-binary :all:' --strip-extras requirements.txt
 ```
 
 Always run Python tools through `.venv`; the system Python (3.14) does not have the project dependencies. `requirements.txt` holds runtime packages, `requirements-dev.txt` adds pytest, Hypothesis and ruff. Update this section as real commands are added.

@@ -8,9 +8,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY requirements.txt .
+# requirements.lock pins every package, direct and transitive, with the hash of
+# each published file (Sonar S8544). --require-hashes rejects any package that is
+# missing from the lock or whose download does not match its hash.
 # Wheels only, so no package can run a setup script during the build (Sonar S8541).
-RUN pip install --no-cache-dir --only-binary :all: --requirement requirements.txt
+COPY requirements.lock .
+RUN pip install --no-cache-dir --only-binary :all: --require-hashes \
+    --requirement requirements.lock
 
 COPY api ./api
 COPY config ./config

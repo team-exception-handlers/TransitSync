@@ -1,3 +1,4 @@
+# AI contribution: Below 50% AI-generated
 name: Docker Compose CI
 
 on:
@@ -7,6 +8,7 @@ on:
       - "Dockerfile"
       - "docker-compose.yml"
       - "requirements.txt"
+      - "requirements.lock"
       - "api/**"
       - "config/**"
       - "simulator/**"
@@ -20,6 +22,7 @@ on:
       - "Dockerfile"
       - "docker-compose.yml"
       - "requirements.txt"
+      - "requirements.lock"
       - "api/**"
       - "config/**"
       - "simulator/**"

@@ -1,5 +1,11 @@
+# AI contribution: Below 50% AI-generated
 # Runtime dependencies, pinned to exact versions.
 # Add a package here only when merged code imports it.
+#
+# The Docker image installs from requirements.lock, which also pins every
+# package these depend on, with hashes. After changing this file, regenerate it
+# (CI fails while the two disagree):
+#   pip-compile --allow-unsafe --generate-hashes --no-emit-index-url --output-file=requirements.lock --pip-args='--only-binary :all:' --strip-extras requirements.txt
 numpy==2.5.4
 
 # FastAPI backend and ASGI server.
