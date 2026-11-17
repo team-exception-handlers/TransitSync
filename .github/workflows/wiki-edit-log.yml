@@ -1,33 +1,59 @@
-PR title: ci: log every wiki edit to a "Wiki edit log" issue
+# AI contribution: 50% or more AI-generated
+# wiki edit log
+# github wikis have no review step or per-page locks, so this workflow gives us
+# the next best thing: a public record. every time someone creates or edits a
+# wiki page, it posts who did it and links to that exact revision on one
+# "Wiki edit log" issue. anyone watching the issue gets notified.
 
-## Summary
+name: Wiki edit log
 
-Adds `.github/workflows/wiki-edit-log.yml`. GitHub wikis have no review step or per-page locks, so this workflow runs on every wiki create or edit (the `gollum` event) and comments on a "Wiki edit log" issue with who edited which page, plus links to that revision and the page history. The issue is created automatically the first time. Subscribe to it to get notified of every wiki change.
+on:
+  # "gollum" is github's name for the wiki engine, so this fires on any wiki edit
+  gollum:
 
-## How it was tested
+# the job only needs to read the repo and write issue comments, nothing else
+permissions:
+  contents: read
+  issues: write
 
-- YAML parses, and the job only asks for `contents: read` and `issues: write`
-- After merging: make one small wiki edit and check that the comment appears on the "Wiki edit log" issue and that the revision link opens the right version
+jobs:
+  log-edit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post the edit to the Wiki edit log issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // the issue title we look for (and create the first time)
+            const TITLE = 'Wiki edit log';
+            const { owner, repo } = context.repo;
 
-- [ ] `ruff check .` passes (no Python changed)
-- [ ] `ruff format --check .` passes (no Python changed)
-- [ ] `pytest` passes, including the determinism test (no Python changed)
+            // look for an open issue with that exact title
+            const found = await github.paginate(github.rest.issues.listForRepo, {
+              owner, repo, state: 'open', per_page: 100,
+            });
+            let issue = found.find((i) => !i.pull_request && i.title === TITLE);
 
-## AI declaration
+            // first run: make the issue so every later edit has a home
+            if (!issue) {
+              const created = await github.rest.issues.create({
+                owner, repo, title: TITLE,
+                body: 'Every wiki create or edit is posted here automatically by `.github/workflows/wiki-edit-log.yml`. Subscribe to get notified.',
+              });
+              issue = created.data;
+            }
 
-AI contribution: 50% or more AI-generated
+            // one line per page touched in this push, each linking to the
+            // exact revision and to the page's full history
+            const editor = context.payload.sender.login;
+            const lines = context.payload.pages.map((p) =>
+              `- **${p.action}** [${p.title}](${p.html_url}): ` +
+              `[this revision](${p.html_url}/${p.sha}) · [history](${p.html_url}/_history)`
+            );
 
-AI-assisted files:
-- .github/workflows/wiki-edit-log.yml
-
-How the AI-generated code was verified:
-Drafted with help from Claude (Anthropic). Reviewed by Samuel, YAML checked, and tested with a wiki edit after merge.
-
-- [x] File headers match the level of each file listed above
-- [x] AI_USAGE.md updated for this feature or fix
-
----
-
-Line to add under "## Features and fixes" in AI_USAGE.md:
-
-Wiki edit log workflow (no issue): Claude (Claude Code, Anthropic), 50% or more AI-generated.
+            // the comment body: who, when, and what changed
+            const when = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+            await github.rest.issues.createComment({
+              owner, repo, issue_number: issue.number,
+              body: `\`${editor}\` edited the wiki (${when}):\n\n${lines.join('\n')}`,
+            });
