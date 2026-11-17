@@ -41,6 +41,19 @@ jobs:
       - name: Check formatting (ruff format)
         run: ruff format --check .
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Run front-end tests with coverage
+        working-directory: web
+        run: |
+          npm ci --ignore-scripts
+          npm run test:coverage
+
       - name: Cache SonarQube packages
         uses: actions/cache@v6
         with:
@@ -54,3 +67,4 @@ jobs:
         with:
           args: >
             -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.javascript.lcov.reportPaths=web/coverage/lcov.info
