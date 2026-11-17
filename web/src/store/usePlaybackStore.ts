@@ -9,7 +9,7 @@
 import { create } from "zustand";
 
 import { getNetworkSnapshot } from "../lib/getNetworkSnapshot";
-import type { ConnectionRunLoader } from "../lib/simulation-api";
+import type { ConnectionRunLoader, ConnectionSummary } from "../lib/simulation-api";
 import { parseStationViewData } from "../lib/validateStationView";
 
 import type { NetworkSnapshot, StationViewData } from "../types/stationView";
@@ -25,6 +25,11 @@ interface StationViewStore {
   data: StationViewData | null;
   availableRuns: StationViewData[];
   setAvailableRuns: (runs: readonly unknown[]) => void;
+
+  // The backend's authoritative connection list (#76); null keeps the
+  // selector on the run catalog's own connections (the offline fallback).
+  availableConnections: ConnectionSummary[] | null;
+  setAvailableConnections: (connections: readonly ConnectionSummary[] | null) => void;
 
   // Connections whose catalog entry has been replaced by simulator output.
   simulatedConnectionIds: readonly string[];
@@ -136,6 +141,7 @@ export const usePlaybackStore = create<StationViewStore>(
     // INITIAL STATE
     data: null,
     availableRuns: [],
+    availableConnections: null,
     currentTime_s: 0,
     selectedConnectionId: null,
     isPlaying: false,
@@ -153,6 +159,12 @@ export const usePlaybackStore = create<StationViewStore>(
       const ids = availableRuns.flatMap((run) => run.connections.map((item) => item.id));
       if (new Set(ids).size !== ids.length) throw new Error("Duplicate connection in catalog");
       set({ availableRuns, simulatedConnectionIds: [] });
+    },
+
+    // The catalog is already validated by the fetch client, so this only
+    // publishes it; null restores the run-catalog fallback in the selector.
+    setAvailableConnections: (connections) => {
+      set({ availableConnections: connections === null ? null : [...connections] });
     },
 
     // Only the latest selection may publish: a response for a connection the

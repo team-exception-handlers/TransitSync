@@ -10,7 +10,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from api.connection_data import ConnectionDataResponse, index_connections
+from api.connection_data import (
+    ConnectionDataResponse,
+    ConnectionSummary,
+    index_connections,
+    list_connections,
+)
 from api.settings import Settings
 from api.simulation_run import (
     SimulationRunRequest,
@@ -74,6 +79,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 detail=f"Unknown interchange: {interchange_id}",
             )
         return layout
+
+    @application.get(
+        "/connections",
+        response_model=list[ConnectionSummary],
+        tags=["connections"],
+    )
+    def connections_list() -> list[ConnectionSummary]:
+        """Return every selectable connection with its metro line and interchange.
+
+        Built from the same validated layout catalog `connection_data` serves,
+        so the list and each connection's detail can never disagree (#76).
+        """
+        return list_connections(connections)
 
     @application.get(
         "/connections/{connection_id}",

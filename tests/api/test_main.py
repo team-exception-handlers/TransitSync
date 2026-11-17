@@ -1,3 +1,4 @@
+# AI contribution: 50% or more AI-generated
 """Tests for the FastAPI endpoints and environment configuration."""
 
 import json
@@ -94,6 +95,48 @@ def test_station_layout_endpoint_remaps_platforms_for_other_interchanges(
     assert payload["connections"][0]["corridor_id"] == (
         f"{interchange_id}_rem_{metro_line}_transfer"
     )
+
+
+def test_connections_list_endpoint_lists_all_three_with_their_metro_line() -> None:
+    """All three connections are listed with their metro line (#76).
+
+    This is the backend half of the catalog-listing task: the front end's
+    connection selector no longer has to hardcode which connections exist.
+    """
+    client = TestClient(create_app())
+
+    response = client.get("/connections")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert {item["id"] for item in payload} == {
+        "gare_centrale_bonaventure-rem-orange",
+        "mcgill-rem-green",
+        "edouard_montpetit-rem-blue",
+    }
+    by_id = {item["id"]: item for item in payload}
+    assert by_id["mcgill-rem-green"]["metro_line_id"] == "green"
+    assert by_id["mcgill-rem-green"]["interchange"]["id"] == "mcgill"
+    assert by_id["gare_centrale_bonaventure-rem-orange"]["metro_line_id"] == "orange"
+    assert by_id["edouard_montpetit-rem-blue"]["metro_line_id"] == "blue"
+    assert all(item["label"] for item in payload)
+
+
+def test_connections_list_endpoint_matches_each_connection_detail_endpoint() -> None:
+    """The catalog and the single-connection lookup can never drift apart.
+
+    Both read from the same `index_connections` table, so this checks that
+    sharing the index, rather than re-deriving the summary fields, actually
+    keeps them equal.
+    """
+    client = TestClient(create_app())
+
+    catalog = client.get("/connections").json()
+
+    for summary in catalog:
+        detail = client.get(f"/connections/{summary['id']}").json()
+        assert detail["connection"]["label"] == summary["label"]
+        assert detail["station_layout"]["interchange"] == summary["interchange"]
 
 
 def test_station_layout_endpoint_rejects_unknown_interchange() -> None:

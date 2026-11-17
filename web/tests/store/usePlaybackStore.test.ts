@@ -138,4 +138,38 @@ describe("usePlaybackStore", () => {
         expect(state.isPlaying).toBe(false);
         expect(state.updatedAt_ms).toBeNull();
     });
+
+    it("has no backend connection catalog until one is set (#76)", () => {
+        expect(usePlaybackStore.getState().availableConnections).toBeNull();
+    });
+
+    it("publishes the backend connection catalog", () => {
+        const catalog = [
+            {
+                id: "mcgill-rem-green",
+                label: "McGill",
+                metro_line_id: "green" as const,
+                interchange: { id: "mcgill", name: "McGill" },
+            },
+        ];
+
+        usePlaybackStore.getState().setAvailableConnections(catalog);
+
+        expect(usePlaybackStore.getState().availableConnections).toStrictEqual(catalog);
+    });
+
+    it("restores the fallback when the catalog is cleared", () => {
+        usePlaybackStore.getState().setAvailableConnections([
+            {
+                id: "mcgill-rem-green",
+                label: "McGill",
+                metro_line_id: "green" as const,
+                interchange: { id: "mcgill", name: "McGill" },
+            },
+        ]);
+
+        usePlaybackStore.getState().setAvailableConnections(null);
+
+        expect(usePlaybackStore.getState().availableConnections).toBeNull();
+    });
 });
