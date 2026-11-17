@@ -17,7 +17,7 @@ Every pull request to `main` runs three GitHub Actions workflows:
 
 | Release | Demo video | Release notes |
 |---|---|---|
-| Release 1 | Link to be added | Link to be added |
+| Release 1 | [OneDrive Link](https://1drv.ms/v/c/44ad8ea29acb7bf5/IQAXPbx3spOTSbwqgY7HggGNASzoGT_PsayHJIYYqBVG5Lc?e=xyOg6G) | Link to be added |
 
 Iteration release notes: [Iteration 2](https://github.com/team-exception-handlers/TransitSync/releases/tag/Iteration_2), [Iteration 3](https://github.com/team-exception-handlers/TransitSync/releases/tag/Iteration_3).
 
