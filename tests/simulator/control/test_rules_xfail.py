@@ -1,4 +1,3 @@
-# AI contribution: 50% or more AI-generated
 """Spike #195: Verify that post-run validation detects unsafe hold decisions."""
 
 import json
@@ -35,35 +34,23 @@ class HoldEveryTrain(DecisionController):
         )
 
 
-@pytest.mark.xfail(
-    reason=(
-        "Spike #195: Post-run validation does not yet inspect event-log "
-        "hold decisions for operating-rule violations."
-    ),
-    strict=True,
-)
 def test_post_run_validation_detects_hold_exceeding_operating_rule(tmp_path):
     """A 999-second applied hold should be caught by post-run validation.
 
     The pass-through enforcer deliberately allows the unsafe hold so this
     test can check whether post-run validation independently detects it.
     """
-
     scenario = SimpleNamespace(master_seed=42, duration_s=500.0)
-
     train = Train(
         id="A",
         capacity=800,
         schedule=(ScheduledStop("S1", "P1", 100, 130),),
     )
-
     decision = DecisionPipeline(
         HoldEveryTrain(),
         enforcer=PassThroughEnforcer(),
     )
-
     component = TrainComponent([train], decision=decision)
-
     result = run_scenario(
         scenario,
         lambda seed: None,
@@ -76,14 +63,12 @@ def test_post_run_validation_detects_hold_exceeding_operating_rule(tmp_path):
         json.loads(line)
         for line in result.events_path.read_text(encoding="utf-8").splitlines()
     ]
-
     holds = [event for event in events if event["event_type"] == "hold"]
-
     assert len(holds) == 1
     assert holds[0]["requested_s"] == REQUESTED_HOLD_S
     assert holds[0]["applied_s"] == REQUESTED_HOLD_S
     assert holds[0]["applied_s"] > MAX_HOLD_S
 
-    # Expected future behaviour: post-run validation detects the violation.
+    # Post-run validation now independently detects and raises on the violation.
     with pytest.raises(PostRunValidationFailedError):
         validate_run_results(result)
