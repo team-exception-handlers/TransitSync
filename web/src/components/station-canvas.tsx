@@ -8,7 +8,7 @@
  * canvas transform. Clicking a marker follows that passenger (#237); the pick
  * lives in the playback store so other views can highlight the same person.
  */
-import { type MouseEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { fitLayout } from "../lib/fitLayout";
 import { getNetworkSnapshot } from "../lib/getNetworkSnapshot";
 import { pickPassenger } from "../lib/pickPassenger";
@@ -288,11 +288,18 @@ export function StationCanvas() {
     const { sampled } = connectionSample(getNetworkSnapshot(data, time).passengers, selected, followed);
     selectPassenger(pickPassenger(sampled, { x: event.clientX - rect.left, y: event.clientY - rect.top }, fit));
   };
-  const followingLabel = followed ? `, following passenger ${followed}` : "";
+  // Keyboard path: Escape stops following, so the pick can be cleared without a mouse.
+  const handleKeyDown = (event: KeyboardEvent<HTMLCanvasElement>) => {
+    if (event.key === "Escape") selectPassenger(null);
+  };
+  const followingLabel = followed ? `, following passenger ${followed}, press Escape to stop` : "";
+  // No role="img": the canvas takes clicks and keys, and its aria-label already
+  // names it for screen readers (Sonar S6819 prefers the native element).
   return (
     <div ref={containerRef} className="station-canvas-wrap">
       <canvas ref={canvasRef} className="station-canvas" onClick={handleClick}
-        width={data.map.width} height={data.map.height} role="img"
+        onKeyDown={handleKeyDown} tabIndex={0}
+        width={data.map.width} height={data.map.height}
         aria-label={`${data.interchange.name} at ${time.toFixed(1)} simulation seconds${followingLabel}`}>
         Station schematic with platforms, transfer corridor, trains and passengers.
       </canvas>

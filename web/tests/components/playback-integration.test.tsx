@@ -29,7 +29,7 @@ describe("playback integration", () => {
     act(() => vi.advanceTimersByTime(1008));
     expect(usePlaybackStore.getState().currentTime_s).toBeCloseTo(86.008);
     expect(screen.getAllByText("07:41:26")).toHaveLength(2);
-    expect(screen.getByRole("img").getAttribute("aria-label")).toContain("86.0");
+    expect(screen.getByLabelText(/simulation seconds/).getAttribute("aria-label")).toContain("86.0");
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
     const time = usePlaybackStore.getState().currentTime_s;
     act(() => vi.advanceTimersByTime(1008));
@@ -39,7 +39,7 @@ describe("playback integration", () => {
     fireEvent.click(screen.getByRole("button", { name: "Play" }));
     fireEvent.click(screen.getByRole("button", { name: /Gare Centrale/ }));
     expect(usePlaybackStore.getState().currentTime_s).toBe(0);
-    expect(screen.getByRole("img").getAttribute("aria-label")).toContain("Gare Centrale");
+    expect(screen.getByLabelText(/simulation seconds/).getAttribute("aria-label")).toContain("Gare Centrale");
     expect(vi.getTimerCount()).toBe(0);
     fireEvent.click(screen.getByRole("button", { name: "Play" }));
     view.unmount();
@@ -59,7 +59,7 @@ describe("playback integration", () => {
     expect(usePlaybackStore.getState().currentTime_s).toBeCloseTo(95.584);
     fireEvent.click(screen.getByRole("button", { name: "Rewind 30 seconds" }));
     expect(usePlaybackStore.getState().currentTime_s).toBeCloseTo(65.584);
-    expect(screen.getByRole("img").getAttribute("aria-label")).toContain("65.6");
+    expect(screen.getByLabelText(/simulation seconds/).getAttribute("aria-label")).toContain("65.6");
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
     fireEvent.click(screen.getByRole("button", { name: "2× speed" }));
     act(() => vi.advanceTimersByTime(2000));

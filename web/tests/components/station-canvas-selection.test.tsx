@@ -49,17 +49,17 @@ describe("StationCanvas passenger selection (#237)", () => {
     // p-001 is walking at (389, 135) at t = 85 in the shared fixture; jsdom draws unscaled.
     act(() => usePlaybackStore.getState().seek(85));
 
-    fireEvent.click(screen.getByRole("img"), { clientX: 391, clientY: 137 });
+    fireEvent.click(screen.getByLabelText(/simulation seconds/), { clientX: 391, clientY: 137 });
 
     expect(usePlaybackStore.getState().selectedPassengerId).toBe("p-001");
     expect(arc).toHaveBeenCalledWith(...RING(389, 135));
-    expect(screen.getByRole("img").getAttribute("aria-label")).toContain("following passenger p-001");
+    expect(screen.getByLabelText(/simulation seconds/).getAttribute("aria-label")).toContain("following passenger p-001");
   });
 
   it("switches to another passenger, then clears the pick on an empty click", () => {
     render(<StationCanvas />);
     loadAtTen(tracksAt([{ id: "left", x: 50, y: 60 }, { id: "right", x: 200, y: 60 }]));
-    const canvas = screen.getByRole("img");
+    const canvas = screen.getByLabelText(/simulation seconds/);
 
     fireEvent.click(canvas, { clientX: 50, clientY: 60 });
     fireEvent.click(canvas, { clientX: 200, clientY: 60 });
@@ -70,6 +70,20 @@ describe("StationCanvas passenger selection (#237)", () => {
     expect(usePlaybackStore.getState().selectedPassengerId).toBeNull();
     expect(arc).not.toHaveBeenCalledWith(...RING(200, 60));
     expect(canvas.getAttribute("aria-label")).not.toContain("following");
+  });
+
+  it("is focusable and stops following on Escape, but ignores other keys", () => {
+    render(<StationCanvas />);
+    act(() => usePlaybackStore.getState().selectPassenger("p-001"));
+    const canvas = screen.getByLabelText(/simulation seconds/);
+    expect(canvas.tabIndex).toBe(0);
+    expect(canvas.getAttribute("aria-label")).toContain("press Escape to stop");
+
+    fireEvent.keyDown(canvas, { key: "Enter" });
+    expect(usePlaybackStore.getState().selectedPassengerId).toBe("p-001");
+
+    fireEvent.keyDown(canvas, { key: "Escape" });
+    expect(usePlaybackStore.getState().selectedPassengerId).toBeNull();
   });
 
   it("still draws the followed passenger when the 60-marker sample leaves them out", () => {
