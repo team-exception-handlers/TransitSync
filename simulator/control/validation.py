@@ -41,7 +41,6 @@ class PostRunValidationFailedError(ValueError):
     """Raised when a post-run rule check or invariant fails."""
 
 
-
 def _verify_event_log_rules(
     events_path: Path, max_hold_s: float, min_safe_gap_s: float
 ) -> None:
@@ -89,7 +88,6 @@ def _verify_event_log_rules(
             f" - {v}" for v in violations
         )
         raise PostRunValidationFailedError(msg)
-
 
 
 def validate_run_results(
