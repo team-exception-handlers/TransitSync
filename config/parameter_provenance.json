@@ -29,20 +29,20 @@
     "source_name": "Irregularity Regulation Rules (irregularity.py)",
     "source_link": ""
   },
-  "base_dwell_s": {
-    "classification": "measured",
-    "source_name": "STM Station Boarding Observations (dwell.py)",
-    "source_link": "https://www.stm.info"
+ "base_dwell_s": {
+    "classification": "assumed",
+    "source_name": "Dwell model placeholder (dwell.py)",
+    "source_link": ""
   },
   "boarding_s_per_passenger": {
-    "classification": "measured",
-    "source_name": "STM Station Boarding Observations (dwell.py)",
-    "source_link": "https://www.stm.info"
+    "classification": "assumed",
+    "source_name": "Dwell model placeholder (dwell.py)",
+    "source_link": ""
   },
   "alighting_s_per_passenger": {
-    "classification": "measured",
-    "source_name": "STM Station Boarding Observations (dwell.py)",
-    "source_link": "https://www.stm.info"
+    "classification": "assumed",
+    "source_name": "Dwell model placeholder (dwell.py)",
+    "source_link": ""
   },
   "crowding_strength": {
     "classification": "estimated",
@@ -59,9 +59,9 @@
     "source_name": "Rider Survey Ratio Estimate (break_even.py)",
     "source_link": ""
   },
-  "w_onboard": {
-    "classification": "estimated",
-    "source_name": "Break-Even Cost Analysis Model (break_even.py)",
+ "w_onboard": {
+    "classification": "assumed",
+    "source_name": "Break-even weight assumption until rider survey (break_even.py)",
     "source_link": ""
   },
   "kappa": {
@@ -74,9 +74,49 @@
     "source_name": "Reference Network GeoJSON (network.json)",
     "source_link": ""
   },
-  "person_4_posts_day_1": {
+  "passenger_flow": {
     "classification": "assumed",
-    "source_name": "Scenario Participant Profiles (Person 4)",
+    "source_name": "Scenario demand tier setting (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "TRAIN_CAPACITY": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "WALKING_MEAN_S": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "WALKING_MIN_S": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "CORRIDOR_CAPACITY_PER_MINUTE": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "DEMAND_RATES_PER_MINUTE": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "MAX_CACHED_RUNS": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "MIN_STOP_DWELL_S": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "ONBOARD_LOAD": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
     "source_link": ""
   }
 }

@@ -53,5 +53,5 @@ def test_load_parameter_provenance_valid_file(tmp_path: Path) -> None:
 
 
 def test_load_parameter_provenance_missing_file() -> None:
-    result = load_parameter_provenance("nonexistent_file.json")
-    assert result == {}
+    with pytest.raises(FileNotFoundError):
+        load_parameter_provenance("nonexistent_file.json")

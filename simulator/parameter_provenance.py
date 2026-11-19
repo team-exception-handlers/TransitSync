@@ -12,6 +12,10 @@ ConfidenceClassification = Literal["measured", "estimated", "published", "assume
 
 VALID_CLASSIFICATIONS = {"measured", "estimated", "published", "assumed"}
 
+PROVENANCE_PATH = (
+    Path(__file__).resolve().parents[1] / "config" / "parameter_provenance.json"
+)
+
 
 @dataclass(frozen=True)
 class ParameterProvenanceEntry:
@@ -32,16 +36,16 @@ class ParameterProvenanceEntry:
 
 
 def load_parameter_provenance(
-    filepath: Path | str = "config/parameter_provenance.json",
+    filepath: Path | str = PROVENANCE_PATH,
 ) -> dict[str, ParameterProvenanceEntry]:
     path = Path(filepath)
     if not path.exists():
-        return {}
+        raise FileNotFoundError(f"Parameter provenance file not found: {path}")
 
     with path.open("r", encoding="utf-8") as f:
         raw_data = json.load(f)
 
-    provenance_map = {}
+    provenance_map: dict[str, ParameterProvenanceEntry] = {}
     for key, value in raw_data.items():
         if not isinstance(value, dict):
             raise ValueError(f"Provenance entry for '{key}' must be a dictionary")
