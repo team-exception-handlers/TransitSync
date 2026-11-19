@@ -5,11 +5,13 @@
  * simulation model, passenger positions or playback timer. Scaling the
  * fixture's fixed map box to the available viewport is handled by the pure
  * fitLayout() helper; this component only wires it to a ResizeObserver and a
- * canvas transform.
+ * canvas transform. Clicking a marker follows that passenger (#237); the pick
+ * lives in the playback store so other views can highlight the same person.
  */
-import { useEffect, useRef, useState } from "react";
+import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { fitLayout } from "../lib/fitLayout";
 import { getNetworkSnapshot } from "../lib/getNetworkSnapshot";
+import { pickPassenger } from "../lib/pickPassenger";
 import { samplePassengers } from "../lib/samplePassengers";
 import { usePlaybackStore } from "../store/usePlaybackStore";
 import type {
@@ -94,6 +96,28 @@ function drawPassengerMarker(
       return;
     }
   }
+}
+
+/** Ring around the followed passenger (#237), drawn last so no other marker covers it. */
+function drawSelectionRing(context: CanvasRenderingContext2D, position: Point) {
+  context.beginPath();
+  context.arc(position.x, position.y, 8, 0, 2 * Math.PI);
+  context.strokeStyle = "#1a5fb4";
+  context.lineWidth = 2;
+  context.stroke();
+}
+
+/**
+ * The markers drawn for the selected connection. Drawing and click picking
+ * share this, so a click can only land on a passenger that is on screen.
+ */
+function connectionSample(
+  passengers: readonly PassengerPosition[],
+  connectionId: string | null,
+  followedId: string | null,
+) {
+  const onConnection = passengers.filter((passenger) => passenger.connection_id === connectionId);
+  return samplePassengers(onConnection, MAX_PASSENGER_MARKERS, followedId);
 }
 
 /**
@@ -192,6 +216,8 @@ export function StationCanvas() {
   const data = usePlaybackStore((state) => state.data);
   const time = usePlaybackStore((state) => state.currentTime_s);
   const selected = usePlaybackStore((state) => state.selectedConnectionId);
+  const followed = usePlaybackStore((state) => state.selectedPassengerId);
+  const selectPassenger = usePlaybackStore((state) => state.selectPassenger);
 
   // Tracks the container's content box; falls back to the fixture's own
   // size (no scaling) when ResizeObserver is unavailable, e.g. in jsdom.
@@ -244,22 +270,30 @@ export function StationCanvas() {
     drawTrains(context, data.platforms, snapshot.trains_at_platforms);
 
     // No incremental passenger state: pause and backward seeking stay exact.
-    const connectionPassengers = snapshot.passengers.filter(
-      (passenger) => passenger.connection_id === selected,
-    );
-    const { sampled, trueCount } = samplePassengers(connectionPassengers, MAX_PASSENGER_MARKERS);
+    const { sampled, trueCount } = connectionSample(snapshot.passengers, selected, followed);
     for (const passenger of sampled) {
       drawPassengerMarker(context, passenger.position, passenger.phase);
     }
+    const followedMarker = sampled.find((passenger) => passenger.passenger_id === followed);
+    if (followedMarker) drawSelectionRing(context, followedMarker.position);
     if (selected) drawPassengerCount(context, dpr, sampled.length, trueCount);
-  }, [data, time, selected, viewSize]);
+  }, [data, time, selected, followed, viewSize]);
 
   if (!data) return <p className="station-message">Choose a connection to load a mock run.</p>;
+
+  // A click follows the nearest drawn passenger, or clears the pick on empty space.
+  const handleClick = (event: MouseEvent<HTMLCanvasElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const fit = fitLayout(data.map, chooseView(viewSize, data.map));
+    const { sampled } = connectionSample(getNetworkSnapshot(data, time).passengers, selected, followed);
+    selectPassenger(pickPassenger(sampled, { x: event.clientX - rect.left, y: event.clientY - rect.top }, fit));
+  };
+  const followingLabel = followed ? `, following passenger ${followed}` : "";
   return (
     <div ref={containerRef} className="station-canvas-wrap">
-      <canvas ref={canvasRef} className="station-canvas"
-        width={data.map.width} height={data.map.height}
-        role="img" aria-label={`${data.interchange.name} at ${time.toFixed(1)} simulation seconds`}>
+      <canvas ref={canvasRef} className="station-canvas" onClick={handleClick}
+        width={data.map.width} height={data.map.height} role="img"
+        aria-label={`${data.interchange.name} at ${time.toFixed(1)} simulation seconds${followingLabel}`}>
         Station schematic with platforms, transfer corridor, trains and passengers.
       </canvas>
     </div>
