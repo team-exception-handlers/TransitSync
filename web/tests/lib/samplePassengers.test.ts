@@ -132,3 +132,39 @@ describe("samplePassengers", () => {
         expect(result.trueCount).toBe(0);
     });
 });
+
+describe("samplePassengers with a selected passenger (#237)", () => {
+    const ids = (result: { sampled: PassengerPosition[] }) =>
+        result.sampled.map((item) => item.passenger_id);
+
+    it("adds the selected passenger when the hash left them out of the sample", () => {
+        const passengers = makePassengers(500);
+        const plain = ids(samplePassengers(passengers, 60));
+        const outside = passengers.find((item) => !plain.includes(item.passenger_id));
+        expect(outside).toBeDefined();
+        const selectedId = outside?.passenger_id ?? "";
+
+        const result = samplePassengers(passengers, 60, selectedId);
+
+        expect(ids(result)).toEqual([...plain, selectedId].sort());
+        expect(result.trueCount).toBe(500);
+    });
+
+    it("does not draw the selected passenger twice when already sampled", () => {
+        const passengers = makePassengers(500);
+        const plain = ids(samplePassengers(passengers, 60));
+
+        const result = samplePassengers(passengers, 60, plain[0]);
+
+        expect(ids(result)).toEqual(plain);
+    });
+
+    it("leaves the sample unchanged when the selected passenger is not in the list", () => {
+        const passengers = makePassengers(500);
+        const plain = ids(samplePassengers(passengers, 60));
+
+        const result = samplePassengers(passengers, 60, "p-not-here");
+
+        expect(ids(result)).toEqual(plain);
+    });
+});

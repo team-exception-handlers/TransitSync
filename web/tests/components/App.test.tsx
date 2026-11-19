@@ -67,7 +67,7 @@ describe("TransitSync application shell", () => {
         });
 
         expect(stationRegion.querySelector("canvas")?.width).toBe(800);
-        expect(screen.getByRole("img").getAttribute("aria-label")).toContain("McGill");
+        expect(screen.getByLabelText(/simulation seconds/).getAttribute("aria-label")).toContain("McGill");
     });
 
     it("renders the simulation clock", () => {

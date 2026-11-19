@@ -173,3 +173,52 @@ describe("usePlaybackStore", () => {
         expect(usePlaybackStore.getState().availableConnections).toBeNull();
     });
 });
+
+describe("usePlaybackStore passenger selection (#237)", () => {
+    beforeEach(() => {
+        usePlaybackStore.getState().loadData(stationViewData);
+    });
+
+    it("starts with no passenger picked", () => {
+        expect(usePlaybackStore.getState().selectedPassengerId).toBeNull();
+    });
+
+    it("stores the picked passenger ID and switches to a new pick", () => {
+        usePlaybackStore.getState().selectPassenger("p-001");
+        expect(usePlaybackStore.getState().selectedPassengerId).toBe("p-001");
+
+        usePlaybackStore.getState().selectPassenger("p-002");
+        expect(usePlaybackStore.getState().selectedPassengerId).toBe("p-002");
+    });
+
+    it("clears the pick when given null", () => {
+        usePlaybackStore.getState().selectPassenger("p-001");
+
+        usePlaybackStore.getState().selectPassenger(null);
+
+        expect(usePlaybackStore.getState().selectedPassengerId).toBeNull();
+    });
+
+    it("rejects a passenger that is not in the shown run and keeps the old pick", () => {
+        const { selectPassenger } = usePlaybackStore.getState();
+        selectPassenger("p-001");
+
+        expect(() => selectPassenger("p-999")).toThrow("Unknown passenger: p-999");
+        expect(usePlaybackStore.getState().selectedPassengerId).toBe("p-001");
+    });
+
+    it("clears the pick when a new run for the connection is loaded", async () => {
+        const state = usePlaybackStore.getState();
+        state.selectPassenger("p-001");
+
+        const shown = await state.loadConnectionRun(
+            "mcgill-rem-green",
+            async () => stationViewData,
+            undefined,
+            { rerun: true },
+        );
+
+        expect(shown).toBe(true);
+        expect(usePlaybackStore.getState().selectedPassengerId).toBeNull();
+    });
+});

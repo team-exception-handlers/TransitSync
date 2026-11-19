@@ -43,15 +43,34 @@ function hashPassengerId(id: string): number {
 }
 
 /**
+ * Add the passenger the user is following (#237) when the hash left them
+ * out, so selecting someone never makes their marker vanish. This one marker
+ * may go over the budget; the caller still labels the true count.
+ */
+function withPinned(
+    sampled: PassengerPosition[],
+    passengers: readonly PassengerPosition[],
+    pinnedId: string | null,
+): PassengerPosition[] {
+    if (pinnedId === null || sampled.some((item) => item.passenger_id === pinnedId)) {
+        return sampled;
+    }
+    const pinned = passengers.find((item) => item.passenger_id === pinnedId);
+    return pinned ? [...sampled, pinned].sort(byPassengerId) : sampled;
+}
+
+/**
  * Select up to `maxMarkers` passengers to draw out of `passengers`,
  * plus the true (unsampled) count.
  *
  * Given the same passenger list and budget, this always returns the same
- * subset. Within budget, every passenger is included.
+ * subset. Within budget, every passenger is included. `pinnedId`, when it
+ * names a passenger in the list, is always part of the result.
  */
 export function samplePassengers(
     passengers: readonly PassengerPosition[],
     maxMarkers: number,
+    pinnedId: string | null = null,
 ): PassengerSampleResult {
     const trueCount = passengers.length;
     const budget = Math.max(0, Math.floor(maxMarkers));
@@ -77,7 +96,7 @@ export function samplePassengers(
         .sort(byPassengerId);
 
     return {
-        sampled,
+        sampled: withPinned(sampled, passengers, pinnedId),
         trueCount,
     };
 }

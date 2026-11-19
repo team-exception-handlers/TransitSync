@@ -38,7 +38,7 @@ describe("StationCanvas", () => {
     act(() => usePlaybackStore.getState().seek(85));
     expect(arc).toHaveBeenCalledWith(389, 135, 4, 0, 2 * Math.PI);
     expect(clearRect).toHaveBeenCalledTimes(4);
-    expect(screen.getByRole("img").getAttribute("aria-label")).toContain("85.0");
+    expect(screen.getByLabelText(/simulation seconds/).getAttribute("aria-label")).toContain("85.0");
   });
 
   it("renders queued passengers as an outlined square, not a filled circle", () => {
@@ -135,7 +135,7 @@ describe("StationCanvas scaling", () => {
     usePlaybackStore.setState({ data: null });
 
     const { container, unmount } = render(<StationCanvas />);
-    expect(screen.queryByRole("img")).toBeNull();
+    expect(screen.queryByLabelText(/simulation seconds/)).toBeNull();
     expect(observe).not.toHaveBeenCalled();
 
     act(() => usePlaybackStore.getState().loadData(stationViewData));
@@ -147,7 +147,7 @@ describe("StationCanvas scaling", () => {
       {} as ResizeObserver,
     ));
     expect(scaleSpy).toHaveBeenCalledWith(0.5, 0.5);
-    expect(screen.getByRole("img").style.width).toBe("400px");
+    expect(screen.getByLabelText(/simulation seconds/).style.width).toBe("400px");
 
     act(() => usePlaybackStore.setState({ data: null }));
     expect(disconnect).toHaveBeenCalledTimes(1);
@@ -160,8 +160,8 @@ describe("StationCanvas scaling", () => {
   it("renders the station layout with its platforms and connections", () => {
     render(<StationCanvas />);
 
-    expect(screen.getByRole("img")).toBeDefined();
-    expect(screen.getByRole("img").getAttribute("aria-label")).toContain(
+    expect(screen.getByLabelText(/simulation seconds/)).toBeDefined();
+    expect(screen.getByLabelText(/simulation seconds/).getAttribute("aria-label")).toContain(
       stationViewData.interchange.name
     );
   });

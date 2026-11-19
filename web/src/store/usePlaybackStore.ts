@@ -70,6 +70,11 @@ interface StationViewStore {
   // update shared connection state
   selectConnection: (connectionId: string) => void;
 
+  // Passenger followed on the station canvas (#237); null when none is picked.
+  selectedPassengerId: string | null;
+  // Pick a passenger of the shown connection, or pass null to clear the pick.
+  selectPassenger: (passengerId: string | null) => void;
+
   // return network state at the current timestamp
   snapshot: () => NetworkSnapshot | null;
 
@@ -97,12 +102,14 @@ function clampTime(
 }
 
 // A different run has a different timeline, so any run change restarts paused
-// at 0 s; speed is a viewer preference and survives the change.
+// at 0 s; speed is a viewer preference and survives the change. The picked
+// passenger is cleared too, since the new run may not contain them.
 const PLAYBACK_RESET = {
   currentTime_s: 0,
   isPlaying: false,
   updatedAt_ms: null,
   anchorTime_s: 0,
+  selectedPassengerId: null,
 } as const;
 
 // Number of the most recent run load that got past the reuse check. Only that
@@ -144,6 +151,7 @@ export const usePlaybackStore = create<StationViewStore>(
     availableConnections: null,
     currentTime_s: 0,
     selectedConnectionId: null,
+    selectedPassengerId: null,
     isPlaying: false,
     speed: 1,
     updatedAt_ms: null,
@@ -206,12 +214,9 @@ export const usePlaybackStore = create<StationViewStore>(
       const data = parseStationViewData(value);
 
       set({
+        ...PLAYBACK_RESET,
         data,
-        currentTime_s: 0,
-        isPlaying: false,
         speed: 1,
-        updatedAt_ms: null,
-        anchorTime_s: 0,
         selectedConnectionId:
           data.connections[0]?.id ?? null,
       });
@@ -305,6 +310,16 @@ export const usePlaybackStore = create<StationViewStore>(
         runStatus: state.simulatedConnectionIds.includes(connectionId) ? "simulated" : "mock",
         runError: null,
       });
+    },
+
+    // Only a passenger the canvas can draw (one on the shown connection) can be
+    // picked, so the stored ID always points at a real track in this run.
+    selectPassenger: (passengerId) => {
+      const { data, selectedConnectionId } = get();
+      const known = passengerId === null || data?.passenger_tracks.some((track) =>
+        track.passenger_id === passengerId && track.connection_id === selectedConnectionId);
+      if (!known) throw new Error(`Unknown passenger: ${passengerId}`);
+      set({ selectedPassengerId: passengerId });
     },
 
     snapshot: () => {
