@@ -402,3 +402,24 @@ def test_invalid_cors_origins_are_rejected(
 
     with pytest.raises(ValidationError, match="cors_origins"):
         create_app()
+
+
+"""Unit tests for the GET /parameters API endpoint."""
+
+
+@pytest.fixture
+def client() -> TestClient:
+    app = create_app()
+    return TestClient(app)
+
+
+def test_get_parameters_endpoint(client: TestClient) -> None:
+    response = client.get("/parameters")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, dict)
+    # Verify at least one core parameter exists in the response
+    if data:
+        first_key = next(iter(data))
+        assert "classification" in data[first_key]
+        assert "source_name" in data[first_key]

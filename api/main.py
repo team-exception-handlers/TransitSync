@@ -25,6 +25,7 @@ from api.simulation_run import (
 from api.station_layout import StationLayoutResponse, load_station_layouts
 from api.station_view import SimulationRunResponse
 from simulator.engine.runner import RunError
+from simulator.parameter_provenance import load_parameter_provenance
 
 log = logging.getLogger(__name__)
 
@@ -129,6 +130,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=500, detail="Simulation run failed"
             ) from error
+
+    @application.get("/parameters", tags=["parameters"])
+    def get_parameters():
+        """Return classification and source metadata for all simulation parameters."""
+        return load_parameter_provenance()
 
     return application
 

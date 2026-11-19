@@ -1,0 +1,122 @@
+{
+  "connection_id": {
+    "classification": "published",
+    "source_name": "TransitSync GTFS Network Schedule",
+    "source_link": "https://developers.google.com/transit/gtfs"
+  },
+  "strategy": {
+    "classification": "assumed",
+    "source_name": "TransitSync Control Strategy Registry",
+    "source_link": ""
+  },
+  "max_hold_time": {
+    "classification": "estimated",
+    "source_name": "TransitSync Operational Thresholds",
+    "source_link": ""
+  },
+  "error_magnitude": {
+    "classification": "estimated",
+    "source_name": "Prediction Error Model (prediction_error.py)",
+    "source_link": ""
+  },
+  "disruption_enabled": {
+    "classification": "assumed",
+    "source_name": "Scenario Configuration Options",
+    "source_link": ""
+  },
+  "irregularity_threshold": {
+    "classification": "estimated",
+    "source_name": "Irregularity Regulation Rules (irregularity.py)",
+    "source_link": ""
+  },
+ "base_dwell_s": {
+    "classification": "assumed",
+    "source_name": "Dwell model placeholder (dwell.py)",
+    "source_link": ""
+  },
+  "boarding_s_per_passenger": {
+    "classification": "assumed",
+    "source_name": "Dwell model placeholder (dwell.py)",
+    "source_link": ""
+  },
+  "alighting_s_per_passenger": {
+    "classification": "assumed",
+    "source_name": "Dwell model placeholder (dwell.py)",
+    "source_link": ""
+  },
+  "crowding_strength": {
+    "classification": "estimated",
+    "source_name": "Dwell Model Crowding Formulation",
+    "source_link": ""
+  },
+  "crowding_exponent": {
+    "classification": "assumed",
+    "source_name": "Dwell Model Crowding Formulation",
+    "source_link": ""
+  },
+  "DEFAULT_W_WAIT": {
+    "classification": "assumed",
+    "source_name": "Rider Survey Ratio Estimate (break_even.py)",
+    "source_link": ""
+  },
+ "w_onboard": {
+    "classification": "assumed",
+    "source_name": "Break-even weight assumption until rider survey (break_even.py)",
+    "source_link": ""
+  },
+  "kappa": {
+    "classification": "published",
+    "source_name": "Caltrans GTFS-RT Reliable Accuracy Band",
+    "source_link": ""
+  },
+  "network_node_coordinates": {
+    "classification": "published",
+    "source_name": "Reference Network GeoJSON (network.json)",
+    "source_link": ""
+  },
+  "passenger_flow": {
+    "classification": "assumed",
+    "source_name": "Scenario demand tier setting (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "TRAIN_CAPACITY": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "WALKING_MEAN_S": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "WALKING_MIN_S": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "CORRIDOR_CAPACITY_PER_MINUTE": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "DEMAND_RATES_PER_MINUTE": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "MAX_CACHED_RUNS": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "MIN_STOP_DWELL_S": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  },
+  "ONBOARD_LOAD": {
+    "classification": "assumed",
+    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_link": ""
+  }
+}
