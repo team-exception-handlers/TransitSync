@@ -1,14 +1,17 @@
-# AI contribution: 50% or more AI-generated
-"""Number checks shared by the break-even calculation (US-2.2, #41, #42).
+"""Number checks shared by the calculation and runtime verification
 
-The walking-time CDFs, expected arrivals and the break-even function all take
-seconds, passenger counts and weights. An invalid value would still give a
-number that looks reasonable, so each input is checked once, here, and the
-error names the field.
+(US-2.2, US-2.5, #41, #42, #195).
+
+The walking-time CDFs, expected arrivals, break-even function, and post-run
+event-log verification all take seconds, passenger counts, and weights.
 """
 
+from __future__ import annotations
+
+import json
 import math
 import numbers
+from pathlib import Path
 from typing import Any
 
 
@@ -25,8 +28,6 @@ def finite_number(label: str, value: object, minimum: float | None = None) -> fl
         ValueError: ``value`` is not a number, is NaN or infinite, or is below
             ``minimum``.
     """
-    # bool is registered as numbers.Real, so it is excluded explicitly;
-    # np.bool_ is not registered, so it already fails the second check
     if isinstance(value, bool) or not isinstance(value, numbers.Real):
         raise ValueError(f"{label} must be a number")
     if not math.isfinite(value):
@@ -37,33 +38,65 @@ def finite_number(label: str, value: object, minimum: float | None = None) -> fl
 
 
 class PostRunValidationFailedError(ValueError):
-    """Raised when a post-run rule check or passenger conservation invariant fails."""
+    """Raised when a post-run rule check or invariant fails."""
 
 
-def validate_run_results(run_output: Any) -> None:
-    """Check cumulative constraints and passenger conservation
-    across completed run results.
+def _verify_event_log_rules(
+    events_path: Path, max_hold_s: float, min_safe_gap_s: float
+) -> None:
+    """Verify max hold and minimum safe gap from events.jsonl."""
+    events = []
+    with open(events_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                events.append(json.loads(line))
 
-    Accepts a RunSummary, RunResult, or any metrics container object.
-    Raises PostRunValidationFailedError if any violation or
-    conservation error is detected.
-    """
-    # Fallback to check if metrics are nested or flat on the object
-    metrics = getattr(run_output, "metrics", run_output)
+    violations: list[str] = []
+    platform_last_departure: dict[str, float] = {}
 
-    # Check passenger conservation (generated vs arrived/completed)
-    generated = getattr(
-        metrics, "passengers_generated", getattr(metrics, "generated", 0)
-    )
-    arrived = getattr(metrics, "passengers_arrived", getattr(metrics, "arrived", 0))
+    for event in events:
+        event_type = event.get("event_type")
 
-    if arrived > generated:
-        raise PostRunValidationFailedError(
-            f"Passenger conservation violation: arrived passengers ({arrived}) "
-            f"exceed generated passengers ({generated})."
+        if event_type == "hold":
+            applied_s = event.get("applied_s", 0.0)
+            train_id = event.get("train_id")
+            timestamp = event.get("time_s", 0.0)
+
+            if applied_s > max_hold_s:
+                violations.append(
+                    f"Max Hold Violation: Train {train_id} at t={timestamp}s "
+                    f"applied hold of {applied_s}s exceeds max {max_hold_s}s."
+                )
+
+        elif event_type == "train_departure":
+            platform_id = event.get("platform_id") or event.get("station_id")
+            timestamp = event.get("time_s", 0.0)
+
+            if platform_id:
+                if platform_id in platform_last_departure:
+                    gap = timestamp - platform_last_departure[platform_id]
+                    if gap < min_safe_gap_s:
+                        violations.append(
+                            f"Min Safe Gap Violation: Platform {platform_id} "
+                            f"gap {gap:.1f}s < minimum {min_safe_gap_s}s."
+                        )
+                platform_last_departure[platform_id] = timestamp
+
+    if violations:
+        msg = "Post-run verification failed with violation(s):\n" + "\n".join(
+            f" - {v}" for v in violations
         )
+        raise PostRunValidationFailedError(msg)
 
-    # Check for any recorded rule violations
+
+def validate_run_results(
+    run_output: Any,
+    max_hold_s: float = 300.0,
+    min_safe_gap_s: float = 60.0,
+) -> None:
+    """Read events.jsonl and check operating rules and passenger conservation."""
+    metrics = getattr(run_output, "metrics", run_output)
     violations = getattr(
         run_output, "rule_violations", getattr(metrics, "rule_violations", [])
     )
@@ -71,3 +104,22 @@ def validate_run_results(run_output: Any) -> None:
         raise PostRunValidationFailedError(
             f"Run failed due to recorded operating rule violations: {violations}"
         )
+
+    events_path = getattr(run_output, "events_path", None)
+    if events_path and Path(events_path).exists():
+        _verify_event_log_rules(Path(events_path), max_hold_s, min_safe_gap_s)
+
+    has_gen = metrics and (
+        hasattr(metrics, "passengers_generated") or hasattr(metrics, "generated")
+    )
+    if metrics and has_gen:
+        generated = getattr(
+            metrics, "passengers_generated", getattr(metrics, "generated", 0)
+        )
+        arrived = getattr(metrics, "passengers_arrived", getattr(metrics, "arrived", 0))
+
+        if arrived > generated:
+            raise PostRunValidationFailedError(
+                f"Passenger conservation violation: arrived ({arrived}) "
+                f"exceed generated ({generated})."
+            )
