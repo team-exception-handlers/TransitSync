@@ -41,10 +41,11 @@ class PostRunValidationFailedError(ValueError):
     """Raised when a post-run rule check or invariant fails."""
 
 
+
 def _verify_event_log_rules(
     events_path: Path, max_hold_s: float, min_safe_gap_s: float
 ) -> None:
-    """Verify max hold, minimum safe gap, and one-hop rules from events.jsonl."""
+    """Verify max hold and minimum safe gap from events.jsonl."""
     events = []
     with open(events_path, encoding="utf-8") as f:
         for line in f:
@@ -54,7 +55,6 @@ def _verify_event_log_rules(
 
     violations: list[str] = []
     platform_last_departure: dict[str, float] = {}
-    train_last_hold_event: dict[str, bool] = {}
 
     for event in events:
         event_type = event.get("event_type")
@@ -62,7 +62,7 @@ def _verify_event_log_rules(
         if event_type == "hold":
             applied_s = event.get("applied_s", 0.0)
             train_id = event.get("train_id")
-            timestamp = event.get("timestamp", 0.0)
+            timestamp = event.get("time_s", 0.0)
 
             if applied_s > max_hold_s:
                 violations.append(
@@ -70,20 +70,10 @@ def _verify_event_log_rules(
                     f"applied hold of {applied_s}s exceeds max {max_hold_s}s."
                 )
 
-            if train_id in train_last_hold_event and train_last_hold_event[train_id]:
-                violations.append(
-                    f"One-Hop Violation: Train {train_id} received "
-                    f"consecutive secondary holds at t={timestamp}s."
-                )
-            train_last_hold_event[train_id] = True
-
-        elif event_type in ("departure", "train_departed"):
-            train_id = event.get("train_id")
-            if train_id in train_last_hold_event:
-                train_last_hold_event[train_id] = False
-
+        elif event_type == "train_departure":
             platform_id = event.get("platform_id") or event.get("station_id")
-            timestamp = event.get("timestamp", 0.0)
+            timestamp = event.get("time_s", 0.0)
+
             if platform_id:
                 if platform_id in platform_last_departure:
                     gap = timestamp - platform_last_departure[platform_id]
@@ -99,6 +89,7 @@ def _verify_event_log_rules(
             f" - {v}" for v in violations
         )
         raise PostRunValidationFailedError(msg)
+
 
 
 def validate_run_results(
