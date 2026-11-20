@@ -12,8 +12,16 @@ import { useMemo } from "react";
 import { operatingRules, operatingRulesConfig } from "../data/operating-rules";
 import { runOperatingRules } from "../lib/runOperatingRules";
 import { usePlaybackStore } from "../store/usePlaybackStore";
+import type { ParameterProvenanceMap } from "../types/provenance";
+import { ProvenanceBadge } from "./provenance-badge";
 
-export function OperatingRulesPanel() {
+interface OperatingRulesPanelProps {
+  provenance?: ParameterProvenanceMap;
+}
+
+export function OperatingRulesPanel({
+  provenance,
+}: Readonly<OperatingRulesPanelProps>) {
   const data = usePlaybackStore((state) => state.data);
   const fromRun = useMemo(() => runOperatingRules(data), [data]);
   const config = fromRun?.config ?? operatingRulesConfig;
@@ -25,7 +33,11 @@ export function OperatingRulesPanel() {
       <dl className="operating-rules-values">
         <div>
           <dt>Max hold time</dt>
-          <dd>{config.max_hold_time}s</dd>
+          <dd><span>{config.max_hold_time}s</span>{" "}
+            <ProvenanceBadge
+              parameterKey="max_hold_time"
+              provenance={provenance?.max_hold_time}
+            /></dd>
         </div>
         <div>
           <dt>Min safe gap</dt>
