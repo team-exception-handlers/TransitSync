@@ -107,3 +107,44 @@ describe("OperatingRulesPanel with a simulated run", () => {
     expect(screen.getByText(`${operatingRulesConfig.max_hold_time}s`)).toBeDefined();
   });
 });
+
+describe("OperatingRulesPanel rule check (#400)", () => {
+  afterEach(() => {
+    cleanup();
+    usePlaybackStore.getState().loadData(stationViewData);
+  });
+
+  it("says the run passed when no rule was broken", () => {
+    usePlaybackStore.getState().loadData({
+      ...stationViewData, ...runRules, rule_check: { passed: true, violations: [] },
+    });
+    render(<OperatingRulesPanel />);
+
+    expect(screen.getByText("Rule check: passed, no rule broken in this run")).toBeDefined();
+  });
+
+  it("lists every violation when the run broke a rule", () => {
+    const messages = [
+      "Max Hold Violation: Train T1 at t=900.0s applied hold of 150.0s exceeds max 60.0s.",
+      "Min Safe Gap Violation: Platform P1 gap 59.0s < minimum 60.0s.",
+    ];
+    const violations = [
+      { rule: "max_hold_exceeded", time_s: 900, subject_id: "T1", message: messages[0] },
+      { rule: "headway_violation", time_s: 959, subject_id: "P1", message: messages[1] },
+    ];
+    usePlaybackStore.getState().loadData({
+      ...stationViewData, ...runRules, rule_check: { passed: false, violations },
+    });
+    render(<OperatingRulesPanel />);
+
+    expect(screen.getByText("Rule check: failed, 2 violations")).toBeDefined();
+    expect(screen.getByText(messages[0])).toBeDefined();
+    expect(screen.getByText(messages[1])).toBeDefined();
+  });
+
+  it("shows no rule check for mock playback", () => {
+    render(<OperatingRulesPanel />);
+
+    expect(screen.queryByText(/Rule check:/)).toBeNull();
+  });
+});

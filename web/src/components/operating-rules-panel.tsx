@@ -10,12 +10,36 @@
  */
 import { useMemo } from "react";
 import { operatingRules, operatingRulesConfig } from "../data/operating-rules";
-import { runOperatingRules } from "../lib/runOperatingRules";
+import { runOperatingRules, runRuleCheck } from "../lib/runOperatingRules";
 import { usePlaybackStore } from "../store/usePlaybackStore";
+import type { RuleCheck } from "../types/operatingRules";
+
+/**
+ * The post-run check of the whole event log (#400): "Passed", or each
+ * violation. Stated in words, not only color, so it reads without color vision.
+ */
+function RuleCheckResult({ check }: Readonly<{ check: RuleCheck }>) {
+  if (check.passed) {
+    return <p className="rule-check rule-check--passed">Rule check: passed, no rule broken in this run</p>;
+  }
+  const count = check.violations.length;
+  return (
+    <div className="rule-check rule-check--failed">
+      <p>Rule check: failed, {count} {count === 1 ? "violation" : "violations"}</p>
+      <ul>
+        {check.violations.map((item) => (
+          <li key={`${item.rule}-${item.subject_id}-${item.time_s}`}>{item.message}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export function OperatingRulesPanel() {
   const data = usePlaybackStore((state) => state.data);
   const fromRun = useMemo(() => runOperatingRules(data), [data]);
+  // Mock playback and older cached runs have no check, so nothing is shown.
+  const ruleCheck = useMemo(() => runRuleCheck(data), [data]);
   const config = fromRun?.config ?? operatingRulesConfig;
   const rules = fromRun?.rules ?? operatingRules;
   return (
@@ -32,6 +56,8 @@ export function OperatingRulesPanel() {
           <dd><span>{config.min_safe_gap}s</span> <small>Not enforced yet</small></dd>
         </div>
       </dl>
+
+      {ruleCheck && <RuleCheckResult check={ruleCheck} />}
 
       <ul className="operating-rules-list">
         {rules.map((rule) => (

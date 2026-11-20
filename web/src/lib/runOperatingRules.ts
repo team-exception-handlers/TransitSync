@@ -14,7 +14,9 @@ import type {
   OperatingRule,
   OperatingRulesConfig,
   RuleAction,
+  RuleCheck,
   RuleName,
+  RuleViolation,
 } from "../types/operatingRules";
 
 /** The run's limits and its rules in display order. */
@@ -79,6 +81,36 @@ export function runOperatingRules(run: unknown): RunOperatingRules | null {
     rules: described.flatMap((entry: unknown) => {
       const rule = toRule(entry);
       return rule === null ? [] : [rule];
+    }),
+  };
+}
+
+/** One reported violation, or null when a field is missing or the wrong type. */
+function toViolation(entry: unknown): RuleViolation | null {
+  if (typeof entry !== "object" || entry === null) return null;
+  const { rule, time_s, subject_id, message } = entry as Record<string, unknown>;
+  if (rule !== "max_hold_exceeded" && rule !== "headway_violation") return null;
+  if (!isFiniteNumber(time_s) || typeof subject_id !== "string") return null;
+  if (typeof message !== "string") return null;
+  return { rule, time_s, subject_id, message };
+}
+
+/**
+ * The run's post-run rule check (#400), or null when the run has none (mock
+ * playback, or a cached response from before the check existed). Malformed
+ * violations are skipped; `passed` still decides whether the run failed.
+ */
+export function runRuleCheck(run: unknown): RuleCheck | null {
+  if (typeof run !== "object" || run === null) return null;
+  const { rule_check } = run as Record<string, unknown>;
+  if (typeof rule_check !== "object" || rule_check === null) return null;
+  const { passed, violations } = rule_check as Record<string, unknown>;
+  if (typeof passed !== "boolean" || !Array.isArray(violations)) return null;
+  return {
+    passed,
+    violations: violations.flatMap((entry: unknown) => {
+      const violation = toViolation(entry);
+      return violation === null ? [] : [violation];
     }),
   };
 }
