@@ -11,6 +11,8 @@ import pytest
 
 from simulator.control.validation import (
     PostRunValidationFailedError,
+    RuleViolation,
+    find_rule_violations,
     validate_run_results,
 )
 
@@ -86,3 +88,90 @@ def test_departures_with_unsafe_gap_raise_error(tmp_path):
 
     with pytest.raises(PostRunValidationFailedError, match="Min Safe Gap Violation"):
         validate_run_results(result)
+
+
+def _hold(time_s: float, applied_s: float, train_id: str = "T1") -> dict:
+    return {
+        "event_type": "hold",
+        "time_s": time_s,
+        "train_id": train_id,
+        "applied_s": applied_s,
+    }
+
+
+def _departure(time_s: float, platform_id: str) -> dict:
+    return {
+        "event_type": "train_departure",
+        "time_s": time_s,
+        "platform_id": platform_id,
+    }
+
+
+def test_find_rule_violations_returns_a_hold_over_the_maximum():
+    """A 310 s hold against a 300 s maximum is one max-hold violation."""
+    found = find_rule_violations([_hold(500.0, 310.0)], 300.0, 60.0)
+
+    assert found == [
+        RuleViolation(
+            "max_hold_exceeded",
+            500.0,
+            "T1",
+            "Max Hold Violation: Train T1 at t=500.0s "
+            "applied hold of 310.0s exceeds max 300.0s.",
+        )
+    ]
+
+
+def test_find_rule_violations_returns_a_short_gap_at_one_platform():
+    """Departures at 100 s and 159 s leave a 59 s gap, under the 60 s minimum."""
+    found = find_rule_violations(
+        [_departure(100.0, "P1"), _departure(159.0, "P1")], 300.0, 60.0
+    )
+
+    assert found == [
+        RuleViolation(
+            "headway_violation",
+            159.0,
+            "P1",
+            "Min Safe Gap Violation: Platform P1 gap 59.0s < minimum 60.0s.",
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    "events",
+    [
+        pytest.param([_hold(500.0, 300.0)], id="hold-exactly-at-max"),
+        pytest.param(
+            [_departure(100.0, "P1"), _departure(160.0, "P1")], id="gap-exactly-at-min"
+        ),
+        pytest.param(
+            [_departure(100.0, "P1"), _departure(110.0, "P2")], id="different-platforms"
+        ),
+        pytest.param(
+            [{"event_type": "train_arrival", "time_s": 5.0}], id="other-event-types"
+        ),
+        pytest.param([], id="empty-log"),
+    ],
+)
+def test_find_rule_violations_passes_runs_within_the_limits(events):
+    """Limits are inclusive, and only same-platform departures are compared."""
+    assert find_rule_violations(events, 300.0, 60.0) == []
+
+
+def test_find_rule_violations_keeps_log_order_across_rules():
+    """Each departure is compared with the one just before it at that platform."""
+    events = [
+        _departure(100.0, "P1"),
+        _hold(120.0, 400.0, "T2"),
+        _departure(130.0, "P1"),
+        _departure(150.0, "P1"),
+    ]
+
+    found = find_rule_violations(events, 300.0, 60.0)
+
+    assert [(item.rule, item.time_s) for item in found] == [
+        ("max_hold_exceeded", 120.0),
+        ("headway_violation", 130.0),
+        ("headway_violation", 150.0),
+    ]
