@@ -1,4 +1,8 @@
 // AI contribution: 50% or more AI-generated
+/**
+ * Styles for parameter provenance badges, source labels, and external source
+ * links across panels and decision views (US-7.1, Task 7.1.2).
+ */
 import {
   CLASSIFICATION_LABELS,
   getSafeSourceLink,

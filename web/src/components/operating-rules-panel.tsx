@@ -41,7 +41,11 @@ export function OperatingRulesPanel({
         </div>
         <div>
           <dt>Min safe gap</dt>
-          <dd><span>{config.min_safe_gap}s</span> <small>Not enforced yet</small></dd>
+          <dd><span>{config.min_safe_gap}s</span> {" "}
+            <ProvenanceBadge
+              parameterKey="min_safe_gap"
+              provenance={provenance?.min_safe_gap}
+            />{" "}<small>Not enforced yet</small></dd>
         </div>
       </dl>
 

@@ -1,5 +1,9 @@
 // AI contribution: 50% or more AI-generated
 // @vitest-environment jsdom
+/**
+ * Component tests for `ProvenanceBadge` covering classification labels,
+ * optional source links, and missing/invalid provenance fallbacks (US-7.1).
+ */
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { ProvenanceBadge } from "../../src/components/provenance-badge";

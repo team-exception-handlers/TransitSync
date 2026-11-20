@@ -1,4 +1,12 @@
-// AI contribution: 50% or more AI-generatedS
+// AI contribution: 50% or more AI-generated
+/**
+ * Shared types, classification labels, and validation helpers for parameter
+ * provenance metadata (US-7.1).
+ *
+ * Normalizes confidence classifications (`measured`, `estimated`, `published`,
+ * `assumed`) and sanitizes external `http`/`https` source links before UI
+ * rendering.
+ */
 export type ConfidenceClassification =
   | "measured"
   | "estimated"
