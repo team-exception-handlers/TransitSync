@@ -6,6 +6,7 @@ are points on the selected transfer path; event and run times are seconds.
 """
 
 from collections.abc import Mapping, Sequence
+from dataclasses import asdict
 from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -20,6 +21,7 @@ from api.station_layout import (
 from api.time_utils import scenario_start_clock_s
 from simulator.control.decision_audit import KIND_ESTIMATES, KIND_MODE_SWITCH
 from simulator.control.settings import OperatingRulesConfig
+from simulator.control.validation import find_rule_violations
 from simulator.engine.events import EventType
 from simulator.passengers.transfer_component import TransferComponent
 from simulator.scenario import Scenario
@@ -194,6 +196,29 @@ class OperatingRulesResponse(BaseModel):
     rule_action_map: dict[str, Literal["CLAMP", "REFUSE"]]
 
 
+class RuleViolationResponse(BaseModel):
+    """One place where the run's event log broke an operating rule.
+
+    ``subject_id`` is the held train or the platform with the short gap.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    rule: Literal["max_hold_exceeded", "headway_violation"]
+    time_s: float = Field(ge=0, allow_inf_nan=False)
+    subject_id: str = Field(min_length=1)
+    message: str = Field(min_length=1)
+
+
+class RuleCheckResponse(BaseModel):
+    """The post-run check of the whole event log against the run's limits."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    passed: bool
+    violations: list[RuleViolationResponse]
+
+
 class SimulationRunResponse(StationLayoutResponse):
     """Station-view map data together with one run's dynamic playback records.
 
@@ -214,6 +239,8 @@ class SimulationRunResponse(StationLayoutResponse):
     estimates: list[EstimatesResponse] = Field(default_factory=list)
     rules: list[OperatingRuleResponse]
     operating_rules: OperatingRulesResponse
+    # Optional for the same reason as mode_switches: cached payloads lack it.
+    rule_check: RuleCheckResponse | None = None
 
 
 def build_station_view_response(
@@ -253,8 +280,24 @@ def build_station_view_response(
         estimates=_estimate_records(decision_records, decisions),
         rules=_rule_records(scenario.operating_rules),
         operating_rules=scenario.operating_rules.to_dict(),
+        rule_check=_rule_check(event_records, scenario.operating_rules),
     )
     return response
+
+
+def _rule_check(
+    records: Sequence[dict[str, object]], rules: OperatingRulesConfig
+) -> RuleCheckResponse:
+    """Check every event in the run, not only the shown connection's platforms.
+
+    Uses the run's own limits, so a chosen maximum hold below 300 s is the one
+    each hold is checked against.
+    """
+    found = find_rule_violations(records, rules.max_hold_time, rules.min_safe_gap)
+    return RuleCheckResponse(
+        passed=not found,
+        violations=[RuleViolationResponse(**asdict(item)) for item in found],
+    )
 
 
 def _train_events(
