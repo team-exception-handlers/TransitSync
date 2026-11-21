@@ -192,6 +192,7 @@ export interface PassengerMovement {
 
 export interface StationViewData
     extends Omit<MockInterchangeData, "platform_layouts"> {
+    run_id?: string;
     platforms: Platform[];
     passenger_outcomes?: PassengerOutcome[];
     passenger_metrics?: {

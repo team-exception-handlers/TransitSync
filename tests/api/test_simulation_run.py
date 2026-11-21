@@ -169,6 +169,7 @@ def test_run_service_shares_duplicate_work_without_serializing_other_settings(
     layout = load_station_layouts()["mcgill"]
     response = SimulationRunResponse(
         **layout.model_dump(),
+        run_id="0" * 64,
         schema_version=1,
         start_clock_s=0,
         duration_s=3600,
