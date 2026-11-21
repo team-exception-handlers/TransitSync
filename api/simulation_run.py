@@ -17,6 +17,7 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import Future
 from copy import deepcopy
 from dataclasses import replace
+from functools import partial
 from pathlib import Path
 from threading import RLock
 from typing import Literal
@@ -465,7 +466,7 @@ def _build_train_component(
         enforcer=OperatingRulesEnforcer(scenario.operating_rules),
         error_model=PredictionErrorModel(
             scenario.control.prediction_error,
-            streams.get_stream("prediction_errors"),
+            partial(streams.keyed_normal, "prediction_errors"),
         ),
     )
     return TrainComponent(

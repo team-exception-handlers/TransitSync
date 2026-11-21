@@ -2,6 +2,7 @@
 """Correlated route forecasts stay consistent and detached (#61 review)."""
 
 from dataclasses import replace
+from functools import partial
 
 import pytest
 from hypothesis import given
@@ -72,7 +73,8 @@ def test_route_forecasts_remain_chronological_for_extreme_errors(z):
 def test_seeded_next_stop_forecast_matches_route_forecast():
     truth = route_snapshot()
     model = PredictionErrorModel(
-        PredictionErrorSettings(), StreamManager(42).get_stream("prediction_errors")
+        PredictionErrorSettings(),
+        partial(StreamManager(42).keyed_normal, "prediction_errors"),
     )
     seen = model.apply(truth)
     assert seen.trains[0].predicted_arrival_s == seen.future_visits[0].arrival_s
@@ -129,11 +131,8 @@ def test_observed_arrival_and_known_platform_bound_are_preserved():
     assert seen.future_visits[1].departure_s == 114
 
 
-def test_planning_perfect_information_preserves_snapshot_and_draw_count():
+def test_planning_perfect_information_preserves_snapshot():
     truth = route_snapshot()
-    streams = [StreamManager(42).get_stream("prediction_errors") for _ in range(2)]
-    perfect = PredictionErrorModel(PredictionErrorSettings(0, 0, 0), streams[0])
-    noisy = PredictionErrorModel(PredictionErrorSettings(), streams[1])
+    draw = partial(StreamManager(42).keyed_normal, "prediction_errors")
+    perfect = PredictionErrorModel(PredictionErrorSettings(0, 0, 0), draw)
     assert perfect.apply(truth) == truth
-    noisy.apply(truth)
-    assert streams[0].random() == streams[1].random()

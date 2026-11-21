@@ -8,14 +8,18 @@ Implements US-2.1, Task 2.1.3 and Mathematical Foundations section 7:
 tau is the prediction horizon, the seconds until the predicted arrival. The
 same form is applied to transfer counts and onboard loads, each with its own
 kappa, so the effect of each kind of error can be swept separately.
-kappa = 0 is perfect-information mode: errors are still drawn, so the stream
-is used the same way, but every estimate equals the true value.
+kappa = 0 is perfect-information mode: errors are still drawn, but every
+estimate equals the true value.
+
+Each e is keyed by what it predicts (the decision, the value type and the
+train or group), not by draw order, so paired runs with the same seed give the
+same prediction the same e even when a hold changes the other snapshots
+(section 9, #192).
 """
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass, replace
-
-import numpy as np
 
 from simulator.control.interface import (
     IncomingTransfer,
@@ -94,33 +98,42 @@ class PredictionErrorSettings:
 class PredictionErrorModel:
     """Turns a true snapshot into the estimated one a strategy receives.
 
-    ``stream`` must be the ``prediction_errors`` stream, so a strategy that
-    decides more often never shifts the walking times or group sizes.
+    ``draw(*key)`` returns the standard normal e for ``key``; in a run it is
+    ``StreamManager.keyed_normal`` on the ``prediction_errors`` stream, so a
+    strategy that decides more often never shifts the walking times or group
+    sizes.
     """
 
     def __init__(
-        self, settings: PredictionErrorSettings, stream: np.random.Generator
+        self, settings: PredictionErrorSettings, draw: Callable[..., float]
     ) -> None:
         self.settings = settings
-        self._stream = stream
+        self._draw = draw
 
     def apply(self, truth: ObservationSnapshot) -> ObservationSnapshot:
         """Return ``truth`` with error on arrivals, transfer counts and loads.
 
         Other fields (delays, waiting counts, walk times) are copied unchanged.
         """
-        # Keep draws local to this snapshot; later decisions get fresh errors.
+        # A hold delays a departure but never changes its scheduled time, so
+        # this names the same decision in both runs of a pair
+        decision = (truth.train_id, truth.platform_id, truth.scheduled_departure_s)
         arrival_z: dict[str, float] = {}
         trains = tuple(
-            self._train(train, truth.time_s, arrival_z) for train in truth.trains
+            self._train(train, truth.time_s, decision, arrival_z)
+            for train in truth.trains
         )
-        transfers = tuple(self._transfer(group) for group in truth.incoming_transfers)
+        transfers = tuple(
+            self._transfer(group, decision) for group in truth.incoming_transfers
+        )
         if not truth.future_visits and not truth.headway_visits:
             return _updated(truth, trains=trains, incoming_transfers=transfers)
         departures: dict[str, float] = {}
-        visits = self._visits(truth.future_visits, truth.time_s, arrival_z, departures)
+        visits = self._visits(
+            truth.future_visits, truth.time_s, decision, arrival_z, departures
+        )
         headways = self._visits(
-            truth.headway_visits, truth.time_s, arrival_z, departures
+            truth.headway_visits, truth.time_s, decision, arrival_z, departures
         )
         # Use the same bounded forecast in both representations of a next stop.
         next_arrivals = {}
@@ -150,6 +163,7 @@ class PredictionErrorModel:
         self,
         source: tuple[FutureVisit, ...],
         now_s: float,
+        decision: tuple,
         arrival_z: dict[str, float],
         departures: dict[str, float],
     ) -> tuple[FutureVisit, ...]:
@@ -157,7 +171,7 @@ class PredictionErrorModel:
         visits = []
         for visit in source:
             previous_s = departures.get(visit.train_id, now_s)
-            estimated = self._visit(visit, now_s, arrival_z, previous_s)
+            estimated = self._visit(visit, now_s, decision, arrival_z, previous_s)
             departures[visit.train_id] = estimated.departure_s
             visits.append(estimated)
         return tuple(visits)
@@ -166,6 +180,7 @@ class PredictionErrorModel:
         self,
         visit: FutureVisit,
         now_s: float,
+        decision: tuple,
         arrival_z: dict[str, float],
         previous_s: float,
     ) -> FutureVisit:
@@ -179,7 +194,7 @@ class PredictionErrorModel:
         if visit.arrived or visit.arrival_s <= now_s:
             return visit
         if visit.train_id not in arrival_z:
-            arrival_z[visit.train_id] = float(self._stream.standard_normal())
+            arrival_z[visit.train_id] = self._draw(*decision, "arrival", visit.train_id)
         sigma = arrival_sigma_s(visit.arrival_s - now_s)
         error = self.settings.arrival_kappa * sigma * arrival_z[visit.train_id]
         arrival = visit.arrival_s + error
@@ -193,30 +208,32 @@ class PredictionErrorModel:
         )
 
     def _train(
-        self, train: TrainState, now_s: float, arrival_z: dict[str, float]
+        self,
+        train: TrainState,
+        now_s: float,
+        decision: tuple,
+        arrival_z: dict[str, float],
     ) -> TrainState:
-        load = self._count(train.onboard_load, self.settings.load_kappa)
+        z_load = self._draw(*decision, "load", train.train_id)
+        load = _scaled(train.onboard_load, self.settings.load_kappa, z_load)
         if train.predicted_arrival_s is None:
             return _updated(train, onboard_load=load)
         sigma = arrival_sigma_s(train.predicted_arrival_s - now_s)
-        z = float(self._stream.standard_normal())
+        z = self._draw(*decision, "arrival", train.train_id)
         arrival_z[train.train_id] = z
         error_s = sigma * z
         arrival_s = train.predicted_arrival_s + self.settings.arrival_kappa * error_s
         return _updated(train, predicted_arrival_s=arrival_s, onboard_load=load)
 
-    def _transfer(self, group: IncomingTransfer) -> IncomingTransfer:
+    def _transfer(self, group: IncomingTransfer, decision: tuple) -> IncomingTransfer:
         # One draw scales both counts, so still walking <= group size holds
-        z = float(self._stream.standard_normal())
+        z = self._draw(*decision, "transfer", group.group_id)
         kappa = self.settings.transfer_kappa
         return _updated(
             group,
             passenger_count=_scaled(group.passenger_count, kappa, z),
             group_size=_scaled(group.group_size, kappa, z),
         )
-
-    def _count(self, value: int, kappa: float) -> int:
-        return _scaled(value, kappa, float(self._stream.standard_normal()))
 
 
 def _scaled(value: int, kappa: float, z: float) -> int:

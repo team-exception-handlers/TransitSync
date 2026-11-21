@@ -2,11 +2,12 @@
 """Prediction errors across paired runs with the same seed (section 9, #191).
 
 Common random numbers need the same prediction to get the same error in both
-runs of a pair. The error model draws in decision order from one stream, so a
-hold that changes later snapshots shifts every later error. The second test
-documents that drift until keyed draws (#191) replace the sequential stream.
+runs of a pair. Drawing in decision order from one stream let a hold shift
+every later error (26 of 34 arrival errors changed, #193); keyed draws (#192)
+tie each error to the prediction it is for.
 """
 
+from functools import partial
 from types import SimpleNamespace
 
 import pytest
@@ -45,8 +46,8 @@ class HoldTrainA(DecisionController):
 class RecordingModel(PredictionErrorModel):
     """The real model, also keeping each arrival error by the prediction it is for."""
 
-    def __init__(self, stream):
-        super().__init__(PredictionErrorSettings(), stream)
+    def __init__(self, draw):
+        super().__init__(PredictionErrorSettings(), draw)
         self.errors = {}
         self._decisions = {}
 
@@ -84,7 +85,9 @@ def make_trains():
 
 def arrival_errors(output_dir, hold_s):
     """Run the scenario with the given hold on train A; return its arrival errors."""
-    model = RecordingModel(StreamManager(SEED).get_stream("prediction_errors"))
+    model = RecordingModel(
+        partial(StreamManager(SEED).keyed_normal, "prediction_errors")
+    )
     decision = DecisionPipeline(HoldTrainA(hold_s), error_model=model)
     # Each run needs its own folder: the runner refuses one that holds output
     run_scenario(
@@ -106,11 +109,6 @@ def test_held_run_makes_every_prediction_of_the_plain_run(tmp_path):
     assert plain.keys() <= held.keys()
 
 
-# Strict: once keyed draws make this pass, the run fails until the marker goes
-@pytest.mark.xfail(
-    strict=True,
-    reason="errors are drawn in decision order; keyed draws are planned in #191",
-)
 def test_same_prediction_gets_same_error_in_paired_runs(tmp_path):
     # Same seed, so section 9 expects the same error for the same prediction
     plain = arrival_errors(tmp_path / "plain", 0)
