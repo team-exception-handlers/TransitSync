@@ -15,11 +15,15 @@ import { runSimulation, type ScenarioRunner } from "../../src/lib/simulation-api
 import { parseStationViewData } from "../../src/lib/validateStationView";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
 import { useRunSettingsStore } from "../../src/store/useRunSettingsStore";
+import { useViewStore } from "../../src/store/useViewStore";
 
 const CONNECTION = "mcgill-rem-green";
 const draft = () => useRunSettingsStore.getState().draft;
 const slider = (name: RegExp) => screen.getByRole("slider", { name }) as HTMLInputElement;
 const runButton = () => screen.getByRole("button", { name: "Run scenario" }) as HTMLButtonElement;
+// The panel lives on Scenario setup, while the run status and the settings
+// summary live on the station view (#408), so App tests move between them.
+const openStationView = () => fireEvent.click(screen.getByRole("button", { name: "Station view" }));
 
 /** A valid run that differs from the fixture, so a successful load is visible. */
 function simulatedRun() {
@@ -229,6 +233,9 @@ describe("Run scenario", () => {
 });
 
 describe("Run scenario through the API client", () => {
+  beforeEach(() => useViewStore.setState({ activeView: "setup" }));
+  afterEach(() => useViewStore.setState({ activeView: "station" }));
+
   it("posts the exact body, loads the run and labels the results with its settings", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, simulatedRun()));
     render(<App runLoader={null} scenarioRunner={runnerWith(fetchImpl)} />);
@@ -238,9 +245,10 @@ describe("Run scenario through the API client", () => {
     fireEvent.click(screen.getByRole("button", { name: "High" }));
     fireEvent.click(screen.getByRole("button", { name: "Platform delay" }));
     fireEvent.click(runButton());
+    await waitFor(() => expect(usePlaybackStore.getState().runStatus).toBe("simulated"));
+    openStationView();
 
-    await waitFor(() => expect(screen.getByRole("status").textContent)
-      .toBe("Simulation run · demo scenario output"));
+    expect(screen.getByRole("status").textContent).toBe("Simulation run · demo scenario output");
     const init = (fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1];
     expect(JSON.parse(init.body as string)).toStrictEqual({
       connection_id: CONNECTION,
@@ -266,6 +274,7 @@ describe("Run scenario through the API client", () => {
 
   it("shows no settings summary for mock playback", () => {
     render(<App runLoader={null} scenarioRunner={null} />);
+    openStationView();
 
     expect(screen.queryByLabelText("Settings used for this run")).toBeNull();
   });
@@ -311,9 +320,11 @@ describe("Run scenario through the API client", () => {
 
     fireEvent.change(slider(/Maximum hold/), { target: { value: "30" } });
     fireEvent.click(runButton());
+    await waitFor(() => expect(usePlaybackStore.getState().runStatus).toBe("error"));
+    openStationView();
 
-    await waitFor(() => expect(screen.getByRole("status").textContent)
-      .toBe("Run failed · showing the previous simulation run"));
+    expect(screen.getByRole("status").textContent)
+      .toBe("Run failed · showing the previous simulation run");
     expect(usePlaybackStore.getState().data?.duration_s).toBe(600);
     // The label still describes the run on screen, not the failed attempt.
     expect(screen.getByLabelText("Settings used for this run").textContent).toContain("Max hold300 s");

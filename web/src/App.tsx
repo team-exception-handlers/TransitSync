@@ -1,24 +1,19 @@
 // AI contribution: 50% or more AI-generated
 /**
- * Station view shell: header with the connection selector, the Canvas map,
- * the clock, rules and decision panels, and the playback timeline.
+ * Application shell: header with the connection selector, the sidebar that
+ * switches between the five workspace screens (#408), and the active screen.
  *
- * On start it registers the mock run catalog so the view works offline. When
+ * On start it registers the mock run catalog so the app works offline. When
  * an API URL is configured, every connection the user selects is then swapped
- * for that connection's simulator run output (#79); all panels read the run
- * and playback position from the shared Zustand store, so they switch together.
- * The run settings panel re-runs the selected connection with chosen settings.
+ * for that connection's simulator run output (#79). The loading effects and
+ * the playback clock live here, not in a screen, so they keep running while
+ * the user moves between screens and every screen shows the same run.
  */
 
-import { useEffect } from "react";
-import { PlaybackTimeline } from "./components/PlaybackTimeline";
-import { StationCanvas } from "./components/station-canvas";
+import { useEffect, type ReactNode } from "react";
 import { ConnectionSelector } from "./components/connection-selector";
 import { connectionRuns } from "./data/connection-runs";
 import { stationViewData } from "./data/stationViewData";
-import { SimulationClock } from "./components/simulation-clock";
-import { OperatingRulesPanel } from "./components/operating-rules-panel";
-import { DecisionView } from "./components/decision-view";
 import { startPlaybackClock } from "./lib/playback-clock";
 import {
   configuredApiUrl,
@@ -29,12 +24,12 @@ import {
   type ConnectionRunLoader,
   type ScenarioRunner,
 } from "./lib/simulation-api";
-import { RunSettingsPanel } from "./components/run-settings-panel";
-import { RunSummary } from "./components/run-summary";
-import { PlaybackControls } from "./components/playback-controls";
-import { SpeedSelector } from "./components/speed-selector";
-import { DelayChart } from "./components/DelayChart";
-import { usePlaybackStore, type RunStatus } from "./store/usePlaybackStore";
+import { usePlaybackStore } from "./store/usePlaybackStore";
+import { VIEWS, useViewStore, type AppView } from "./store/useViewStore";
+import { PlaceholderView } from "./views/placeholder-view";
+import { ResultsView } from "./views/results-view";
+import { SetupView } from "./views/setup-view";
+import { StationView } from "./views/station-view";
 
 // Built once per page load. Without VITE_API_URL the app stays on its bundled
 // mock runs, which is also what the component tests render.
@@ -51,17 +46,6 @@ const defaultConnectionCatalogLoader: ConnectionCatalogLoader | null = apiUrl ==
   ? null
   : createConnectionCatalogLoader(apiUrl);
 
-// Subtitle under the heading, so viewers always know whether they are looking
-// at simulator output or synthetic data.
-const RUN_STATUS_TEXT: Record<RunStatus, string> = {
-  mock: "Mock playback · synthetic passenger and train data",
-  loading: "Loading simulation run…",
-  simulated: "Simulation run · demo scenario output",
-  error: "Showing mock playback · simulation run unavailable",
-};
-// A failed re-run leaves the earlier simulator output on screen, not a mock.
-const RERUN_FAILED_TEXT = "Run failed · showing the previous simulation run";
-
 interface AppProps {
   // Injectable for tests; null keeps the app on the mock catalog.
   runLoader?: ConnectionRunLoader | null;
@@ -76,25 +60,11 @@ export default function App({
   scenarioRunner = defaultScenarioRunner,
   connectionCatalogLoader = defaultConnectionCatalogLoader,
 }: Readonly<AppProps>) {
+  // Leased by the shell so playback keeps its position across screen changes.
   useEffect(startPlaybackClock, []);
-  const runStatus = usePlaybackStore((state) => state.runStatus);
-  const runError = usePlaybackStore((state) => state.runError);
-  const data = usePlaybackStore(
-    (state) => state.data
-  );
-  const selectedConnectionId = usePlaybackStore(
-    (state) => state.selectedConnectionId
-  );
-  // The heading must persistently name the connection the user selected, even
-  // when a run bundles more than one connection, not just data?.connections[0].
-  const selectedConnection =
-    data?.connections.find((connection) => connection.id === selectedConnectionId) ??
-    data?.connections[0];
-  const showsSimulatorOutput = usePlaybackStore((state) =>
-    selectedConnectionId !== null && state.simulatedConnectionIds.includes(selectedConnectionId));
-  const statusText = runStatus === "error" && showsSimulatorOutput
-    ? RERUN_FAILED_TEXT
-    : RUN_STATUS_TEXT[runStatus];
+  const selectedConnectionId = usePlaybackStore((state) => state.selectedConnectionId);
+  const activeView = useViewStore((state) => state.activeView);
+  const setView = useViewStore((state) => state.setView);
 
   useEffect(() => {
     const store = usePlaybackStore.getState();
@@ -135,106 +105,48 @@ export default function App({
     return () => controller.abort();
   }, [runLoader, selectedConnectionId]);
 
+  // One entry per sidebar item; only the active one is mounted.
+  const screens: Record<AppView, ReactNode> = {
+    station: <StationView />,
+    compare: <PlaceholderView title="Compare" story="US-4.1" />,
+    results: <ResultsView />,
+    setup: <SetupView runner={scenarioRunner} />,
+    sources: <PlaceholderView title="Sources" story="US-7.2" />,
+  };
+
   return (
     <div className="app-shell">
-
-      {/* APPLICATION HEADER */}
       <header className="topbar">
-
         <div className="brand">
-
-          <div
-            className="brand-mark"
-            aria-hidden="true"
-          >
-            ↔
-          </div>
-
+          <div className="brand-mark" aria-hidden="true">↔</div>
           <div className="brand-text">
-
-            <strong>
-              TransitSync
-            </strong>
-
-            <small>
-              Metro-REM transfer coordination
-            </small>
-
+            <strong>TransitSync</strong>
+            <small>Metro-REM transfer coordination</small>
           </div>
-
         </div>
-
         <ConnectionSelector />
       </header>
 
-      {/* APPLICATION WORKSPACE */}
       <div className="workspace">
+        {/* Plain buttons, not links: there is no router, and the current
+            screen is marked with aria-current so screen readers announce it. */}
+        <nav className="sidebar" aria-label="Workspace">
+          <div className="section-label">Workspace</div>
+          {VIEWS.map((view) => (
+            <button key={view.id} type="button" className="nav-item"
+              aria-current={view.id === activeView ? "page" : undefined}
+              onClick={() => setView(view.id)}>
+              {view.label}
+            </button>
+          ))}
+        </nav>
 
-        {/* SIDEBAR */}
-        <aside className="sidebar">
-
-          <div className="section-label">
-            Workspace
-          </div>
-
-          <div className="nav-current">
-            Station view
-          </div>
-
-        </aside>
-
-        {/* DASHBOARD */}
-        <main className="content">
-
-          {/* STATION VIEW */}
-          <section
-            className="panel station-region"
-            aria-label="Station view"
-          >
-            <div className="station-heading">
-              <span className="clock-heading">Selected connection</span>
-              <h1>{selectedConnection?.label ?? "Choose a connection"}</h1>
-              {/* <output> is natively a live status region, so no ARIA role is needed. */}
-              <output className="station-status" title={runError ?? undefined}>
-                {statusText}
-              </output>
-              <RunSummary />
-            </div>
-            <StationCanvas />
-          </section>
-
-          {/* RIGHT-HAND PANELS */}
-          <aside className="inspector">
-
-            {/* SIMULATION TIME */}
-            <SimulationClock />
-
-            {/* OPERATING RULES */}
-            <OperatingRulesPanel />
-
-            {/* DECISIONS */}
-            <DecisionView />
-
-          </aside>
-
-          {/* PLAYBACK TIMELINE */}
-          <section className="panel playback-region">
-            <PlaybackControls />
-            <PlaybackTimeline />
-            <SpeedSelector />
-
-          </section>
-
-          {/* RESULTS */}
-          <DelayChart />
-
-          {/* RUN SETTINGS */}
-          <RunSettingsPanel runner={scenarioRunner} />
-
+        {/* Each screen has its own grid, since only the station view needs
+            the map, inspector and playback rows. */}
+        <main className={`content content--${activeView}`}>
+          {screens[activeView]}
         </main>
-
       </div>
-
     </div>
   );
 }
