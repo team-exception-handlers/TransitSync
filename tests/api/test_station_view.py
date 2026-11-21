@@ -187,6 +187,8 @@ def test_rule_check_passes_a_run_within_its_limits() -> None:
     check = _rule_check([LONG_HOLD], OperatingRulesConfig())
 
     assert check.model_dump() == {"passed": True, "violations": []}
+
+
 def test_time_series_assigns_wait_delay_and_holds_to_full_horizon() -> None:
     """A terminal event at 420 s belongs in bucket [300,600), with holds marked."""
     event_records = [
