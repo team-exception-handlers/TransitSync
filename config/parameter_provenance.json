@@ -14,6 +14,11 @@
     "source_name": "TransitSync Operational Thresholds",
     "source_link": ""
   },
+   "min_safe_gap": {
+    "classification": "estimated",
+    "source_name": "TransitSync Operational Thresholds",
+    "source_link": ""
+  },
   "error_magnitude": {
     "classification": "estimated",
     "source_name": "Prediction Error Model (prediction_error.py)",
@@ -120,3 +125,4 @@
     "source_link": ""
   }
 }
+

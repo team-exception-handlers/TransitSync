@@ -8,6 +8,8 @@ import {
   createConnectionCatalogLoader,
   createConnectionRunLoader,
   parseConnectionSummaries,
+  createParameterProvenanceLoader, 
+  parseParameterProvenance
 } from "../../src/lib/simulation-api";
 
 // Minimal Response stand-in: the client only reads ok, status and json().
@@ -175,5 +177,30 @@ describe("createConnectionCatalogLoader", () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, [{ id: "x" }]));
     await expect(createConnectionCatalogLoader("http://api.test", fetchImpl)())
       .rejects.toThrow("Invalid connection summary in catalog response");
+  });
+});
+
+describe("parameter provenance loader", () => {
+  it("parses and normalizes /parameters response", async () => {
+    const mockFetch = async () =>
+      new Response(
+        JSON.stringify({
+          max_hold_time: {
+            classification: "estimated",
+            source_name: "Operational Thresholds",
+            source_link: "https://example.com/docs",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+
+    const load = createParameterProvenanceLoader("http://localhost:8000", mockFetch as typeof fetch);
+    const map = await load();
+    expect(map.max_hold_time?.classification).toBe("estimated");
+    expect(map.max_hold_time?.source_name).toBe("Operational Thresholds");
+  });
+
+  it("rejects non-object provenance payloads", () => {
+    expect(() => parseParameterProvenance([])).toThrow();
   });
 });

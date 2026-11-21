@@ -1,0 +1,56 @@
+/* AI contribution: 50% or more AI-generated */
+/*
+ * Styles for parameter provenance badges, source labels, and external source
+ * links across panels and decision views (US-7.1, Task 7.1.2).
+ */
+.provenance-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.provenance-badge {
+  display: inline-block;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-weight: 600;
+  border: 1px solid currentColor;
+}
+
+.provenance-badge--measured {
+  color: #155724;
+  background-color: #d4edda;
+}
+
+.provenance-badge--estimated {
+  color: #856404;
+  background-color: #fff3cd;
+}
+
+.provenance-badge--published {
+  color: #0c5460;
+  background-color: #d1ecf1;
+}
+
+.provenance-badge--assumed {
+  color: #383d41;
+  background-color: #e2e3e5;
+}
+
+.provenance-badge--unknown {
+  color: #555;
+  background-color: #f1f1f1;
+}
+
+.provenance-source {
+  color: inherit;
+  opacity: 0.9;
+}
+
+.provenance-link {
+  font-weight: 600;
+  text-decoration: underline;
+}
