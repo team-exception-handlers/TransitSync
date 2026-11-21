@@ -19,6 +19,9 @@ describe("useRunSettingsStore", () => {
       error_magnitude: 1,
       passenger_flow: "Normal",
       disruption_enabled: false,
+      disruption_preset: "none",
+      disruption_time_s: 120,
+      disruption_magnitude: 60,
     });
   });
 

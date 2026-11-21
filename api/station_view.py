@@ -5,6 +5,7 @@ The playback schema mirrors the frontend's station view. Passenger positions
 are points on the selected transfer path; event and run times are seconds.
 """
 
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
 from typing import Literal, cast
@@ -220,6 +221,41 @@ class RuleCheckResponse(BaseModel):
     violations: list[RuleViolationResponse]
 
 
+class DelayBucketResponse(BaseModel):
+    """Average passenger waiting delay in one five-minute simulation bucket."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_s: float = Field(ge=0, allow_inf_nan=False)
+    end_s: float = Field(gt=0, allow_inf_nan=False)
+    average_passenger_delay_s: float = Field(ge=0, allow_inf_nan=False)
+    passenger_count: int = Field(ge=0)
+
+
+class HoldEventResponse(BaseModel):
+    """One applied hold that the delay chart can mark on its time axis."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    time_s: float = Field(ge=0, allow_inf_nan=False)
+    train_id: str = Field(min_length=1)
+    station_id: str = Field(min_length=1)
+    platform_id: str = Field(min_length=1)
+    applied_s: float = Field(gt=0, allow_inf_nan=False)
+
+
+class TimeSeriesResponse(BaseModel):
+    """Passenger delay and hold events for the complete run horizon."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    start_s: float = Field(ge=0, allow_inf_nan=False)
+    end_s: float = Field(gt=0, allow_inf_nan=False)
+    bucket_s: float = Field(gt=0, allow_inf_nan=False)
+    buckets: list[DelayBucketResponse]
+    hold_events: list[HoldEventResponse]
+
+
 class SimulationRunResponse(StationLayoutResponse):
     """Station-view map data together with one run's dynamic playback records.
 
@@ -243,6 +279,7 @@ class SimulationRunResponse(StationLayoutResponse):
     operating_rules: OperatingRulesResponse
     # Optional for the same reason as mode_switches: cached payloads lack it.
     rule_check: RuleCheckResponse | None = None
+    time_series: TimeSeriesResponse | None = None
 
 
 def build_station_view_response(
@@ -284,6 +321,12 @@ def build_station_view_response(
         rules=_rule_records(scenario.operating_rules),
         operating_rules=scenario.operating_rules.to_dict(),
         rule_check=_rule_check(event_records, scenario.operating_rules),
+        time_series=_time_series_records(
+            event_records,
+            decision_records,
+            float(scenario.duration_s),
+            shown_platforms,
+        ),
     )
     return response
 
@@ -434,3 +477,114 @@ def _rule_records(rules: OperatingRulesConfig) -> list[dict[str, str]]:
             }
         )
     return records
+
+
+def _time_series_records(
+    event_records: Sequence[dict[str, object]],
+    decision_records: Sequence[dict[str, object]],
+    duration_s: float,
+    platform_ids: set[str],
+) -> dict[str, object]:
+    """Aggregate passenger platform waiting and applied holds over five-minute buckets.
+
+    Passenger delay is the time from reaching a selected-platform queue to boarding
+    or being marked missed. Waiting with no terminal event contributes no delay
+    value; every bucket still exists so the chart represents the full horizon.
+    """
+    bucket_s = 300.0
+    bucket_count = max(1, math.ceil(duration_s / bucket_s))
+    totals = [0.0] * bucket_count
+    counts = [0] * bucket_count
+    events_by_passenger: dict[str, list[dict[str, object]]] = {}
+    for record in event_records:
+        passenger_id = record.get("passenger_id")
+        if isinstance(passenger_id, str):
+            events_by_passenger.setdefault(passenger_id, []).append(record)
+
+    for passenger_events in events_by_passenger.values():
+        arrival = next(
+            (
+                record
+                for record in passenger_events
+                if record.get("event_type") == EventType.PASSENGER_ARRIVAL.value
+                and record.get("platform_id") in platform_ids
+            ),
+            None,
+        )
+        terminal = next(
+            (
+                record
+                for record in passenger_events
+                if record.get("event_type")
+                in {EventType.BOARDING.value, EventType.MISSED_CONNECTION.value}
+                and record.get("platform_id") in platform_ids
+            ),
+            None,
+        )
+        if arrival is None or terminal is None:
+            continue
+        arrival_s = float(arrival["time_s"])
+        terminal_s = float(terminal["time_s"])
+        if not arrival_s <= terminal_s <= duration_s:
+            continue
+        bucket = min(int(terminal_s // bucket_s), bucket_count - 1)
+        totals[bucket] += max(0.0, terminal_s - arrival_s)
+        counts[bucket] += 1
+
+    buckets = []
+    for index in range(bucket_count):
+        start_s = index * bucket_s
+        end_s = min((index + 1) * bucket_s, duration_s)
+        average = totals[index] / counts[index] if counts[index] else 0.0
+        buckets.append(
+            {
+                "start_s": start_s,
+                "end_s": end_s,
+                "average_passenger_delay_s": average,
+                "passenger_count": counts[index],
+            }
+        )
+
+    hold_events = sorted(
+        (
+            {
+                "time_s": record["time_s"],
+                "train_id": record["train_id"],
+                "station_id": record["station_id"],
+                "platform_id": record["platform_id"],
+                "applied_s": record["applied_s"],
+            }
+            for record in decision_records
+            if record.get("kind") == "hold"
+            and record.get("platform_id") in platform_ids
+            and float(record.get("applied_s", 0)) > 0
+        ),
+        key=lambda event: cast(float, event["time_s"]),
+    )
+    # Decision audit records use hold events too, but mode-switch records remain
+    # separate; this fallback accepts raw hold-event records from the engine log.
+    if not hold_events:
+        hold_events = sorted(
+            (
+                {
+                    "time_s": record["time_s"],
+                    "train_id": record["train_id"],
+                    "station_id": record["station_id"],
+                    "platform_id": record["platform_id"],
+                    "applied_s": record["applied_s"],
+                }
+                for record in event_records
+                if record.get("event_type") == EventType.HOLD.value
+                and record.get("platform_id") in platform_ids
+                and float(record.get("applied_s", 0)) > 0
+            ),
+            key=lambda event: cast(float, event["time_s"]),
+        )
+
+    return {
+        "start_s": 0.0,
+        "end_s": duration_s,
+        "bucket_s": bucket_s,
+        "buckets": buckets,
+        "hold_events": hold_events,
+    }
