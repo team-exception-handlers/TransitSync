@@ -31,7 +31,8 @@ Passenger connection outcomes and cached scenario comparisons (#241): Codex (Ope
 
 Passenger metric computation (#272): Codex (OpenAI), 50% or more AI-generated.
 Files: api/passenger_metrics.py, api/station_view.py, web/src/types/stationView.ts,
-tests/api/test_passenger_metrics.py, tests/api/test_passenger_outcomes.py.
+tests/api/test_passenger_metrics.py, tests/api/test_passenger_outcomes.py,
+web/src/lib/validateStationView.ts, web/tests/data/validateStationView.test.ts.
 
 Passenger delay-over-time chart and disruption preset controls (#286, #287, #288, #289, #290, #291, #25): Copilot SDK in VS Code, 50% or more AI-generated.
 Aggregate passenger waiting into 300-second buckets, return full-horizon delay/hold time-series data

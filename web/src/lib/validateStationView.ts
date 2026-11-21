@@ -82,6 +82,7 @@ export function parseStationViewData(
     );
     checkPassengerTracks(data.passenger_tracks, connectionIds, data.duration_s);
     checkPassengerOutcomes(data);
+    checkPassengerMetrics(data.passenger_metrics);
     checkTrainEvents(data.train_events, data.platforms, data.duration_s);
     checkTimeSeries(data.time_series, data.duration_s);
 
@@ -90,6 +91,21 @@ export function parseStationViewData(
         ...data,
         passengers: derivePassengerMovements(data.passenger_tracks),
     };
+}
+
+function checkPassengerMetrics(metrics: StationViewData["passenger_metrics"]): void {
+    if (metrics === undefined) return;
+    if (metrics === null || typeof metrics !== "object" || Array.isArray(metrics)) {
+        throw new Error("Invalid passenger metrics");
+    }
+
+    const counts = [metrics.total_affected_passengers, metrics.successful_connections, metrics.missed_connections];
+    const averages = [metrics.average_transfer_time_s, metrics.average_passenger_delay_s];
+    if (!counts.every(count => Number.isSafeInteger(count) && count >= 0) ||
+        metrics.successful_connections + metrics.missed_connections > metrics.total_affected_passengers ||
+        !averages.every(value => value === null || isNonNegativeNumber(value))) {
+        throw new Error("Invalid passenger metrics");
+    }
 }
 
 /** Older runs and mock fixtures can omit the outcome collection. */
