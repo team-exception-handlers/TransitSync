@@ -6,6 +6,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { OperatingRulesPanel } from "../../src/components/operating-rules-panel";
 import { operatingRulesConfig } from "../../src/data/operating-rules";
 import { stationViewData } from "../../src/data/stationViewData";
+import { formatTime } from "../../src/lib/time";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
 
 describe("OperatingRulesPanel", () => {
@@ -138,8 +139,26 @@ describe("OperatingRulesPanel rule check (#400)", () => {
     render(<OperatingRulesPanel />);
 
     expect(screen.getByText("Rule check: failed, 2 violations")).toBeDefined();
-    expect(screen.getByText(messages[0])).toBeDefined();
-    expect(screen.getByText(messages[1])).toBeDefined();
+    // Times are clock times (start_clock_s + time_s), like the clock and timeline
+    const start = stationViewData.start_clock_s;
+    const first = screen.getByText(
+      `${formatTime(900, start)}: Train T1 held longer than the max hold time`,
+    );
+    expect(first.getAttribute("title")).toBe(messages[0]);
+    expect(
+      screen.getByText(`${formatTime(959, start)}: Platform P1 departures closer than the min safe gap`),
+    ).toBeDefined();
+  });
+
+  it("says details are unavailable when a failed check has no usable violations", () => {
+    const malformed = [{ rule: "max_hold_exceeded", time_s: "900", subject_id: "T1", message: "x" }];
+    usePlaybackStore.getState().loadData({
+      ...stationViewData, ...runRules, rule_check: { passed: false, violations: malformed },
+    });
+    render(<OperatingRulesPanel />);
+
+    expect(screen.getByText("Rule check: failed (details unavailable)")).toBeDefined();
+    expect(screen.queryByText(/0 violations/)).toBeNull();
   });
 
   it("shows no rule check for mock playback", () => {
