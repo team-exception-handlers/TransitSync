@@ -106,9 +106,8 @@ describe("OperatingRulesPanel with a simulated run", () => {
 
     expect(screen.getByText(`${operatingRulesConfig.max_hold_time}s`)).toBeDefined();
   });
-});
 
-it("renders provenance badge for min_safe_gap when provided", () => {
+  it("renders provenance badge for min_safe_gap when provided", () => {
     render(
       <OperatingRulesPanel
         provenance={{
@@ -125,3 +124,4 @@ it("renders provenance badge for min_safe_gap when provided", () => {
     expect(badge.textContent).toContain("Estimated");
     expect(badge.textContent).toContain("TransitSync Operational Thresholds");
   });
+});

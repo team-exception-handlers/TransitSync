@@ -1,18 +1,17 @@
 // AI contribution: 50% or more AI-generated
 /**
- * Shared types, classification labels, and validation helpers for parameter
- * provenance metadata (US-7.1).
- *
- * Normalizes confidence classifications (`measured`, `estimated`, `published`,
- * `assumed`) and sanitizes external `http`/`https` source links before UI
- * rendering.
+ * Types, labels and validation helpers for parameter provenance (US-7.1):
+ * the four confidence classifications and safe source links.
  */
+
+/** The four confidence levels from US-7.1; mirrors VALID_CLASSIFICATIONS in the backend. */
 export type ConfidenceClassification =
   | "measured"
   | "estimated"
   | "published"
   | "assumed";
 
+/** One parameter's entry in GET /parameters, after parseParameterProvenance. */
 export interface ParameterProvenance {
   // Already normalized by parseParameterProvenance; null means unknown or invalid.
   classification?: ConfidenceClassification | null;
@@ -20,8 +19,10 @@ export interface ParameterProvenance {
   source_link?: string | null;
 }
 
+/** Entries keyed by parameter name, such as "max_hold_time". */
 export type ParameterProvenanceMap = Record<string, ParameterProvenance>;
 
+/** The one place the display names live, so every badge uses the same words (#312). */
 export const CLASSIFICATION_LABELS: Record<ConfidenceClassification, string> = {
   measured: "Measured",
   estimated: "Estimated",
@@ -29,6 +30,10 @@ export const CLASSIFICATION_LABELS: Record<ConfidenceClassification, string> = {
   assumed: "Assumed",
 };
 
+/**
+ * One of the four classifications, or null. The API can send any string, so
+ * anything unknown reads "Unspecified" instead of inventing a level.
+ */
 export function normalizeClassification(
   value?: string | null,
 ): ConfidenceClassification | null {
@@ -45,6 +50,10 @@ export function normalizeClassification(
   return null;
 }
 
+/**
+ * The link only if it is an absolute `http`/`https` URL. It goes straight into
+ * an `href`, where a `javascript:` URL would run in the app when clicked.
+ */
 export function getSafeSourceLink(link?: string | null): string | null {
   if (!link) return null;
   const trimmed = link.trim();

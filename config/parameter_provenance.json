@@ -14,7 +14,7 @@
     "source_name": "TransitSync Operational Thresholds",
     "source_link": ""
   },
-   "min_safe_gap": {
+  "min_safe_gap": {
     "classification": "estimated",
     "source_name": "TransitSync Operational Thresholds",
     "source_link": ""
@@ -125,4 +125,3 @@
     "source_link": ""
   }
 }
-
