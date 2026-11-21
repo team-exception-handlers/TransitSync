@@ -537,6 +537,11 @@ button:disabled { cursor: default; opacity: 0.45; }
 .operating-rules-values > div {
   min-width: 0;
 }
+.rule-check { margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; font-size: 13px; }
+.rule-check p { margin: 0; font-weight: 600; }
+.rule-check ul { margin: 6px 0 0; padding-left: 18px; }
+.rule-check--passed { background: #e3f4ea; color: #1d6b3f; }
+.rule-check--failed { background: #fbe1e1; color: #a21b1b; }
 
 /* DECISION VIEW */
 .decision-view { padding: 16px; overflow: auto; }
