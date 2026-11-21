@@ -218,6 +218,8 @@ class RuleCheckResponse(BaseModel):
 
     passed: bool
     violations: list[RuleViolationResponse]
+
+
 class DelayBucketResponse(BaseModel):
     """Average passenger waiting delay in one five-minute simulation bucket."""
 
