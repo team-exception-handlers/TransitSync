@@ -10,10 +10,11 @@
  * The run settings panel re-runs the selected connection with chosen settings.
  */
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { PlaybackTimeline } from "./components/PlaybackTimeline";
 import { StationCanvas } from "./components/station-canvas";
 import { ConnectionSelector } from "./components/connection-selector";
+import { ProvenanceBadge } from "./components/provenance-badge";
 import { connectionRuns } from "./data/connection-runs";
 import { stationViewData } from "./data/stationViewData";
 import { SimulationClock } from "./components/simulation-clock";
@@ -24,11 +25,14 @@ import {
   configuredApiUrl,
   createConnectionCatalogLoader,
   createConnectionRunLoader,
+  createParameterProvenanceLoader,
   runSimulation,
   type ConnectionCatalogLoader,
   type ConnectionRunLoader,
+  type ParameterProvenanceLoader,
   type ScenarioRunner,
 } from "./lib/simulation-api";
+import type { ParameterProvenanceMap } from "./types/provenance";
 import { RunSettingsPanel } from "./components/run-settings-panel";
 import { RunSummary } from "./components/run-summary";
 import { PlaybackControls } from "./components/playback-controls";
@@ -51,6 +55,9 @@ const defaultConnectionCatalogLoader: ConnectionCatalogLoader | null = apiUrl ==
   ? null
   : createConnectionCatalogLoader(apiUrl);
 
+const defaultParameterProvenanceLoader: ParameterProvenanceLoader | null =
+apiUrl === null ? null : createParameterProvenanceLoader(apiUrl);
+
 // Subtitle under the heading, so viewers always know whether they are looking
 // at simulator output or synthetic data.
 const RUN_STATUS_TEXT: Record<RunStatus, string> = {
@@ -69,13 +76,16 @@ interface AppProps {
   scenarioRunner?: ScenarioRunner | null;
   // Injectable for tests; null keeps the selector on the bundled fixture catalog.
   connectionCatalogLoader?: ConnectionCatalogLoader | null;
+  parameterProvenanceLoader?: ParameterProvenanceLoader | null;
 }
 
 export default function App({
   runLoader = defaultRunLoader,
   scenarioRunner = defaultScenarioRunner,
   connectionCatalogLoader = defaultConnectionCatalogLoader,
+  parameterProvenanceLoader = defaultParameterProvenanceLoader,
 }: Readonly<AppProps>) {
+  const [provenance, setProvenance] = useState<ParameterProvenanceMap>({});
   useEffect(startPlaybackClock, []);
   const runStatus = usePlaybackStore((state) => state.runStatus);
   const runError = usePlaybackStore((state) => state.runError);
@@ -135,6 +145,21 @@ export default function App({
     return () => controller.abort();
   }, [runLoader, selectedConnectionId]);
 
+  useEffect(() => {
+    if (parameterProvenanceLoader === null) return;
+    const controller = new AbortController();
+    parameterProvenanceLoader(controller.signal)
+      .then((entries) => {
+        if (!controller.signal.aborted) {
+          setProvenance(entries);
+        }
+      })
+      .catch(() => {
+        // Keep empty provenance map; panels handle missing entries gracefully.
+      });
+    return () => controller.abort();
+  }, [parameterProvenanceLoader]);
+
   return (
     <div className="app-shell">
 
@@ -165,6 +190,14 @@ export default function App({
         </div>
 
         <ConnectionSelector />
+        {/* The connections come from the REM and STM GTFS feeds. Both are CC BY 4.0,
+            so each badge carries the credit and links to its own feed (#313). */}
+        <div className="schedule-sources">
+          <ProvenanceBadge parameterKey="rem_schedule" label="REM schedule"
+            provenance={provenance.rem_schedule} />
+          <ProvenanceBadge parameterKey="stm_schedule" label="STM schedule"
+            provenance={provenance.stm_schedule} />
+        </div>
       </header>
 
       {/* APPLICATION WORKSPACE */}
@@ -210,10 +243,10 @@ export default function App({
             <SimulationClock />
 
             {/* OPERATING RULES */}
-            <OperatingRulesPanel />
+            <OperatingRulesPanel provenance={provenance} />
 
             {/* DECISIONS */}
-            <DecisionView />
+            <DecisionView provenance={provenance}/>
 
           </aside>
 
@@ -229,7 +262,7 @@ export default function App({
           <DelayChart />
 
           {/* RUN SETTINGS */}
-          <RunSettingsPanel runner={scenarioRunner} />
+          <RunSettingsPanel runner={scenarioRunner} provenance={provenance}/>
 
         </main>
 

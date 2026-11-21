@@ -107,6 +107,24 @@ describe("OperatingRulesPanel with a simulated run", () => {
 
     expect(screen.getByText(`${operatingRulesConfig.max_hold_time}s`)).toBeDefined();
   });
+
+  it("renders provenance badge for min_safe_gap when provided", () => {
+    render(
+      <OperatingRulesPanel
+        provenance={{
+          min_safe_gap: {
+            classification: "estimated",
+            source_name: "TransitSync Operational Thresholds",
+            source_link: "",
+          },
+        }}
+      />,
+    );
+
+    const badge = screen.getByTestId("provenance-min_safe_gap");
+    expect(badge.textContent).toContain("Estimated");
+    expect(badge.textContent).toContain("TransitSync Operational Thresholds");
+  });
 });
 
 describe("OperatingRulesPanel rule check (#400)", () => {

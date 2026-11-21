@@ -21,7 +21,14 @@ import type {
   HoldDecisionRecord,
   SeenAndTrue,
 } from "../types/decision";
+import type { ParameterProvenanceMap } from "../types/provenance";
+import { ProvenanceBadge } from "./provenance-badge";
 import { usePlaybackStore } from "../store/usePlaybackStore";
+
+interface DecisionViewProps {
+  /** Parameter sources from GET /parameters; only max hold is shown here. */
+  provenance?: ParameterProvenanceMap;
+}
 
 /** Label shown for each outcome of the safety rules. */
 const STATUS_LABEL: Record<string, string> = {
@@ -62,30 +69,35 @@ function signedGap(gap: number, unit: string) {
 }
 
 /** Seen, true and gap for each value the strategy estimated at one decision. */
+// The error magnitude badge lives in Run settings only: it describes the run,
+// so repeating it on every decision's table added noise (PR #402 review).
 function EstimateTable({ record }: Readonly<{ record: EstimatesRecord }>) {
   return (
-    // Named for screen readers, since the cells alone read as bare numbers
-    <table className="decision-estimates" aria-label="Seen versus true">
-      <thead>
-        <tr>
-          <th>Value</th>
-          <th>Seen</th>
-          <th>True</th>
-          <th>Gap</th>
-        </tr>
-      </thead>
-      <tbody>
-        {estimateRows(record).map(({ label, seen, actual, unit }) => (
-          // Labels are unique within one decision, so they work as React keys
-          <tr key={label}>
-            <td>{label}</td>
-            <td>{`${Math.round(seen)}${unit}`}</td>
-            <td>{`${Math.round(actual)}${unit}`}</td>
-            <td>{signedGap(seen - actual, unit)}</td>
+    // The wrapper scrolls sideways in a narrow sidebar instead of overflowing
+    <div className="decision-estimates-block">
+      {/* Named for screen readers, since the cells alone read as bare numbers */}
+      <table className="decision-estimates" aria-label="Seen versus true">
+        <thead>
+          <tr>
+            <th>Value</th>
+            <th>Seen</th>
+            <th>True</th>
+            <th>Gap</th>
           </tr>
-        ))}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {estimateRows(record).map(({ label, seen, actual, unit }) => (
+            // Labels are unique within one decision, so they work as React keys
+            <tr key={label}>
+              <td>{label}</td>
+              <td>{`${Math.round(seen)}${unit}`}</td>
+              <td>{`${Math.round(actual)}${unit}`}</td>
+              <td>{signedGap(seen - actual, unit)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -93,9 +105,11 @@ function EstimateTable({ record }: Readonly<{ record: EstimatesRecord }>) {
 function DecisionRow({
   decision,
   estimates,
+  provenance,
 }: Readonly<{
   decision: HoldDecisionRecord;
   estimates?: EstimatesRecord;
+  provenance?: ParameterProvenanceMap;
 }>) {
   const status = decisionStatus(decision);
   // The requested length only matters when a rule shortened or refused it
@@ -122,6 +136,15 @@ function DecisionRow({
           <span className="decision-applied">{Math.round(decision.applied_s)}s</span>
         )}
       </span>
+      {/* Only a clamp is always caused by the max hold rule; a refusal can come
+          from the one-hop or minimum gap rule, so it gets no max hold badge. */}
+      {status === "clamped" && provenance?.max_hold_time && (
+        <ProvenanceBadge
+          parameterKey="max_hold_time"
+          label="Maximum hold"
+          provenance={provenance.max_hold_time}
+        />
+      )}
       <small className="decision-reason">{decision.reason}</small>
       {/* Only runs with a prediction error model record estimates */}
       {estimates && <EstimateTable record={estimates} />}
@@ -131,7 +154,7 @@ function DecisionRow({
 
 /** Decisions reached so far at the selected connection's two platforms, each
  * with what the strategy saw when it decided. */
-export function DecisionView() {
+export function DecisionView({ provenance }: Readonly<DecisionViewProps>) {
   const data = usePlaybackStore((state) => state.data);
   const time = usePlaybackStore((state) => state.currentTime_s);
   const selected = usePlaybackStore((state) => state.selectedConnectionId);
@@ -162,6 +185,7 @@ export function DecisionView() {
             decision={decision}
             // The estimates taken at this same decision, if the run kept them
             estimates={estimatesFor(decision, estimates)}
+            provenance={provenance}
           />
         ))}
       </ul>
