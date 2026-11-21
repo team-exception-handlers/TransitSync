@@ -4,7 +4,7 @@
 from collections.abc import Sequence
 from statistics import fmean
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from api.passenger_outcomes import PassengerOutcome
 
@@ -16,11 +16,20 @@ class PassengerMetrics(BaseModel):
     successful_connections: int
     missed_connections: int
     average_transfer_time_s: float | None
-    average_passenger_delay_s: float | None
+    average_passenger_delay_s: float | None = Field(
+        description="Mean recorded delay in seconds, including zero for passengers "
+        "who made their connection. Passengers who missed a train count toward "
+        "this mean only once a later train departs with them aboard. Returns null "
+        "when no passenger has a recorded delay."
+    )
 
 
 def compute_passenger_metrics(outcomes: Sequence[PassengerOutcome]) -> PassengerMetrics:
-    """Count each passenger once and average each duration over its known values."""
+    """Count each passenger once and average each duration over its known values.
+
+    A passenger still waiting after a miss at run end counts as missed. Their
+    final delay is unknown, so they are excluded from the delay average.
+    """
     transfer_times = [
         p.transfer_time_s for p in outcomes if p.transfer_time_s is not None
     ]

@@ -24,12 +24,13 @@ def test_counts_passengers_and_averages_only_observed_values():
             delay_s=20,
         ),
         outcome("aboard", status="missed", transfer_time_s=15),
+        outcome("still_waiting", status="missed", missed_train_ids=["a"]),
         outcome("walking"),
     ]
     assert compute_passenger_metrics(outcomes).model_dump() == {
-        "total_affected_passengers": 4,
+        "total_affected_passengers": 5,
         "successful_connections": 1,
-        "missed_connections": 2,
+        "missed_connections": 3,
         "average_transfer_time_s": 25,
         "average_passenger_delay_s": 10,
     }
