@@ -135,14 +135,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @application.post("/simulation/passenger-comparison", tags=["simulation"])
     def compare_passengers(settings: SimulationRunRequest) -> PassengerComparison:
         """Return cached outcomes for matched settings with and without control."""
-        selected = run_simulation(settings).passenger_outcomes
-        baseline = selected
+        baseline_settings = settings.model_dump(
+            exclude={"irregularity_threshold", "error_magnitude", "max_hold_time"}
+        )
+        baseline_settings["strategy"] = "no_control"
+        baseline = run_simulation(
+            SimulationRunRequest.model_validate(baseline_settings)
+        ).passenger_outcomes
+        selected = baseline
         if settings.strategy != "no_control":
-            baseline_settings = settings.model_dump(exclude={"irregularity_threshold"})
-            baseline_settings["strategy"] = "no_control"
-            baseline = run_simulation(
-                SimulationRunRequest.model_validate(baseline_settings)
-            ).passenger_outcomes
+            selected = run_simulation(settings).passenger_outcomes
         return PassengerComparison(without_holding=baseline, selected_strategy=selected)
 
     @application.get("/parameters", tags=["parameters"])

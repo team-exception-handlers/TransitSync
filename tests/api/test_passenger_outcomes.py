@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from api.main import create_app
 from api.passenger_outcomes import build_passenger_outcomes
+from api.simulation_run import SimulationRunService
 from api.station_layout import Connection
 
 
@@ -73,3 +74,31 @@ def test_comparison_matches_each_cached_run():
         assert [o["passenger_id"] for o in comparison[key]] == [
             t["passenger_id"] for t in run["passenger_tracks"]
         ]
+
+
+def test_comparison_reuses_baseline_across_slider_changes(monkeypatch):
+    runs = []
+    run_uncached = SimulationRunService._run_uncached
+
+    def record_run(service, request):
+        runs.append((request.strategy, request.error_magnitude, request.max_hold_time))
+        return run_uncached(service, request)
+
+    monkeypatch.setattr(SimulationRunService, "_run_uncached", record_run)
+    client = TestClient(create_app())
+    for error, hold in [(0, 300), (3, 60)]:
+        response = client.post(
+            "/simulation/passenger-comparison",
+            json={
+                "connection_id": "mcgill-rem-green",
+                "strategy": "connection_protection",
+                "error_magnitude": error,
+                "max_hold_time": hold,
+            },
+        )
+        assert response.status_code == 200
+    assert sorted(runs) == [
+        ("connection_protection", 0, 300),
+        ("connection_protection", 3, 60),
+        ("no_control", 1, 300),
+    ]
