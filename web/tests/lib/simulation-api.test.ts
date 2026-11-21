@@ -203,4 +203,15 @@ describe("parameter provenance loader", () => {
   it("rejects non-object provenance payloads", () => {
     expect(() => parseParameterProvenance([])).toThrow();
   });
+
+  it("drops an unknown classification so the badge reads Unspecified", () => {
+    const map = parseParameterProvenance({
+      walking_speed: { classification: "guessed", source_name: "Field notes", source_link: "" },
+      dwell: { classification: " Measured ", source_name: "Counts", source_link: "" },
+    });
+
+    expect(map.walking_speed?.classification).toBeNull();
+    expect(map.walking_speed?.source_name).toBe("Field notes");
+    expect(map.dwell?.classification).toBe("measured");
+  });
 });

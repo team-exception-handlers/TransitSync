@@ -14,7 +14,8 @@ export type ConfidenceClassification =
   | "assumed";
 
 export interface ParameterProvenance {
-  classification?: ConfidenceClassification | string | null;
+  // Already normalized by parseParameterProvenance; null means unknown or invalid.
+  classification?: ConfidenceClassification | null;
   source_name?: string | null;
   source_link?: string | null;
 }

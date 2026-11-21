@@ -1,7 +1,8 @@
 // AI contribution: 50% or more AI-generated
 /**
- * Styles for parameter provenance badges, source labels, and external source
- * links across panels and decision views (US-7.1, Task 7.1.2).
+ * Badge showing a parameter's confidence classification, its source name and,
+ * when one is safe to open, a link to the source (US-7.1, Task 7.1.1).
+ * Missing or invalid data reads "Unspecified" / "Source not specified".
  */
 import {
   CLASSIFICATION_LABELS,
@@ -19,7 +20,7 @@ interface ProvenanceBadgeProps {
 export function ProvenanceBadge({
   parameterKey,
   provenance,
-}: ProvenanceBadgeProps) {
+}: Readonly<ProvenanceBadgeProps>) {
   const classification = normalizeClassification(provenance?.classification);
   const badgeLabel = classification
     ? CLASSIFICATION_LABELS[classification]
