@@ -189,9 +189,14 @@ export default function App({
         </div>
 
         <ConnectionSelector />
-        {/* The connections come from the published GTFS schedule, the one source with a link (#313). */}
-        <ProvenanceBadge parameterKey="connection_id" label="Connection"
-          provenance={provenance.connection_id} />
+        {/* The connections come from the REM and STM GTFS feeds. Both are CC BY 4.0,
+            so each badge carries the credit and links to its own feed (#313). */}
+        <div className="schedule-sources">
+          <ProvenanceBadge parameterKey="rem_schedule" label="REM schedule"
+            provenance={provenance.rem_schedule} />
+          <ProvenanceBadge parameterKey="stm_schedule" label="STM schedule"
+            provenance={provenance.stm_schedule} />
+        </div>
       </header>
 
       {/* APPLICATION WORKSPACE */}

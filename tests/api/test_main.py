@@ -423,3 +423,22 @@ def test_get_parameters_endpoint(client: TestClient) -> None:
         first_key = next(iter(data))
         assert "classification" in data[first_key]
         assert "source_name" in data[first_key]
+
+
+@pytest.mark.parametrize(
+    ("key", "link", "agency"),
+    [
+        ("rem_schedule", "https://rem.info", "(REM)"),
+        ("stm_schedule", "https://www.stm.info", "(STM)"),
+    ],
+)
+def test_schedule_feeds_link_to_their_data_with_the_licence_credit(
+    client: TestClient, key: str, link: str, agency: str
+) -> None:
+    """Both GTFS feeds are CC BY 4.0, so the app must credit and link each one."""
+    entry = client.get("/parameters").json()[key]
+
+    assert entry["classification"] == "published"
+    assert entry["source_link"] == link
+    assert agency in entry["source_name"]
+    assert "CC BY 4.0" in entry["source_name"]

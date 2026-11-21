@@ -56,6 +56,9 @@ body {
   border-bottom: 1px solid #d8dbd5;
 }
 
+/* The two schedule credits stack beside the connection picker instead of stretching the top bar. */
+.schedule-sources { display: flex; flex-direction: column; gap: 4px; max-width: 420px; }
+
 /* BRANDING */
 
 .brand {

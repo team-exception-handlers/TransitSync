@@ -7,15 +7,12 @@ import App from "../../src/App";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
 import type { ParameterProvenanceMap } from "../../src/types/provenance";
 
-/** Three parameters with different classifications and sources, one with a link. */
+/** Settings with different classifications, plus the two schedule feeds with their own links. */
 const PROVENANCE: ParameterProvenanceMap = {
   max_hold_time: { classification: "estimated", source_name: "Operational thresholds", source_link: "" },
   strategy: { classification: "assumed", source_name: "Strategy registry", source_link: "" },
-  connection_id: {
-    classification: "published",
-    source_name: "GTFS schedule",
-    source_link: "https://gtfs.org/",
-  },
+  rem_schedule: { classification: "published", source_name: "REM data, CC BY 4.0", source_link: "https://rem.info" },
+  stm_schedule: { classification: "published", source_name: "STM data, CC BY 4.0", source_link: "https://www.stm.info" },
 };
 
 /** The app with no API except the parameters loader under test. */
@@ -50,13 +47,15 @@ describe("App parameter provenance", () => {
     expect(loader).toHaveBeenCalledTimes(1);
   });
 
-  it("links the connection picker to its published source", async () => {
+  it("links each schedule feed beside the connection picker to its own data", async () => {
     renderApp(vi.fn().mockResolvedValue(PROVENANCE));
 
-    // A readable name, not the raw key, so screen readers don't say "connection underscore id"
-    const link = await screen.findByRole("link", { name: "Source link for Connection: GTFS schedule" });
-    expect(link.getAttribute("href")).toBe("https://gtfs.org/");
-    expect(screen.getByTestId("provenance-connection_id").textContent).toContain("Published");
+    // Readable names, not raw keys, so screen readers don't say "rem underscore schedule"
+    const rem = await screen.findByRole("link", { name: "Source link for REM schedule: REM data, CC BY 4.0" });
+    const stm = screen.getByRole("link", { name: "Source link for STM schedule: STM data, CC BY 4.0" });
+    expect(rem.getAttribute("href")).toBe("https://rem.info/");
+    expect(stm.getAttribute("href")).toBe("https://www.stm.info/");
+    expect(screen.getByTestId("provenance-rem_schedule").textContent).toContain("Published");
   });
 
   it("keeps working and marks sources as unspecified when the request fails", async () => {
