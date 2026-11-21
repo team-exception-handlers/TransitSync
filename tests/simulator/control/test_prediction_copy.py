@@ -62,3 +62,40 @@ def test_prediction_clone_preserves_draw_order_and_subclass(seed):
         assert actual.onboard_load == expected.onboard_load
         assert actual.predicted_arrival_s == expected.predicted_arrival_s
     assert plain_stream.standard_normal() == subclass_stream.standard_normal()
+
+
+class ScalarStream:
+    """Exercise the pre-batching scalar interface with a real seeded generator."""
+
+    def __init__(self, stream):
+        self.stream = stream
+
+    def standard_normal(self):
+        return self.stream.standard_normal()
+
+
+@pytest.mark.parametrize("seed", [0, 7, 42])
+@pytest.mark.parametrize("size", [0, 1, 64, 1679])
+@pytest.mark.parametrize("kappa", [0, 1, 3])
+def test_batched_train_draws_match_scalar_values_and_stream_position(seed, size, kappa):
+    """Mixed next-stop branches consume exactly the original ordered draws.
+
+    Repeat snapshots to test stream boundaries and enough values to exercise
+    NumPy's normal-distribution rejection path, including perfect information.
+    """
+    original = snapshot()
+    trains = tuple(
+        replace(original.trains[i % 2], train_id=str(i)) for i in range(size)
+    )
+    truth = replace(original, trains=trains)
+    batched_stream = np.random.default_rng(seed)
+    scalar_stream = np.random.default_rng(seed)
+    settings = PredictionErrorSettings(kappa, kappa, kappa)
+    batched = PredictionErrorModel(settings, batched_stream)
+    scalar = PredictionErrorModel(settings, ScalarStream(scalar_stream))
+    for _ in range(3):
+        assert batched.apply(truth) == scalar.apply(truth)
+    assert (
+        batched_stream.standard_normal(16).tolist()
+        == scalar_stream.standard_normal(16).tolist()
+    )

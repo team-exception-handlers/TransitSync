@@ -111,8 +111,9 @@ class PredictionErrorModel:
         """
         # Keep draws local to this snapshot; later decisions get fresh errors.
         arrival_z: dict[str, float] = {}
+        draw = self._train_draws(truth.trains)
         trains = tuple(
-            self._train(train, truth.time_s, arrival_z) for train in truth.trains
+            self._train(train, truth.time_s, arrival_z, draw) for train in truth.trains
         )
         transfers = tuple(self._transfer(group) for group in truth.incoming_transfers)
         if not truth.future_visits and not truth.headway_visits:
@@ -192,14 +193,27 @@ class PredictionErrorModel:
             departure_s=visit.departure_s + shift,
         )
 
+    def _train_draws(self, trains):
+        """Batch the same ordered NumPy draws, keeping scalar stand-ins supported.
+
+        Load is drawn before arrival for each train, including completed trains.
+        Restrict batching to NumPy's concrete generator; custom streams retain
+        their scalar interface. Convert to Python floats before any arithmetic
+        so NumPy scalar rules cannot change rounding or forecast values.
+        """
+        if type(self._stream) is not np.random.Generator:
+            return self._stream.standard_normal
+        count = len(trains) + sum(t.predicted_arrival_s is not None for t in trains)
+        return iter(self._stream.standard_normal(count).tolist()).__next__
+
     def _train(
-        self, train: TrainState, now_s: float, arrival_z: dict[str, float]
+        self, train: TrainState, now_s: float, arrival_z: dict[str, float], draw
     ) -> TrainState:
-        load = self._count(train.onboard_load, self.settings.load_kappa)
+        load = _scaled(train.onboard_load, self.settings.load_kappa, float(draw()))
         arrival_s = train.predicted_arrival_s
         if arrival_s is not None:
             sigma = arrival_sigma_s(arrival_s - now_s)
-            z = float(self._stream.standard_normal())
+            z = float(draw())
             arrival_z[train.train_id] = z
             error_s = sigma * z
             arrival_s = arrival_s + self.settings.arrival_kappa * error_s
@@ -214,9 +228,6 @@ class PredictionErrorModel:
             passenger_count=_scaled(group.passenger_count, kappa, z),
             group_size=_scaled(group.group_size, kappa, z),
         )
-
-    def _count(self, value: int, kappa: float) -> int:
-        return _scaled(value, kappa, float(self._stream.standard_normal()))
 
 
 def _scaled(value: int, kappa: float, z: float) -> int:
