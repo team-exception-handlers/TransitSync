@@ -25,13 +25,13 @@ def test_outcomes_use_event_order_and_keep_unfinished_transfers():
         event("train_departure", 3, "other", train_id="unrelated"),
         event("train_departure", 5, train_id="first"),
         event("passenger_arrival", 6, passenger_id="late"),
+        event("alighting", 9, "rem", passenger_id="walking"),
         event("train_departure", 10, train_id="second"),
         event("alighting", 11, "rem", passenger_id="ontime"),
         event("passenger_arrival", 15, passenger_id="ontime"),
         event("boarding", 15, passenger_id="ontime", train_id="third"),
         event("boarding", 15, passenger_id="late", train_id="third"),
         event("train_departure", 15, train_id="third"),
-        event("alighting", 16, "rem", passenger_id="walking"),
         event("alighting", 17, "rem", passenger_id="held"),
         event("passenger_arrival", 18, passenger_id="held"),
         event("boarding", 19, passenger_id="held", train_id="fourth"),
@@ -51,6 +51,7 @@ def test_outcomes_use_event_order_and_keep_unfinished_transfers():
     assert ontime.delay_s == 0
     assert ontime.missed_train_ids == []
     assert walking.status == "pending"
+    assert walking.missed_train_ids == []
     assert walking.platform_arrival_s is walking.departure_s is walking.delay_s is None
 
 

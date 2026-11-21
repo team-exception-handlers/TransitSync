@@ -34,6 +34,8 @@ class PassengerOutcome(BaseModel):
 
 
 class PassengerComparison(BaseModel):
+    """Passenger outcomes for the no-holding baseline and the selected strategy."""
+
     without_holding: list[PassengerOutcome]
     selected_strategy: list[PassengerOutcome]
 
@@ -77,6 +79,9 @@ def build_passenger_outcomes(
                     outcome.transfer_time_s = outcome.boarding_s - outcome.alighting_s
 
     for passenger, outcome in outcomes.items():
+        # A late walker’s first miss is only observed upon platform arrival.
+        if outcome.platform_arrival_s is None:
+            continue
         first = bisect_left(departures, starts[passenger])
         end = bisect_left(departures, boardings.get(passenger, len(records)))
         missed = departures[first:end]
