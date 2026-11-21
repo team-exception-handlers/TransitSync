@@ -10,10 +10,13 @@
  * Two callers share the request code: the connection loader (API default
  * settings) and `runSimulation`, which sends the run settings panel's values
  * and turns every failure into a sentence a user can act on.
+ *
+ * `runComparison` (US-4.1, #230) sends the same settings to
+ * `/simulation/comparison` and gets a holding and a no-holding run back,
+ * each checked exactly like a single run.
  */
-import type { LineId } from "../types/stationView";
+import type { LineId, StationViewData } from "../types/stationView";
 import type { RunSettings } from "../types/runSettings";
-import type { StationViewData } from "../types/stationView";
 import { buildRunRequest } from "./run-settings";
 import { parseStationViewData } from "./validateStationView";
 
@@ -122,14 +125,15 @@ async function errorDetail(response: Response): Promise<unknown> {
   return null;
 }
 
-/** POST one JSON body to the run endpoint; network errors pass through. */
+/** POST one JSON body to a simulation endpoint; network errors pass through. */
 function postRun(
   baseUrl: string,
   body: unknown,
   fetchImpl: typeof fetch,
   signal?: AbortSignal,
+  path = "/simulation/run",
 ): Promise<Response> {
-  return fetchImpl(`${baseUrl}/simulation/run`, {
+  return fetchImpl(`${baseUrl}${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -240,14 +244,31 @@ export interface RunSimulationOptions {
  * server failure, or a response the station view cannot display. An aborted
  * request rethrows the abort unchanged so callers can ignore it.
  */
-export async function runSimulation(
+export function runSimulation(
+  connectionId: string,
+  settings: RunSettings,
+  options: RunSimulationOptions,
+): Promise<StationViewData> {
+  return requestRun("/simulation/run", connectionId, settings, options,
+    (payload) => checkedRun(payload, connectionId));
+}
+
+/**
+ * Send the panel's settings to `path` and parse the reply with `parse`.
+ * Shared by single runs and comparisons so both explain failures the same
+ * way; see `runSimulation` for the errors it throws.
+ */
+async function requestRun<T>(
+  path: string,
   connectionId: string,
   settings: RunSettings,
   { baseUrl, signal, fetchImpl = fetch }: RunSimulationOptions,
-): Promise<StationViewData> {
+  parse: (payload: unknown) => T,
+): Promise<T> {
   let response: Response;
   try {
-    response = await postRun(baseUrl, buildRunRequest(connectionId, settings), fetchImpl, signal);
+    const body = buildRunRequest(connectionId, settings);
+    response = await postRun(baseUrl, body, fetchImpl, signal, path);
   } catch (error) {
     if (signal?.aborted) throw error;
     // fetch rejects before any response: server down, wrong URL or blocked by CORS.
@@ -259,7 +280,7 @@ export async function runSimulation(
     throw new SimulationRunError(await failureMessage(response), response.status);
   }
   try {
-    return checkedRun(await response.json(), connectionId);
+    return parse(await response.json());
   } catch (error) {
     // A cancel while the body is still being read rejects json() with the
     // abort; pass it through unchanged, as for a cancel during fetch above.
@@ -270,4 +291,87 @@ export async function runSimulation(
       response.status,
     );
   }
+}
+
+/** What both runs of a comparison share, shown so users can see they match. */
+export interface StartingConditions {
+  /** Service date both runs simulate, as an ISO date (YYYY-MM-DD). */
+  serviceDate: string;
+  /** Master seed: the same random draws feed both runs. */
+  masterSeed: number;
+  /** Run length in seconds. */
+  duration_s: number;
+}
+
+/** A holding run and a no-holding run of one connection (US-4.1, #230). */
+export interface SimulationComparison {
+  holding: StationViewData;
+  noHolding: StationViewData;
+  /** Strategy the holding side used, for example "connection_protection". */
+  holdingStrategy: string;
+  startingConditions: StartingConditions;
+}
+
+/** Runs both sides of a comparison; the Compare screen accepts any function of this shape. */
+export type ComparisonRunner = (
+  connectionId: string,
+  settings: RunSettings,
+  signal?: AbortSignal,
+) => Promise<SimulationComparison>;
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Check the shared fields of a comparison body; throws on the first bad one. */
+function checkStartingConditions(body: Record<string, unknown>): StartingConditions {
+  const { service_date, master_seed, duration_s } = body;
+  if (typeof service_date !== "string" || !ISO_DATE.test(service_date)) {
+    throw new TypeError("Invalid comparison service date");
+  }
+  if (typeof master_seed !== "number" || !Number.isInteger(master_seed) || master_seed < 0) {
+    throw new TypeError("Invalid comparison master seed");
+  }
+  if (typeof duration_s !== "number" || !Number.isFinite(duration_s) || duration_s <= 0) {
+    throw new TypeError("Invalid comparison duration");
+  }
+  return { serviceDate: service_date, masterSeed: master_seed, duration_s };
+}
+
+/**
+ * Validate a `/simulation/comparison` body for `connectionId`. Each side goes
+ * through the same checks as a single run, and both must last as long as the
+ * shared duration, because one playback clock drives both panels.
+ */
+export function parseSimulationComparison(
+  value: unknown,
+  connectionId: string,
+): SimulationComparison {
+  if (typeof value !== "object" || value === null) {
+    throw new TypeError("Comparison response must be an object");
+  }
+  const body = value as Record<string, unknown>;
+  const startingConditions = checkStartingConditions(body);
+  if (!isNonEmptyString(body.holding_strategy)) {
+    throw new TypeError("Invalid comparison holding strategy");
+  }
+  const holding = checkedRun(body.holding, connectionId);
+  const noHolding = checkedRun(body.no_holding, connectionId);
+  if (holding.duration_s !== startingConditions.duration_s
+    || noHolding.duration_s !== startingConditions.duration_s) {
+    throw new TypeError("Comparison runs do not share one duration");
+  }
+  return { holding, noHolding, holdingStrategy: body.holding_strategy, startingConditions };
+}
+
+/**
+ * Run `connectionId` with and without holding, using the panel's `settings`,
+ * and return both validated runs. Failures are thrown as `SimulationRunError`
+ * with the same user-facing messages as `runSimulation`.
+ */
+export function runComparison(
+  connectionId: string,
+  settings: RunSettings,
+  options: RunSimulationOptions,
+): Promise<SimulationComparison> {
+  return requestRun("/simulation/comparison", connectionId, settings, options,
+    (payload) => parseSimulationComparison(payload, connectionId));
 }

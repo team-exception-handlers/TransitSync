@@ -277,6 +277,18 @@ class SimulationRunService:
                 decision_records,
             )
 
+    def starting_conditions(self, connection_id: str) -> Scenario:
+        """Return the committed scenario a connection's runs start from.
+
+        Paired comparisons show its service date, master seed and duration so
+        users can see both runs share them. Raises ``UnknownConnectionError``
+        for a connection missing from the catalog.
+        """
+        layout, _connection = self._select_connection(connection_id)
+        return load_scenario_file(
+            SCENARIO_PATHS[layout.interchange.id], {DATASET_ID: self._dataset}
+        )
+
     def _select_connection(
         self, connection_id: str
     ) -> tuple[StationLayoutResponse, Connection]:

@@ -1,0 +1,102 @@
+// AI contribution: 50% or more AI-generated
+/** The Compare screen's store loads both runs together and keeps only the newest pair (US-4.1). */
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { stationViewData } from "../../src/data/stationViewData";
+import { DEFAULT_RUN_SETTINGS } from "../../src/lib/run-settings";
+import type { ComparisonRunner, SimulationComparison } from "../../src/lib/simulation-api";
+import { EMPTY_COMPARISON, useComparisonStore } from "../../src/store/useComparisonStore";
+
+const CONNECTION = "mcgill-rem-green";
+
+/** A pair whose holding side is told apart from the baseline by its duration. */
+function pairFor(strategy: string, holdingDuration = 360): SimulationComparison {
+  return {
+    holding: { ...stationViewData, duration_s: holdingDuration },
+    noHolding: stationViewData,
+    holdingStrategy: strategy,
+    startingConditions: { serviceDate: "2026-10-05", masterSeed: 42, duration_s: 360 },
+  };
+}
+
+/** A runner whose calls resolve only when the test says so. */
+function deferredRunner() {
+  const pending: { resolve: (pair: SimulationComparison) => void; reject: (error: Error) => void }[] = [];
+  const runner = vi.fn<ComparisonRunner>(() => new Promise((resolve, reject) => {
+    pending.push({ resolve, reject });
+  }));
+  return { runner, pending };
+}
+
+const load = (runner: ComparisonRunner, settings = DEFAULT_RUN_SETTINGS, signal?: AbortSignal) =>
+  useComparisonStore.getState().loadComparison(CONNECTION, settings, runner, signal);
+
+beforeEach(() => {
+  useComparisonStore.setState(EMPTY_COMPARISON);
+});
+
+describe("useComparisonStore", () => {
+  it("loads both runs from one runner call", async () => {
+    const runner = vi.fn<ComparisonRunner>(async () => pairFor("connection_protection"));
+
+    expect(await load(runner)).toBe(true);
+
+    expect(runner).toHaveBeenCalledTimes(1);
+    const state = useComparisonStore.getState();
+    expect(state.status).toBe("ready");
+    expect(state.holding).not.toBe(state.noHolding);
+    expect(state.holdingStrategy).toBe("connection_protection");
+    expect(state.startingConditions?.masterSeed).toBe(42);
+    expect(state.connectionId).toBe(CONNECTION);
+  });
+
+  it("does not refetch a pair already loaded for the same request", async () => {
+    const runner = vi.fn<ComparisonRunner>(async () => pairFor("connection_protection"));
+    await load(runner);
+
+    // A copy with equal values sends the same body, so it is the same key.
+    expect(await load(runner, { ...DEFAULT_RUN_SETTINGS })).toBe(false);
+    expect(runner).toHaveBeenCalledTimes(1);
+
+    await load(runner, { ...DEFAULT_RUN_SETTINGS, passenger_flow: "High" });
+    expect(runner).toHaveBeenCalledTimes(2);
+  });
+
+  it("drops a response overtaken by a newer request", async () => {
+    const { runner, pending } = deferredRunner();
+    const first = load(runner);
+    const second = load(runner, { ...DEFAULT_RUN_SETTINGS, passenger_flow: "High" });
+
+    pending[1].resolve(pairFor("newer", 300));
+    pending[0].resolve(pairFor("older", 200));
+
+    expect(await second).toBe(true);
+    expect(await first).toBe(false);
+    expect(useComparisonStore.getState().holdingStrategy).toBe("newer");
+    expect(useComparisonStore.getState().holding?.duration_s).toBe(300);
+  });
+
+  it("drops a response whose request was aborted", async () => {
+    const { runner, pending } = deferredRunner();
+    const controller = new AbortController();
+    const result = load(runner, DEFAULT_RUN_SETTINGS, controller.signal);
+
+    controller.abort();
+    pending[0].resolve(pairFor("connection_protection"));
+
+    expect(await result).toBe(false);
+    expect(useComparisonStore.getState().holding).toBeNull();
+  });
+
+  it("keeps the previous pair and reports the error when a load fails", async () => {
+    await load(vi.fn<ComparisonRunner>(async () => pairFor("connection_protection")));
+    const shown = useComparisonStore.getState().holding;
+
+    const failing = vi.fn<ComparisonRunner>(async () => { throw new Error("Server down"); });
+    expect(await load(failing, { ...DEFAULT_RUN_SETTINGS, passenger_flow: "Low" })).toBe(false);
+
+    const state = useComparisonStore.getState();
+    expect(state.status).toBe("error");
+    expect(state.error).toBe("Server down");
+    expect(state.holding).toBe(shown);
+  });
+});

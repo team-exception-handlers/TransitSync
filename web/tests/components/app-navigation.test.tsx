@@ -86,15 +86,21 @@ describe("sidebar navigation", () => {
     expect(navItem("Station view").getAttribute("aria-current")).toBeNull();
   });
 
-  it.each([
-    ["Compare", "US-4.1"],
-    ["Sources", "US-7.2"],
-  ])("shows a placeholder naming the story that fills %s", (label, story) => {
+  it("shows a placeholder naming the story that fills Sources", () => {
     render(<App runLoader={null} />);
-    openView(label);
+    openView("Sources");
 
-    expect(screen.getByRole("heading", { name: label })).toBeDefined();
-    expect(screen.getByText(`This screen is filled by ${story}.`)).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Sources" })).toBeDefined();
+    expect(screen.getByText("This screen is filled by US-7.2.")).toBeDefined();
+  });
+
+  it("shows the side-by-side comparison screen on Compare", () => {
+    render(<App runLoader={null} comparisonRunner={null} />);
+    openView("Compare");
+
+    expect(screen.getByRole("heading", { name: "Compare" })).toBeDefined();
+    expect(screen.getByText(/Comparing runs needs the simulation API/)).toBeDefined();
+    expect(navItem("Compare").getAttribute("aria-current")).toBe("page");
   });
 
   it("keeps the playback position and connection after leaving the station view", () => {

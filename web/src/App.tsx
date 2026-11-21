@@ -19,13 +19,16 @@ import {
   configuredApiUrl,
   createConnectionCatalogLoader,
   createConnectionRunLoader,
+  runComparison,
   runSimulation,
+  type ComparisonRunner,
   type ConnectionCatalogLoader,
   type ConnectionRunLoader,
   type ScenarioRunner,
 } from "./lib/simulation-api";
 import { usePlaybackStore } from "./store/usePlaybackStore";
 import { VIEWS, useViewStore, type AppView } from "./store/useViewStore";
+import { CompareView } from "./views/compare-view";
 import { PlaceholderView } from "./views/placeholder-view";
 import { ResultsView } from "./views/results-view";
 import { SetupView } from "./views/setup-view";
@@ -40,6 +43,11 @@ const defaultScenarioRunner: ScenarioRunner | null = apiUrl === null
   ? null
   : (connectionId, settings, signal) =>
       runSimulation(connectionId, settings, { baseUrl: apiUrl, signal });
+// The Compare screen runs holding and no holding through the same API (US-4.1).
+const defaultComparisonRunner: ComparisonRunner | null = apiUrl === null
+  ? null
+  : (connectionId, settings, signal) =>
+      runComparison(connectionId, settings, { baseUrl: apiUrl, signal });
 // Lists the backend's real connections for the selector (#76); null keeps
 // the selector on the bundled fixture catalog, as before this endpoint.
 const defaultConnectionCatalogLoader: ConnectionCatalogLoader | null = apiUrl === null
@@ -53,11 +61,14 @@ interface AppProps {
   scenarioRunner?: ScenarioRunner | null;
   // Injectable for tests; null keeps the selector on the bundled fixture catalog.
   connectionCatalogLoader?: ConnectionCatalogLoader | null;
+  // Injectable for tests; null shows the Compare screen's "no API" note.
+  comparisonRunner?: ComparisonRunner | null;
 }
 
 export default function App({
   runLoader = defaultRunLoader,
   scenarioRunner = defaultScenarioRunner,
+  comparisonRunner = defaultComparisonRunner,
   connectionCatalogLoader = defaultConnectionCatalogLoader,
 }: Readonly<AppProps>) {
   // Leased by the shell so playback keeps its position across screen changes.
@@ -108,7 +119,7 @@ export default function App({
   // One entry per sidebar item; only the active one is mounted.
   const screens: Record<AppView, ReactNode> = {
     station: <StationView />,
-    compare: <PlaceholderView title="Compare" story="US-4.1" />,
+    compare: <CompareView runner={comparisonRunner} />,
     results: <ResultsView />,
     setup: <SetupView runner={scenarioRunner} />,
     sources: <PlaceholderView title="Sources" story="US-7.2" />,
