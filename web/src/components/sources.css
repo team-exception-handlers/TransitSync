@@ -1,0 +1,35 @@
+/* AI contribution: 50% or more AI-generated */
+/* Sources table (US-7.2): same colors and type as the station view panels. */
+
+.sources-table .segmented-control { flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+.sources-table .segmented-control .clock-heading { padding: 0 8px; }
+.sources-table .segmented-control button { padding: 0 12px; }
+
+.sources-table table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.sources-table th,
+.sources-table td { padding: 12px 8px; border-bottom: 1px solid #e4e6e1; text-align: left; }
+.sources-table thead th { color: #5b6168; font-size: 12px; font-weight: 500; }
+.sources-table tbody th { font-weight: 500; }
+.sources-table td:nth-child(2) { font-family: "IBM Plex Mono", monospace; }
+
+/* Orange plus the words "No source recorded yet", so it reads without color. */
+.source-missing { color: #b4470c; }
+
+.source-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 24px;
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: 8px;
+  background: #f3f4f1;
+}
+.source-details dt { color: #5b6168; }
+.source-details dd { margin: 0; overflow-wrap: anywhere; }
+
+.sources-empty { color: #5b6168; }
+
+/* Narrow screens scroll the table sideways instead of the whole page. */
+@media (max-width: 720px) {
+  .sources-table { overflow-x: auto; }
+}
