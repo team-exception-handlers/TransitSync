@@ -449,6 +449,14 @@ def test_non_adaptive_run_returns_no_mode_switches() -> None:
     assert response.json()["mode_switches"] == []
 
 
+def test_run_returns_a_passed_rule_check_for_a_normal_run() -> None:
+    """The enforcer clamps holds to the run's 120 s maximum, so the check passes."""
+    response = TestClient(create_app()).post("/simulation/run", json=RUN_SETTINGS)
+
+    assert response.status_code == 200
+    assert response.json()["rule_check"] == {"passed": True, "violations": []}
+
+
 def _timetable_trip(trip_id: str, *visits: tuple[float, float]) -> SimpleNamespace:
     """Build a one-platform trip whose visits are (arrival, departure) clock seconds."""
     return SimpleNamespace(
