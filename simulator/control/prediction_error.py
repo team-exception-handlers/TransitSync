@@ -196,14 +196,14 @@ class PredictionErrorModel:
         self, train: TrainState, now_s: float, arrival_z: dict[str, float]
     ) -> TrainState:
         load = self._count(train.onboard_load, self.settings.load_kappa)
-        if train.predicted_arrival_s is None:
-            return _updated(train, onboard_load=load)
-        sigma = arrival_sigma_s(train.predicted_arrival_s - now_s)
-        z = float(self._stream.standard_normal())
-        arrival_z[train.train_id] = z
-        error_s = sigma * z
-        arrival_s = train.predicted_arrival_s + self.settings.arrival_kappa * error_s
-        return _updated(train, predicted_arrival_s=arrival_s, onboard_load=load)
+        arrival_s = train.predicted_arrival_s
+        if arrival_s is not None:
+            sigma = arrival_sigma_s(arrival_s - now_s)
+            z = float(self._stream.standard_normal())
+            arrival_z[train.train_id] = z
+            error_s = sigma * z
+            arrival_s = arrival_s + self.settings.arrival_kappa * error_s
+        return _copy_train(train, arrival_s, load)
 
     def _transfer(self, group: IncomingTransfer) -> IncomingTransfer:
         # One draw scales both counts, so still walking <= group size holds
@@ -222,3 +222,24 @@ class PredictionErrorModel:
 def _scaled(value: int, kappa: float, z: float) -> int:
     """A count with relative error ``kappa * 10% * z``, rounded, never below 0."""
     return max(0, round(value * (1.0 + kappa * COUNT_RELATIVE_SIGMA * z)))
+
+
+def _copy_train(train: TrainState, arrival_s: float | None, load: int) -> TrainState:
+    """Copy the fixed train schema without rediscovering dataclass fields.
+
+    Full-day observations create millions of these values. Keep subclass
+    handling on dataclasses.replace so extensions retain their concrete type
+    and extra fields. Random draws and arithmetic remain in the caller.
+    """
+    if type(train) is not TrainState:
+        return _updated(train, predicted_arrival_s=arrival_s, onboard_load=load)
+    return TrainState(
+        train.train_id,
+        train.line_id,
+        train.next_platform_id,
+        arrival_s,
+        train.scheduled_departure_s,
+        train.delay_s,
+        load,
+        train.capacity,
+    )

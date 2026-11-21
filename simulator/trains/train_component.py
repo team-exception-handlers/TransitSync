@@ -19,6 +19,7 @@ All event times, dwell durations and separation gaps are simulation seconds.
 import math
 from collections import defaultdict, deque
 from collections.abc import Mapping, Sequence
+from functools import lru_cache
 from types import MappingProxyType
 from typing import Any
 
@@ -100,6 +101,10 @@ class TrainComponent:
             raise ValueError("Minimum gap must be finite and positive")
         self.minimum_gap_s = float(minimum_gap_s)
         self.trains: dict[str, Train] = {}
+        # Frozen snapshots with identical fields can be shared safely between
+        # observations. Scope this bounded value cache to this run, so a new
+        # scenario never inherits live state or warmed result-cache entries.
+        self._state_snapshot = lru_cache(maxsize=8192, typed=True)(TrainState)
         self._schedules: dict[str, tuple[tuple[ScheduledStop, ...], ...]] = {}
         self._visits: dict[str, list[Visit]] = defaultdict(list)
         self.suspensions = tuple(suspensions)
@@ -367,21 +372,29 @@ class TrainComponent:
         no next stop, while its identity and final onboard load remain available.
         Passenger movements therefore reach controller observations immediately.
         """
+        load = (train.current_delay, train.onboard_load, train.capacity)
+        if train.id in self._finished:
+            # Completed vehicles still appear in observations and consume the
+            # same prediction draws; only obsolete stop lookups are avoided.
+            return self._state_snapshot(
+                train.id, train.line_id, None, None, None, *load
+            )
         visit = (train.id, train.current_trip_index, train.current_stop_index)
         if visit in self._at_platform[self._stop(visit).platform_id]:
             # A dwelling train's next stop is the following one in its trip
             visit = (*visit[:2], visit[2] + 1)
-        load = (train.current_delay, train.onboard_load, train.capacity)
         trip = self._schedules[train.id][visit[1]]
-        if train.id in self._finished or visit[2] >= len(trip):
-            return TrainState(train.id, train.line_id, None, None, None, *load)
+        if visit[2] >= len(trip):
+            return self._state_snapshot(
+                train.id, train.line_id, None, None, None, *load
+            )
         stop = trip[visit[2]]
         # The arrival the simulator already planned, else timetable + delay
         arrival_s = self._ready_arrivals.get(
             visit, stop.arrival_s + train.current_delay
         )
         next_stop = (stop.platform_id, arrival_s, stop.departure_s)
-        return TrainState(train.id, train.line_id, *next_stop, *load)
+        return self._state_snapshot(train.id, train.line_id, *next_stop, *load)
 
     def platform_states(self) -> tuple[PlatformState, ...]:
         """Copy waiting counts and last departures per platform (#38)."""
