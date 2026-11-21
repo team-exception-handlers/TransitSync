@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 import { PlaybackTimeline } from "./components/PlaybackTimeline";
 import { StationCanvas } from "./components/station-canvas";
 import { ConnectionSelector } from "./components/connection-selector";
+import { ProvenanceBadge } from "./components/provenance-badge";
 import { connectionRuns } from "./data/connection-runs";
 import { stationViewData } from "./data/stationViewData";
 import { SimulationClock } from "./components/simulation-clock";
@@ -188,6 +189,8 @@ export default function App({
         </div>
 
         <ConnectionSelector />
+        {/* The connections come from the published GTFS schedule, the one source with a link (#313). */}
+        <ProvenanceBadge parameterKey="connection_id" provenance={provenance.connection_id} />
       </header>
 
       {/* APPLICATION WORKSPACE */}
