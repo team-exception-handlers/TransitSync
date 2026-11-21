@@ -235,3 +235,26 @@ def test_perfect_information_shows_no_gap_in_the_decision_estimates(monkeypatch)
     ]
     assert pairs
     assert all(pair["seen"] == pair["true"] for pair in pairs)
+
+
+@pytest.mark.parametrize(
+    ("preset", "expected_time", "expected_magnitude"),
+    [
+        ("platform_delay", 90.0, 75.0),
+        ("line_suspension", 90.0, 75.0),
+        ("uneven_headways", 90.0, 75.0),
+    ],
+)
+def test_disruption_presets_validate_custom_time_and_magnitude(
+    preset: str, expected_time: float, expected_magnitude: float
+) -> None:
+    """Every preset accepts the shared time and magnitude controls."""
+    request = simulation_run.SimulationRunRequest(
+        connection_id="mcgill-rem-green",
+        disruption_preset=preset,
+        disruption_time_s=expected_time,
+        disruption_magnitude=expected_magnitude,
+    )
+
+    assert request.disruption_time_s == expected_time
+    assert request.disruption_magnitude == expected_magnitude

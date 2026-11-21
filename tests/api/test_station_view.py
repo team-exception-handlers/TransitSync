@@ -14,6 +14,7 @@ from api.station_view import (
     _estimate_records,
     _mode_switch_records,
     _rule_check,
+    _time_series_records,
 )
 from simulator.control.decision_audit import (
     KIND_ESTIMATES,
@@ -186,3 +187,35 @@ def test_rule_check_passes_a_run_within_its_limits() -> None:
     check = _rule_check([LONG_HOLD], OperatingRulesConfig())
 
     assert check.model_dump() == {"passed": True, "violations": []}
+def test_time_series_assigns_wait_delay_and_holds_to_full_horizon() -> None:
+    """A terminal event at 420 s belongs in bucket [300,600), with holds marked."""
+    event_records = [
+        {
+            "event_type": "passenger_arrival",
+            "passenger_id": "P1",
+            "platform_id": "green_mcgill_0",
+            "time_s": 360.0,
+        },
+        {
+            "event_type": "boarding",
+            "passenger_id": "P1",
+            "platform_id": "green_mcgill_0",
+            "time_s": 420.0,
+        },
+        {
+            "event_type": "hold",
+            "train_id": "T1",
+            "station_id": "32",
+            "platform_id": "rem_mcgill_0",
+            "time_s": 300.0,
+            "applied_s": 45.0,
+        },
+    ]
+
+    series = _time_series_records(event_records, [], 601.0, SHOWN)
+
+    assert len(series["buckets"]) == 3
+    assert series["buckets"][1]["average_passenger_delay_s"] == 60.0
+    assert series["buckets"][1]["passenger_count"] == 1
+    assert series["buckets"][2]["average_passenger_delay_s"] == 0.0
+    assert [hold["time_s"] for hold in series["hold_events"]] == [300.0]

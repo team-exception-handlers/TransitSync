@@ -61,6 +61,7 @@ from simulator.passengers.platform_queue import PlatformQueue
 from simulator.scenario import Scenario, load_scenario_file
 from simulator.timetable import ScheduledVisit
 from simulator.trains.disruption import DelayInjection
+from simulator.trains.suspension import LineSuspension
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
 
@@ -119,6 +120,15 @@ class SimulationRunRequest(BaseModel):
     )
     passenger_flow: Literal["Low", "Normal", "High"] = "Normal"
     disruption_enabled: bool = Field(default=False, strict=True)
+    disruption_preset: Literal[
+        "none", "platform_delay", "line_suspension", "uneven_headways"
+    ] = "none"
+    disruption_time_s: float = Field(
+        default=120.0, ge=0, allow_inf_nan=False, strict=True
+    )
+    disruption_magnitude: float = Field(
+        default=60.0, gt=0, allow_inf_nan=False, strict=True
+    )
 
     irregularity_threshold: float | None = Field(
         default=None, ge=0, allow_inf_nan=False, strict=True
@@ -472,6 +482,7 @@ def _build_train_component(
         trains,
         minimum_gap_s=scenario.operating_rules.min_safe_gap,
         delay_injections=_delay_injections(connection, request),
+        suspensions=_line_suspensions(request),
         passenger_queue=PlatformQueue(
             (route.connecting_platform_id,), passengers=transfers.passengers
         ),
@@ -483,23 +494,35 @@ def _build_train_component(
 def _delay_injections(
     connection: Connection, request: SimulationRunRequest
 ) -> tuple[DelayInjection, ...]:
-    """Apply the demo's 60-second delay to the selected REM feeder if enabled.
+    """Build a platform delay from the legacy toggle or the preset picker.
 
-    The injection is scheduled at 120 seconds of relative simulation time.
+    The legacy boolean remains accepted for older clients. It is equivalent
+    to a 60-second platform delay starting at 120 seconds.
     """
-    # Collected in a list and converted once, so every path returns the same
-    # kind of value: a sequence of injections that may be empty.
     injections = []
-    if request.disruption_enabled:
+    platform_delay = request.disruption_preset == "platform_delay" or (
+        request.disruption_preset == "none" and request.disruption_enabled
+    )
+    if platform_delay:
         injections.append(
             DelayInjection(
                 disruption_id="demo-rem-delay",
-                time_s=120,
-                delay_s=60,
+                time_s=request.disruption_time_s,
+                delay_s=request.disruption_magnitude,
                 platform_id=connection.from_platform_id,
             )
         )
     return tuple(injections)
+
+
+def _line_suspensions(
+    request: SimulationRunRequest,
+) -> tuple[LineSuspension, ...]:
+    """Create the selected line-suspension interval, in seconds."""
+    if request.disruption_preset != "line_suspension":
+        return ()
+    end_s = request.disruption_time_s + request.disruption_magnitude
+    return (LineSuspension("green", request.disruption_time_s, end_s),)
 
 
 def _build_trains(

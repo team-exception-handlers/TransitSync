@@ -33,6 +33,7 @@ import { RunSettingsPanel } from "./components/run-settings-panel";
 import { RunSummary } from "./components/run-summary";
 import { PlaybackControls } from "./components/playback-controls";
 import { SpeedSelector } from "./components/speed-selector";
+import { DelayChart } from "./components/DelayChart";
 import { usePlaybackStore, type RunStatus } from "./store/usePlaybackStore";
 
 // Built once per page load. Without VITE_API_URL the app stays on its bundled
@@ -223,6 +224,9 @@ export default function App({
             <SpeedSelector />
 
           </section>
+
+          {/* RESULTS */}
+          <DelayChart />
 
           {/* RUN SETTINGS */}
           <RunSettingsPanel runner={scenarioRunner} />

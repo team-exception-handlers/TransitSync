@@ -135,16 +135,17 @@ describe("run settings controls", () => {
     expect(pressed()).toStrictEqual(["High"]);
   });
 
-  it("stores the disruption switch, off by default", () => {
+  it("stores the disruption preset, none by default", () => {
     render(<RunSettingsPanel runner={null} />);
-    const on = screen.getByRole("button", { name: "On" });
-    expect(on.getAttribute("aria-pressed")).toBe("false");
+    const none = screen.getByRole("button", { name: "None" });
+    const delay = screen.getByRole("button", { name: "Platform delay" });
+    expect(none.getAttribute("aria-pressed")).toBe("true");
 
-    fireEvent.click(on);
+    fireEvent.click(delay);
 
     expect(draft().disruption_enabled).toBe(true);
-    expect(on.getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: "Off" }).getAttribute("aria-pressed")).toBe("false");
+    expect(draft().disruption_preset).toBe("platform_delay");
+    expect(delay.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("opens and closes the maximum hold help note", () => {
@@ -165,7 +166,7 @@ describe("run settings controls", () => {
     fireEvent.change(slider(/Maximum hold/), { target: { value: "60" } });
     fireEvent.change(slider(/Error magnitude/), { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: "High" }));
-    fireEvent.click(screen.getByRole("button", { name: "On" }));
+    fireEvent.click(screen.getByRole("button", { name: "Platform delay" }));
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
 
     expect(draft()).toStrictEqual(DEFAULT_RUN_SETTINGS);
@@ -235,7 +236,7 @@ describe("Run scenario through the API client", () => {
     fireEvent.change(slider(/Maximum hold/), { target: { value: "60" } });
     fireEvent.change(slider(/Error magnitude/), { target: { value: "0" } });
     fireEvent.click(screen.getByRole("button", { name: "High" }));
-    fireEvent.click(screen.getByRole("button", { name: "On" }));
+    fireEvent.click(screen.getByRole("button", { name: "Platform delay" }));
     fireEvent.click(runButton());
 
     await waitFor(() => expect(screen.getByRole("status").textContent)
@@ -248,6 +249,9 @@ describe("Run scenario through the API client", () => {
       error_magnitude: 0,
       passenger_flow: "High",
       disruption_enabled: true,
+      disruption_preset: "platform_delay",
+      disruption_time_s: 120,
+      disruption_magnitude: 60,
       irregularity_threshold: 0.25,
     });
     expect(usePlaybackStore.getState().data?.duration_s).toBe(600);
@@ -257,7 +261,7 @@ describe("Run scenario through the API client", () => {
     expect(summary.textContent).toContain("Irregularity threshold0.25");
     expect(summary.textContent).toContain("Error magnitude0.0 · upper bound (perfect information)");
     expect(summary.textContent).toContain("Passenger flowHigh");
-    expect(summary.textContent).toContain("DisruptionOn");
+    expect(summary.textContent).toContain("DisruptionPlatform delay");
   });
 
   it("shows no settings summary for mock playback", () => {
