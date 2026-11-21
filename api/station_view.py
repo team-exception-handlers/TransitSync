@@ -11,6 +11,7 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.passenger_outcomes import PassengerOutcome, build_passenger_outcomes
 from api.passenger_tracks import build_passenger_tracks
 from api.station_layout import (
     Connection,
@@ -229,6 +230,7 @@ class SimulationRunResponse(StationLayoutResponse):
     start_clock_s: float = Field(ge=0, allow_inf_nan=False)
     duration_s: float = Field(gt=0, allow_inf_nan=False)
     passenger_tracks: list[PassengerTrackResponse]
+    passenger_outcomes: list[PassengerOutcome] = Field(default_factory=list)
     train_events: list[TrainMovementResponse]
     decisions: list[DecisionResponse]
     # Empty for every strategy except adaptive. Added without a schema bump
@@ -266,6 +268,7 @@ def build_station_view_response(
         schema_version=1,
         start_clock_s=scenario_start_clock_s(scenario),
         duration_s=float(scenario.duration_s),
+        passenger_outcomes=build_passenger_outcomes(event_records, connection),
         passenger_tracks=build_passenger_tracks(
             event_records,
             transfers,

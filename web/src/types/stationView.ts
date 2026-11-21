@@ -79,6 +79,20 @@ export interface PassengerTrack {
     samples: PassengerSample[];
 }
 
+export interface PassengerOutcome {
+    passenger_id: string;
+    connection_id: string;
+    alighting_s: number;
+    platform_arrival_s: number | null;
+    missed_train_ids: string[];
+    boarded_train_id: string | null;
+    boarding_s: number | null;
+    departure_s: number | null;
+    transfer_time_s: number | null;
+    delay_s: number | null;
+    status: "made" | "missed" | "pending";
+}
+
 export interface TrainMovementEvent {
     event_type: "train_arrival" | "train_departure";
     train_id: string;
@@ -149,5 +163,6 @@ export interface PassengerMovement {
 export interface StationViewData
     extends Omit<MockInterchangeData, "platform_layouts"> {
     platforms: Platform[];
+    passenger_outcomes?: PassengerOutcome[];
     passengers: PassengerMovement[]; // Derived movement data included
 }
