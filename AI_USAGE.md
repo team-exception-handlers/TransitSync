@@ -31,6 +31,11 @@ Batch prediction-error draws without changing their sequence (#395): Codex (Open
 Files: simulator/control/prediction_error.py, tests/simulator/control/test_prediction_copy.py.
 - **Verification:** compare full snapshots and the next 16 random values with the original scalar interface, across three seeds, four network sizes and three error magnitudes. Repeated snapshots cover draw boundaries; custom streams and dataclass subclasses retain their fallback paths
 
+Reuse fixed candidate positions and grid decisions (#61, #62, #395): Codex (OpenAI), 50% or more AI-generated; no PR opened.
+Files: simulator/control/downstream.py, simulator/control/rolling_horizon.py,
+tests/simulator/control/test_prepared_forecasts.py.
+- **Verification:** ordered, reordered and incomplete candidate lists agree with the standalone downstream evaluator. Five captured production plans retain their original complete digest and all 41,401 evaluations; seeded event and audit regressions remain unchanged
+
 Performance integration with passenger comparisons and charts (#395, #241): Codex (OpenAI), 50% or more AI-generated; no PR opened.
 Files: api/simulation_run.py, api/station_view.py, tests/api/test_audit_streaming.py,
 tests/api/test_performance_integration.py.

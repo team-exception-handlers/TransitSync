@@ -105,6 +105,7 @@ def prepare_projection(
         v for v in observation.future_visits if v.arrival_s <= end_s or v.arrived
     )
     by_key, trains, platforms, order = _visit_order(visits)
+    keys = tuple(v.key for v in visits)
     last_departures = {p.platform_id: p.last_departure_s for p in observation.platforms}
     lines = {t.train_id: t.line_id for t in observation.trains}
     memo = {key: {} for key in order}
@@ -138,7 +139,7 @@ def prepare_projection(
                     lines,
                 )
             projected[key] = memo[key][boundary]
-        return tuple(projected[v.key] for v in visits)
+        return tuple(projected[key] for key in keys)
 
     return project
 
@@ -258,15 +259,18 @@ def evaluate_downstream(
     return DownstreamCost(onboard_ps, waiting_ps)
 
 
-def prepare_downstream(baseline, observation, weights, end_s):
+def prepare_downstream(baseline, observation, weights, end_s, *, ordered=False):
     """Prepare invariant cost inputs once for one decision's candidate search.
 
     Cache each train's marginal contributions independently: its carried delay
     depends only on its own projected departures, holds and fixed recovery.
     Summation still follows the original visit order, without regrouping sums
-    that could change floating-point scores or tie-breaking.
+    that could change floating-point scores or tie-breaking. The planner's
+    ordered projection permits fixed tuple positions; external candidates
+    retain key lookup and support incomplete or reordered lists.
     """
     by_train = defaultdict(list)
+    positions = {p.visit.key: i for i, p in enumerate(baseline)}
     for base in sorted(baseline, key=lambda p: p.visit.key):
         by_train[base.visit.train_id].append(base)
     loads = {t.train_id: t.onboard_load for t in observation.trains}
@@ -292,25 +296,31 @@ def prepare_downstream(baseline, observation, weights, end_s):
             by_train[train_id], timings, loads.get(train_id, 0), weights, end_s
         )
 
+    train_positions = tuple(
+        (train_id, tuple(positions[p.visit.key] for p in visits))
+        for train_id, visits in by_train.items()
+    )
+    service_positions = tuple((base, positions[base.visit.key]) for base in services)
+
     def evaluate(candidate):
-        proposed = {p.visit.key: p for p in candidate}
-        onboard_ps = 0.0
-        for train_id, visits in by_train.items():
-            timings = tuple(
-                (proposed[p.visit.key].departure_s, proposed[p.visit.key].hold_s)
-                for p in visits
-                if p.visit.key in proposed
-            )
-            if len(timings) != len(visits):
-                # The public evaluator also accepts incomplete candidate lists.
+        if not ordered:
+            proposed = {p.visit.key: p for p in candidate}
+            if any(base.visit.key not in proposed for base in baseline):
+                # Public callers may omit visits or supply a different order.
                 return evaluate_downstream(
                     baseline, candidate, observation, weights, end_s
                 )
+            candidate = tuple(proposed[base.visit.key] for base in baseline)
+        onboard_ps = 0.0
+        for train_id, indices in train_positions:
+            timings = tuple(
+                (candidate[i].departure_s, candidate[i].hold_s) for i in indices
+            )
             for contribution in train_costs(train_id, timings):
                 onboard_ps += contribution
         waiting_ps = 0.0
-        for base in services:
-            projected = proposed[base.visit.key]
+        for base, index in service_positions:
+            projected = candidate[index]
             delay = _added_delay(base, projected, end_s)
             waiting_ps += (
                 waiting.get(base.visit.platform_id, 0) * delay * weights.w_wait

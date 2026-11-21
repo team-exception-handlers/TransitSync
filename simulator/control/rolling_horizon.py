@@ -111,11 +111,19 @@ class RollingHorizonPlanner:
             observation,
             trains=tuple(t for t in observation.trains if t.train_id in train_ids),
         )
-        downstream_cost = prepare_downstream(baseline, scoring, self.weights, end_s)
+        downstream_cost = prepare_downstream(
+            baseline, scoring, self.weights, end_s, ordered=True
+        )
         # Candidate grids revisit identical local values and projected visits.
         # Cache only pure results within this decision, retaining arithmetic
         # order and bounded storage; later observations always start fresh.
         value_hold = lru_cache(maxsize=8192)(evaluate_hold)
+        # Fixed grid choices occur in thousands of combinations. Construct
+        # each immutable decision once instead of once per scored candidate.
+        grid_decisions = tuple(
+            {h: PlannedDecision(p, h) for h in grid}
+            for p, grid in zip(points, choices, strict=True)
+        )
 
         @lru_cache(maxsize=8192)
         def shift(visit, due_s, hold_s):
@@ -123,7 +131,7 @@ class RollingHorizonPlanner:
 
         def evaluate(holds):
             decisions = tuple(
-                PlannedDecision(p, h) for p, h in zip(points, holds, strict=True)
+                grid[h] for grid, h in zip(grid_decisions, holds, strict=True)
             )
             return self._evaluate_plan(
                 decisions,

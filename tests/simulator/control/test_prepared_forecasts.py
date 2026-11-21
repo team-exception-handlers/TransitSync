@@ -31,12 +31,20 @@ def test_prepared_candidates_match_standalone_costs(first, second, end_s):
     baseline = project({})
     weights = BreakEvenWeights(w_wait=1.3, w_onboard=0.7)
     score = prepare_downstream(baseline, observation, weights, end_s)
+    ordered_score = prepare_downstream(
+        baseline, observation, weights, end_s, ordered=True
+    )
     for hold in (first, second, first):
         holds = {("A", 0, 0): hold}
         candidate = project(holds)
         assert candidate == project_visits(observation, holds, end_s)
         assert score(candidate) == evaluate_downstream(
             baseline, candidate, observation, weights, end_s
+        )
+        assert ordered_score(candidate) == score(candidate)
+        assert score(candidate[::-1]) == score(candidate)
+        assert score(candidate[:-1]) == evaluate_downstream(
+            baseline, candidate[:-1], observation, weights, end_s
         )
 
 
