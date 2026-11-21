@@ -12,6 +12,9 @@
 import { useEffect, useId, useRef } from "react";
 import {
   ERROR_MAGNITUDE_RANGE,
+  DISRUPTION_MAGNITUDE_RANGE,
+  DISRUPTION_PRESETS,
+  DISRUPTION_TIME_RANGE,
   MAX_HOLD_RANGE,
   PASSENGER_FLOWS,
   STRATEGY_OPTIONS,
@@ -19,8 +22,8 @@ import {
   formatErrorMagnitude,
   formatSeconds,
   formatThreshold,
-  formatToggle,
 } from "../lib/run-settings";
+import type { DisruptionPreset } from "../types/runSettings";
 import type { ScenarioRunner } from "../lib/simulation-api";
 import type { ParameterProvenanceMap } from "../types/provenance";
 import { usePlaybackStore } from "../store/usePlaybackStore";
@@ -33,7 +36,15 @@ import "./run-settings.css";
 const ERROR_MAGNITUDE_HELP =
   "How wrong the strategy's predictions are. At 0 it decides on the true values, "
   + "which gives the best result that strategy can reach.";
-const DISRUPTION_HELP = "Delays the arriving REM train by 60 seconds, two minutes into the run.";
+const DISRUPTION_HELP =
+  "None leaves a baseline run. Platform delay delays the feeder train; line suspension "
+  + "halts Green line dispatch; uneven headways vary dispatch gaps.";
+const DISRUPTION_LABELS: Record<DisruptionPreset, string> = {
+  none: "None",
+  platform_delay: "Platform delay",
+  line_suspension: "Line suspension",
+  uneven_headways: "Uneven headways",
+};
 // Wording from the Scenario setup mockup's help popover.
 const MAX_HOLD_HELP =
   "The longest any train may wait for transfers, whatever the strategy asks for.";
@@ -158,14 +169,33 @@ export function RunSettingsPanel({ runner, provenance }: Readonly<RunSettingsPan
           <SettingChoice label="Passenger flow" options={PASSENGER_FLOWS}
             value={draft.passenger_flow} format={(flow) => flow}
             onChange={(flow) => update({ passenger_flow: flow })} />
-          <ProvenanceBadge parameterKey="passenger_flow" label="Passenger flow"
+                    <ProvenanceBadge parameterKey="passenger_flow" label="Passenger flow"
             provenance={provenance?.passenger_flow} />
-          {/* The API only has an on/off switch; delay and suspension types are not exposed yet. */}
-          <SettingChoice label="Disruption" options={[false, true]}
-            value={draft.disruption_enabled} format={formatToggle} note={DISRUPTION_HELP}
-            onChange={(enabled) => update({ disruption_enabled: enabled })} />
+          <SettingChoice label="Disruption" options={DISRUPTION_PRESETS}
+            value={draft.disruption_preset ?? "none"} format={(preset) => DISRUPTION_LABELS[preset]}
+            note={DISRUPTION_HELP}
+            onChange={(preset) => update({
+              disruption_preset: preset,
+              disruption_enabled: preset === "platform_delay",
+            })} />
           <ProvenanceBadge parameterKey="disruption_enabled" label="Disruption"
             provenance={provenance?.disruption_enabled} />
+          {(draft.disruption_preset ?? "none") !== "none" && (
+            <>
+              <SettingSlider label="Disruption start"
+                value={draft.disruption_time_s ?? 120} range={DISRUPTION_TIME_RANGE}
+                format={formatSeconds}
+                onChange={(value) => update({ disruption_time_s: value })} />
+              <SettingSlider
+                label={(draft.disruption_preset ?? "none") === "line_suspension"
+                  ? "Suspension duration"
+                  : "Disruption magnitude"}
+                value={draft.disruption_magnitude ?? 60}
+                range={DISRUPTION_MAGNITUDE_RANGE}
+                format={formatSeconds}
+                onChange={(value) => update({ disruption_magnitude: value })} />
+            </>
+          )}
         </div>
       </div>
     </section>

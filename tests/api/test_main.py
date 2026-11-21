@@ -33,6 +33,22 @@ def test_health_endpoint_returns_typed_response_and_default_cors_origin(
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
 
 
+def test_health_endpoint_allows_loopback_development_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Allow the 127.0.0.1 Vite origin by the default CORS configuration."""
+    monkeypatch.delenv("TRANSITSYNC_CORS_ORIGINS", raising=False)
+    client = TestClient(create_app())
+
+    response = client.get(
+        "/health",
+        headers={"Origin": "http://127.0.0.1:5173"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+
+
 def test_station_layout_endpoint_serves_map_platforms_and_transfer_edges() -> None:
     """Serve the front-end's McGill coordinates with joined platform metadata.
 

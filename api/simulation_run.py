@@ -47,6 +47,7 @@ from simulator.control.settings import (
 from simulator.control.strategies import STRATEGIES
 from simulator.control.strategies.adaptive import AdaptiveStrategy
 from simulator.control.walking_cdf import ShiftedExponentialCdf
+from simulator.disruptions import get_disruption_preset
 from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import Component, run_scenario
 from simulator.network_config import NetworkConfig
@@ -61,6 +62,8 @@ from simulator.passengers.platform_queue import PlatformQueue
 from simulator.scenario import Scenario, load_scenario_file
 from simulator.timetable import ScheduledVisit
 from simulator.trains.disruption import DelayInjection
+from simulator.trains.spacing import perturb_dispatch_times
+from simulator.trains.suspension import LineSuspension
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
 
@@ -119,6 +122,15 @@ class SimulationRunRequest(BaseModel):
     )
     passenger_flow: Literal["Low", "Normal", "High"] = "Normal"
     disruption_enabled: bool = Field(default=False, strict=True)
+    disruption_preset: Literal[
+        "none", "platform_delay", "line_suspension", "uneven_headways"
+    ] = "none"
+    disruption_time_s: float = Field(
+        default=120.0, ge=0, allow_inf_nan=False, strict=True
+    )
+    disruption_magnitude: float = Field(
+        default=60.0, gt=0, allow_inf_nan=False, strict=True
+    )
 
     irregularity_threshold: float | None = Field(
         default=None, ge=0, allow_inf_nan=False, strict=True
@@ -429,7 +441,13 @@ def _build_train_component(
     Prediction errors use their dedicated named stream for reproducible runs.
     The platform queue and walking estimate both use the connection's metro side.
     """
-    trains = _build_trains(network, scenario, route.connecting_platform_id)
+    trains = _build_trains(
+        network,
+        scenario,
+        route.connecting_platform_id,
+        request,
+        streams,
+    )
     platform_ids = [p.platform_id for p in network.platforms]
     adaptive = scenario.control.strategy == AdaptiveStrategy.name
     if adaptive:
@@ -472,6 +490,7 @@ def _build_train_component(
         trains,
         minimum_gap_s=scenario.operating_rules.min_safe_gap,
         delay_injections=_delay_injections(connection, request),
+        suspensions=_line_suspensions(request, network, connection),
         passenger_queue=PlatformQueue(
             (route.connecting_platform_id,), passengers=transfers.passengers
         ),
@@ -483,27 +502,117 @@ def _build_train_component(
 def _delay_injections(
     connection: Connection, request: SimulationRunRequest
 ) -> tuple[DelayInjection, ...]:
-    """Apply the demo's 60-second delay to the selected REM feeder if enabled.
+    """Build a platform delay from the legacy toggle or the preset picker.
 
-    The injection is scheduled at 120 seconds of relative simulation time.
+    The legacy boolean remains accepted for older clients. It is equivalent
+    to a 60-second platform delay starting at 120 seconds.
     """
-    # Collected in a list and converted once, so every path returns the same
-    # kind of value: a sequence of injections that may be empty.
     injections = []
-    if request.disruption_enabled:
+    platform_delay = request.disruption_preset == "platform_delay" or (
+        request.disruption_preset == "none" and request.disruption_enabled
+    )
+    if platform_delay:
         injections.append(
             DelayInjection(
                 disruption_id="demo-rem-delay",
-                time_s=120,
-                delay_s=60,
+                time_s=request.disruption_time_s,
+                delay_s=request.disruption_magnitude,
                 platform_id=connection.from_platform_id,
             )
         )
     return tuple(injections)
 
 
+def _line_suspensions(
+    request: SimulationRunRequest,
+    network: NetworkConfig,
+    connection: Connection,
+) -> tuple[LineSuspension, ...]:
+    """Create a suspension for the selected metro connection route."""
+    if request.disruption_preset != "line_suspension":
+        return ()
+    connecting_platform = next(
+        (
+            platform
+            for platform in network.platforms
+            if platform.platform_id == connection.to_platform_id
+        ),
+        None,
+    )
+    if connecting_platform is None:
+        raise ValueError(f"Unknown connecting platform: {connection.to_platform_id}")
+    route_ids = tuple(connecting_platform.route_ids)
+    if not route_ids:
+        raise ValueError(
+            f"Connecting platform has no metro route: {connection.to_platform_id}"
+        )
+    end_s = request.disruption_time_s + request.disruption_magnitude
+    return tuple(
+        LineSuspension(route_id, request.disruption_time_s, end_s)
+        for route_id in route_ids
+    )
+
+
+def _nominal_first_departure(
+    active_visits: Sequence[ScheduledVisit],
+    start_clock_s: float,
+) -> float:
+    """Return the first active visit's relative departure in seconds."""
+    first_visit = active_visits[0]
+    return float(_departure_with_dwell(first_visit) - start_clock_s)
+
+
+def _irregular_green_starts(
+    network: NetworkConfig,
+    scenario: Scenario,
+    start_clock_s: float,
+    request: SimulationRunRequest | None,
+    streams: StreamManager | None,
+) -> dict[tuple[str, str], float]:
+    """Perturb Green-line dispatch starts using the named preset level."""
+    if request is None or request.disruption_preset != "uneven_headways":
+        return {}
+    preset = get_disruption_preset("uneven_headways")
+    level = preset.spacing_irregularity_level
+    if level is None:
+        return {}
+    if streams is None:
+        raise ValueError("Uneven headways require a seeded disruptions stream")
+
+    departures = []
+    for trip in network.trips_for_date(scenario.service_date):
+        if trip.route_id != "1":
+            continue
+        active_visits = [
+            visit for visit in trip.visits if visit.departure_s >= start_clock_s
+        ]
+        if active_visits:
+            nominal = _nominal_first_departure(active_visits, start_clock_s)
+            departures.append(((trip.feed_id, trip.trip_id), nominal))
+
+    ordered = sorted(departures, key=lambda item: item[1])
+    nominal_starts = [nominal for _key, nominal in ordered]
+    perturbed_starts = perturb_dispatch_times(
+        nominal_starts,
+        level,
+        streams.get_stream("disruptions"),
+    )
+    return {
+        key: perturbed
+        for (key, _nominal), perturbed in zip(
+            ordered,
+            perturbed_starts,
+            strict=True,
+        )
+    }
+
+
 def _build_trains(
-    network: NetworkConfig, scenario: Scenario, connecting_platform_id: str
+    network: NetworkConfig,
+    scenario: Scenario,
+    connecting_platform_id: str,
+    request: SimulationRunRequest | None = None,
+    streams: StreamManager | None = None,
 ) -> list[Train]:
     """Convert remaining timetable visits to second-based simulation trains.
 
@@ -514,6 +623,13 @@ def _build_trains(
     the connecting platform gets an onward stop (see ``_onward_stop``).
     """
     start_clock_s = scenario_start_clock_s(scenario)
+    irregular_starts = _irregular_green_starts(
+        network,
+        scenario,
+        start_clock_s,
+        request,
+        streams,
+    )
     trains = []
     for trip in network.trips_for_date(scenario.service_date):
         active_visits = [
@@ -532,6 +648,21 @@ def _build_trains(
         )
         if stops[-1].platform_id == connecting_platform_id:
             stops = (*stops, _onward_stop(stops[-1], scenario.duration_s))
+        trip_key = (trip.feed_id, trip.trip_id)
+        if trip.route_id == "1" and trip_key in irregular_starts:
+            nominal_start = _nominal_first_departure(
+                active_visits,
+                start_clock_s,
+            )
+            offset = irregular_starts[trip_key] - nominal_start
+            stops = tuple(
+                replace(
+                    stop,
+                    arrival_s=max(0.0, stop.arrival_s + offset),
+                    departure_s=max(0.0, stop.departure_s + offset),
+                )
+                for stop in stops
+            )
         trains.append(
             Train(
                 id=f"{trip.feed_id}:{trip.trip_id}",

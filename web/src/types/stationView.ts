@@ -79,6 +79,20 @@ export interface PassengerTrack {
     samples: PassengerSample[];
 }
 
+export interface PassengerOutcome {
+    passenger_id: string;
+    connection_id: string;
+    alighting_s: number;
+    platform_arrival_s: number | null;
+    missed_train_ids: string[];
+    boarded_train_id: string | null;
+    boarding_s: number | null;
+    departure_s: number | null;
+    transfer_time_s: number | null;
+    delay_s: number | null;
+    status: "made" | "missed" | "pending";
+}
+
 export interface TrainMovementEvent {
     event_type: "train_arrival" | "train_departure";
     train_id: string;
@@ -86,6 +100,36 @@ export interface TrainMovementEvent {
     platform_id: string;
     time_s: number;
     scheduled_s: number;
+}
+
+export interface DelayBucket {
+    start_s: number;
+    end_s: number;
+    average_passenger_delay_s: number;
+    passenger_count: number;
+}
+
+export interface HoldEvent {
+    time_s: number;
+    train_id: string;
+    station_id: string;
+    platform_id: string;
+    applied_s: number;
+}
+
+export interface TimeSeriesData {
+    start_s: number;
+    end_s: number;
+    bucket_s: number;
+    buckets: DelayBucket[];
+    hold_events: HoldEvent[];
+}
+
+export interface ModeSwitchEvent {
+    time_s: number;
+    train_id: string;
+    from_mode: "connection_protection" | "headway_regulation";
+    to_mode: "connection_protection" | "headway_regulation";
 }
 
 // Raw mock data
@@ -149,5 +193,8 @@ export interface PassengerMovement {
 export interface StationViewData
     extends Omit<MockInterchangeData, "platform_layouts"> {
     platforms: Platform[];
+    passenger_outcomes?: PassengerOutcome[];
     passengers: PassengerMovement[]; // Derived movement data included
+    time_series?: TimeSeriesData;
+    mode_switches?: ModeSwitchEvent[];
 }
