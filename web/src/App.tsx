@@ -190,7 +190,8 @@ export default function App({
 
         <ConnectionSelector />
         {/* The connections come from the published GTFS schedule, the one source with a link (#313). */}
-        <ProvenanceBadge parameterKey="connection_id" provenance={provenance.connection_id} />
+        <ProvenanceBadge parameterKey="connection_id" label="Connection"
+          provenance={provenance.connection_id} />
       </header>
 
       {/* APPLICATION WORKSPACE */}

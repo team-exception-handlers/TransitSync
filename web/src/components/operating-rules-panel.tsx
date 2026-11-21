@@ -16,6 +16,7 @@ import type { ParameterProvenanceMap } from "../types/provenance";
 import { ProvenanceBadge } from "./provenance-badge";
 
 interface OperatingRulesPanelProps {
+  /** Parameter sources from GET /parameters, shown beside each limit. */
   provenance?: ParameterProvenanceMap;
 }
 
@@ -36,6 +37,7 @@ export function OperatingRulesPanel({
           <dd><span>{config.max_hold_time}s</span>{" "}
             <ProvenanceBadge
               parameterKey="max_hold_time"
+              label="Maximum hold"
               provenance={provenance?.max_hold_time}
             /></dd>
         </div>
@@ -44,6 +46,7 @@ export function OperatingRulesPanel({
           <dd><span>{config.min_safe_gap}s</span> {" "}
             <ProvenanceBadge
               parameterKey="min_safe_gap"
+              label="Minimum safe gap"
               provenance={provenance?.min_safe_gap}
             />{" "}<small>Not enforced yet</small></dd>
         </div>

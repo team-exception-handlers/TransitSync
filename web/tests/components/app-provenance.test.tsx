@@ -45,13 +45,16 @@ describe("App parameter provenance", () => {
     }
     expect(screen.getAllByTestId("provenance-max_hold_time")).toHaveLength(2);
     expect(screen.getByTestId("provenance-strategy").textContent).toBe("AssumedStrategy registry");
+    // The badge sits outside the legend, so the radio group's name stays "Strategy"
+    expect(screen.getByRole("group", { name: "Strategy" })).toBeDefined();
     expect(loader).toHaveBeenCalledTimes(1);
   });
 
   it("links the connection picker to its published source", async () => {
     renderApp(vi.fn().mockResolvedValue(PROVENANCE));
 
-    const link = await screen.findByRole("link", { name: "Source link for connection_id: GTFS schedule" });
+    // A readable name, not the raw key, so screen readers don't say "connection underscore id"
+    const link = await screen.findByRole("link", { name: "Source link for Connection: GTFS schedule" });
     expect(link.getAttribute("href")).toBe("https://gtfs.org/");
     expect(screen.getByTestId("provenance-connection_id").textContent).toContain("Published");
   });
