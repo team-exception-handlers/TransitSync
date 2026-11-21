@@ -16,6 +16,7 @@ from api.connection_data import (
     index_connections,
     list_connections,
 )
+from api.passenger_outcomes import PassengerComparison
 from api.settings import Settings
 from api.simulation_run import (
     SimulationRunRequest,
@@ -130,6 +131,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=500, detail="Simulation run failed"
             ) from error
+
+    @application.post("/simulation/passenger-comparison", tags=["simulation"])
+    def compare_passengers(settings: SimulationRunRequest) -> PassengerComparison:
+        """Return cached outcomes for matched settings with and without control."""
+        baseline_settings = settings.model_dump(
+            exclude={"irregularity_threshold", "error_magnitude", "max_hold_time"}
+        )
+        baseline_settings["strategy"] = "no_control"
+        baseline = run_simulation(
+            SimulationRunRequest.model_validate(baseline_settings)
+        ).passenger_outcomes
+        selected = baseline
+        if settings.strategy != "no_control":
+            selected = run_simulation(settings).passenger_outcomes
+        return PassengerComparison(without_holding=baseline, selected_strategy=selected)
 
     @application.get("/parameters", tags=["parameters"])
     def get_parameters():
