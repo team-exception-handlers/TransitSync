@@ -204,6 +204,16 @@ describe("parameter provenance loader", () => {
     expect(() => parseParameterProvenance([])).toThrow();
   });
 
+  it("skips a malformed entry but keeps every other parameter's source", () => {
+    const map = parseParameterProvenance({
+      max_hold_time: "estimated",
+      strategy: { classification: "assumed", source_name: "Strategy registry", source_link: "" },
+    });
+
+    expect(map.max_hold_time).toBeUndefined();
+    expect(map.strategy?.source_name).toBe("Strategy registry");
+  });
+
   it("drops an unknown classification so the badge reads Unspecified", () => {
     const map = parseParameterProvenance({
       walking_speed: { classification: "guessed", source_name: "Field notes", source_link: "" },

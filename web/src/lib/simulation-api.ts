@@ -16,7 +16,7 @@ import type { RunSettings } from "../types/runSettings";
 import type { StationViewData } from "../types/stationView";
 import { buildRunRequest } from "./run-settings";
 import { parseStationViewData } from "./validateStationView";
-import type { ParameterProvenance, ParameterProvenanceMap, } from "../types/provenance";
+import type { ParameterProvenance, ParameterProvenanceMap } from "../types/provenance";
 import { normalizeClassification } from "../types/provenance";
 
 /** Loads one run for a connection ID; the store accepts any function of this shape. */
@@ -286,7 +286,8 @@ function isProvenanceEntryRecord(
 
 /**
  * Validate and normalize the `/parameters` provenance response into a map
- * keyed by parameter name. Throws if the top-level payload is not a JSON object.
+ * keyed by parameter name. Throws if the top-level payload is not a JSON object;
+ * a single malformed entry is skipped instead, so it cannot hide every badge.
  */
 export function parseParameterProvenance(
   payload: unknown,
@@ -297,9 +298,9 @@ export function parseParameterProvenance(
 
   const result: ParameterProvenanceMap = {};
   for (const [key, rawEntry] of Object.entries(payload)) {
-    if (!isProvenanceEntryRecord(rawEntry)) {
-      throw new Error(`Invalid provenance entry for parameter: ${key}`);
-    }
+    // Skip one malformed entry, like an unknown classification: that parameter
+    // reads "Unspecified" while every other badge still shows its source.
+    if (!isProvenanceEntryRecord(rawEntry)) continue;
 
     const entry: ParameterProvenance = {
       classification: normalizeClassification(
