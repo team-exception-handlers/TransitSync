@@ -33,7 +33,7 @@ class WalkingTimeSampler:
             or default_mean <= 0
         ):
             raise ValueError("default_mean must be a finite number > 0")
-        self._stream = stream_manager.get_stream("walking_times")
+        self._streams = stream_manager
         self._default_mean = float(default_mean)
 
     def sample(
@@ -41,6 +41,7 @@ class WalkingTimeSampler:
         size: int | None = None,
         mean: float | None = None,
         min_time: float = 30.0,
+        key: tuple[str | float, ...] = (),
     ) -> float | np.ndarray:
         """Sample walking durations using a shifted exponential distribution.
 
@@ -48,6 +49,8 @@ class WalkingTimeSampler:
             size: Optional sample size or shape.
             mean: Target mean walking duration in seconds (must be finite > min_time).
             min_time: Absolute lower bound floor in seconds (must be finite >= 0).
+            key: What the walks belong to (a transfer group), so paired runs
+                give it the same walks whatever drew before it (#192).
 
         Returns:
             A single float or NumPy array of sampled walking durations.
@@ -77,5 +80,6 @@ class WalkingTimeSampler:
 
         # Shifted exponential scale: scale = mean - min_time
         scale = target_mean - floor_time
-        raw_samples = self._stream.exponential(scale=scale, size=size)
+        stream = self._streams.keyed(*key).get_stream("walking_times")
+        raw_samples = stream.exponential(scale=scale, size=size)
         return floor_time + raw_samples

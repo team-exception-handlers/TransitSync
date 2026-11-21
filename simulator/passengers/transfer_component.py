@@ -136,7 +136,8 @@ class TransferComponent:
         self._generator = PassengerGenerator(stream_manager, id_prefix=id_prefix)
         self._walking_sampler = WalkingTimeSampler(stream_manager)
         self._id_prefix = id_prefix
-        self._next_group = 1
+        # (station, train) -> feeder arrivals so far, to tell repeat visits apart
+        self._feeder_visits: dict[tuple[str, str], int] = {}
         self._walking_routes: dict[str, TransferRoute] = {}
         # passenger_id -> walk still in progress
         self._walks: dict[str, _Walk] = {}
@@ -198,30 +199,38 @@ class TransferComponent:
         route = self._routes.get(key)
         if route is None or event.time_s < route.demand_start_s:
             return
+        # The group belongs to this feeder arrival, not to its place in the
+        # draw order, so a hold elsewhere never changes its draws (#192)
+        visit = (route.station_id, event.train_id)
+        self._feeder_visits[visit] = self._feeder_visits.get(visit, 0) + 1
+        group_key = (*visit, self._feeder_visits[visit])
         passengers = self._generator.generate(
             origin=route.station_id,
             demand_profile=route.demand_profile,
             start_s=self._last_arrival[key],
             end_s=event.time_s,
             transfer_fractions=route.transfer_fractions,
+            key=group_key,
         )
         self._last_arrival[key] = event.time_s
         if passengers:
-            self._release_group(passengers, route, event, scheduler)
+            self._release_group(passengers, route, event, group_key, scheduler)
 
     def _release_group(
         self,
         passengers: list[Passenger],
         route: TransferRoute,
         event: TrainArrival,
+        group_key: tuple[str, str, int],
         scheduler: Scheduler,
     ) -> None:
-        group_id = f"{self._id_prefix}-group-{self._next_group:06d}"
-        self._next_group += 1
+        station_id, train_id, visit = group_key
+        group_id = f"{self._id_prefix}-group-{station_id}-{train_id}-{visit}"
         walks = self._walking_sampler.sample(
             size=len(passengers),
             mean=route.walking_mean_s,
             min_time=route.walking_min_s,
+            key=group_key,
         )
         for passenger, walk_s in zip(passengers, walks, strict=True):
             passenger_id = passenger.passenger_id

@@ -86,6 +86,8 @@ def fixed_component(monkeypatch, walks=(20, 5, 10), routes=None):
         "get_stream",
         lambda name: counts if name == "group_sizes" else get_stream(name),
     )
+    # Groups draw from keyed child managers; keep them on the patched one
+    monkeypatch.setattr(streams, "keyed", lambda *_key: streams)
     component = TransferComponent([route()] if routes is None else routes, streams)
     monkeypatch.setattr(
         component._walking_sampler, "sample", lambda **kwargs: np.array(walks)
@@ -140,7 +142,7 @@ def test_full_group_is_created_at_actual_train_arrival_then_spread_by_walking(
         ("passenger-000000000003", 110),
         ("passenger-000000000001", 120),
     ]
-    assert {e.group_id for e in reached} == {"passenger-group-000001"}
+    assert {e.group_id for e in reached} == {"passenger-group-mcgill-rem-100-1"}
     assert {e.platform_id for e in reached} == {"green"}
     assert all(p.state is PassengerState.WAITING for p in component.passengers.values())
 
@@ -192,7 +194,7 @@ def test_zero_demand_does_not_spend_ids_or_create_a_walk(monkeypatch):
     reached = arrivals(advance(component, scheduler, 200))
     assert means == [60]
     assert reached[0].passenger_id == "passenger-000000000001"
-    assert reached[0].group_id == "passenger-group-000001"
+    assert reached[0].group_id == "passenger-group-mcgill-rem-120-1"
 
 
 def test_overlapping_groups_enter_corridor_in_physical_arrival_order(monkeypatch):
@@ -282,8 +284,8 @@ def test_transfer_arrivals_form_train_linked_pulses_never_a_continuous_rate(
 
     # A constant-rate model would fill the 295-second quiet gap or emit before 100.
     assert [e.time_s for e in reached] == [105, 106, 110, 405, 406, 410]
-    assert [e.group_id for e in reached[:3]] == ["passenger-group-000001"] * 3
-    assert [e.group_id for e in reached[3:]] == ["passenger-group-000002"] * 3
+    assert [e.group_id for e in reached[:3]] == ["passenger-group-mcgill-rem-100-1"] * 3
+    assert [e.group_id for e in reached[3:]] == ["passenger-group-mcgill-rem-400-1"] * 3
 
 
 @settings(max_examples=20)
