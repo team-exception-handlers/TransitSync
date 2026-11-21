@@ -350,6 +350,10 @@ class TrainComponent:
         """Return the strategy's audit records for ``decisions.jsonl`` (#44)."""
         return self.decision.decision_records()
 
+    def encoded_decision_records(self):
+        """Pass immutable encoded estimates directly to the audit log writer."""
+        return self.decision.encoded_decision_records()
+
     def train_states(self) -> tuple[TrainState, ...]:
         """Copy each train's next stop, delay and load for an observation (#38)."""
         return tuple(

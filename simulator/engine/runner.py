@@ -260,14 +260,14 @@ def _manifest_record(
     return manifest
 
 
-def _decision_records(components: Sequence[Component]) -> list[dict[str, Any]]:
+def _decision_records(components: Sequence[Component]):
     """Collect audit records in component order, so the file is reproducible."""
-    return [
-        record
-        for component in components
-        if isinstance(component, DecisionAuditSource)
-        for record in component.decision_records()
-    ]
+    for component in components:
+        if isinstance(component, DecisionAuditSource):
+            records = getattr(
+                component, "encoded_decision_records", component.decision_records
+            )
+            yield from records()
 
 
 def _get_code_version() -> str:
