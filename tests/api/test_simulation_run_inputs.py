@@ -17,6 +17,8 @@ from fastapi.testclient import TestClient
 
 import api.simulation_run as simulation_run
 from api.main import create_app
+from api.network_data import load_reference_network
+from api.station_layout import load_station_layouts
 from simulator.control.observation_builder import ObservationBuilder
 from simulator.control.strategies import STRATEGIES
 from simulator.engine.random_streams import StreamManager
@@ -258,3 +260,99 @@ def test_disruption_presets_validate_custom_time_and_magnitude(
 
     assert request.disruption_time_s == expected_time
     assert request.disruption_magnitude == expected_magnitude
+
+
+def test_uneven_headways_perturbs_green_line_dispatch_times(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The uneven preset uses the seeded spacing disruption on Green route 1."""
+    monkeypatch.setattr(simulation_run, "scenario_start_clock_s", lambda _: START_S)
+    green_one = SimpleNamespace(
+        feed_id="stm",
+        trip_id="green-one",
+        route_id="1",
+        visits=(
+            SimpleNamespace(
+                stop_id="32",
+                platform_id="green_mcgill_0",
+                arrival_s=START_S + 60,
+                departure_s=START_S + 90,
+            ),
+        ),
+    )
+    green_two = SimpleNamespace(
+        feed_id="stm",
+        trip_id="green-two",
+        route_id="1",
+        visits=(
+            SimpleNamespace(
+                stop_id="32",
+                platform_id="green_mcgill_0",
+                arrival_s=START_S + 360,
+                departure_s=START_S + 390,
+            ),
+        ),
+    )
+    rem = SimpleNamespace(
+        feed_id="rem",
+        trip_id="rem-one",
+        route_id="S1",
+        visits=(
+            SimpleNamespace(
+                stop_id="MCG",
+                platform_id="rem_mcgill_0",
+                arrival_s=START_S + 120,
+                departure_s=START_S + 150,
+            ),
+        ),
+    )
+    network = SimpleNamespace(trips_for_date=lambda _: (green_one, green_two, rem))
+    scenario = SimpleNamespace(
+        service_date=None,
+        duration_s=DURATION_S,
+    )
+    request = simulation_run.SimulationRunRequest(
+        connection_id="mcgill-rem-green",
+        disruption_preset="uneven_headways",
+    )
+
+    trains = simulation_run._build_trains(
+        network,
+        scenario,
+        "green_mcgill_0",
+        request,
+        StreamManager(42),
+    )
+
+    green_departures = [
+        train.schedule[0].departure_s for train in trains if train.line_id == "1"
+    ]
+    rem_departure = next(
+        train.schedule[0].departure_s for train in trains if train.line_id == "S1"
+    )
+    assert green_departures != [90.0, 390.0]
+    assert rem_departure == 150.0
+
+
+def test_line_suspension_targets_the_connection_metro_route_id() -> None:
+    """The preset suspends route 1, not the display name \"green\"."""
+    layout = load_station_layouts()["mcgill"]
+    connection = next(
+        item for item in layout.connections if item.id == "mcgill-rem-green"
+    )
+    request = simulation_run.SimulationRunRequest(
+        connection_id=connection.id,
+        disruption_preset="line_suspension",
+        disruption_time_s=60,
+        disruption_magnitude=600,
+    )
+
+    suspensions = simulation_run._line_suspensions(
+        request,
+        load_reference_network(),
+        connection,
+    )
+
+    assert [(item.line_id, item.start_s, item.end_s) for item in suspensions] == [
+        ("1", 60.0, 660.0)
+    ]
