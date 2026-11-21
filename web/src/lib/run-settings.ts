@@ -7,7 +7,13 @@
  * here, next to the builder, means the sliders, the store and the request can
  * never disagree about what the API accepts.
  */
-import type { PassengerFlow, RunRequestBody, RunSettings, StrategyName } from "../types/runSettings";
+import type {
+  DisruptionPreset,
+  PassengerFlow,
+  RunRequestBody,
+  RunSettings,
+  StrategyName,
+} from "../types/runSettings";
 
 /** One strategy as shown on a radio card. */
 export interface StrategyOption {
@@ -51,6 +57,16 @@ export const THRESHOLD_RANGE: SettingRange = { min: 0, max: 1, step: 0.05 };
 // The API accepts 0 <= error_magnitude <= 3; one decimal is enough for a demo.
 export const ERROR_MAGNITUDE_RANGE: SettingRange = { min: 0, max: 3, step: 0.1 };
 
+/** User-facing preset choices for disruption injection. */
+export const DISRUPTION_PRESETS: readonly DisruptionPreset[] = [
+  "none",
+  "platform_delay",
+  "line_suspension",
+  "uneven_headways",
+];
+export const DISRUPTION_TIME_RANGE: SettingRange = { min: 0, max: 3300, step: 30 };
+export const DISRUPTION_MAGNITUDE_RANGE: SettingRange = { min: 30, max: 600, step: 30 };
+
 /** Passenger flow levels in the order shown, lowest first. */
 export const PASSENGER_FLOWS: readonly PassengerFlow[] = ["Low", "Normal", "High"];
 
@@ -62,6 +78,9 @@ export const DEFAULT_RUN_SETTINGS: RunSettings = {
   error_magnitude: 1,
   passenger_flow: "Normal",
   disruption_enabled: false,
+  disruption_preset: "none",
+  disruption_time_s: 120,
+  disruption_magnitude: 60,
 };
 
 /**
@@ -99,9 +118,16 @@ export function applyRunSettings(current: RunSettings, patch: Partial<RunSetting
     passenger_flow: PASSENGER_FLOWS.includes(merged.passenger_flow)
       ? merged.passenger_flow
       : current.passenger_flow,
-    disruption_enabled: typeof merged.disruption_enabled === "boolean"
-      ? merged.disruption_enabled
-      : current.disruption_enabled,
+    disruption_preset: DISRUPTION_PRESETS.includes(merged.disruption_preset as DisruptionPreset)
+      ? merged.disruption_preset
+      : current.disruption_preset,
+    disruption_time_s: snapToRange(
+      merged.disruption_time_s, DISRUPTION_TIME_RANGE, current.disruption_time_s),
+    disruption_magnitude: snapToRange(
+      merged.disruption_magnitude, DISRUPTION_MAGNITUDE_RANGE, current.disruption_magnitude),
+    disruption_enabled: merged.disruption_preset === "platform_delay"
+      || (typeof merged.disruption_enabled === "boolean"
+        && merged.disruption_enabled),
   };
 }
 
@@ -150,6 +176,9 @@ export function buildRunRequest(connectionId: string, settings: RunSettings): Ru
     error_magnitude: settings.error_magnitude,
     passenger_flow: settings.passenger_flow,
     disruption_enabled: settings.disruption_enabled,
+    disruption_preset: settings.disruption_preset ?? "none",
+    disruption_time_s: settings.disruption_time_s ?? 120,
+    disruption_magnitude: settings.disruption_magnitude ?? 60,
   };
   if (settings.strategy === "adaptive") {
     body.irregularity_threshold = settings.irregularity_threshold;

@@ -13,12 +13,15 @@ from api.station_view import (
     ModeSwitchResponse,
     _estimate_records,
     _mode_switch_records,
+    _rule_check,
+    _time_series_records,
 )
 from simulator.control.decision_audit import (
     KIND_ESTIMATES,
     KIND_HOLD_SEARCH,
     KIND_MODE_SWITCH,
 )
+from simulator.control.settings import OperatingRulesConfig
 
 SHOWN = {"rem_mcgill_0", "green_mcgill_0"}
 
@@ -156,3 +159,65 @@ def test_estimates_are_kept_only_for_shown_decisions_and_cut_to_the_held_train()
 def test_no_decisions_means_no_estimates():
     """No control holds nobody, so even recorded estimates are not returned."""
     assert _estimate_records([_estimates(120.0, "T1", "green_mcgill_0")], []) == []
+
+
+# A 150 s hold at t = 900 s, as a hold event appears in events.jsonl.
+LONG_HOLD = {
+    "event_type": "hold",
+    "time_s": 900.0,
+    "train_id": "T1",
+    "applied_s": 150.0,
+}
+
+
+def test_rule_check_uses_the_run_maximum_hold_not_the_default() -> None:
+    """A run limited to 120 s fails on a 150 s hold that 300 s would allow."""
+    check = _rule_check([LONG_HOLD], OperatingRulesConfig(max_hold_time=120.0))
+
+    assert check.passed is False
+    (violation,) = check.violations
+    assert violation.rule == "max_hold_exceeded"
+    assert violation.subject_id == "T1"
+    assert violation.time_s == pytest.approx(900.0)
+    assert "exceeds max 120.0s" in violation.message
+
+
+def test_rule_check_passes_a_run_within_its_limits() -> None:
+    """The same hold is within the default 300 s maximum, so nothing is reported."""
+    check = _rule_check([LONG_HOLD], OperatingRulesConfig())
+
+    assert check.model_dump() == {"passed": True, "violations": []}
+
+
+def test_time_series_assigns_wait_delay_and_holds_to_full_horizon() -> None:
+    """A terminal event at 420 s belongs in bucket [300,600), with holds marked."""
+    event_records = [
+        {
+            "event_type": "passenger_arrival",
+            "passenger_id": "P1",
+            "platform_id": "green_mcgill_0",
+            "time_s": 360.0,
+        },
+        {
+            "event_type": "boarding",
+            "passenger_id": "P1",
+            "platform_id": "green_mcgill_0",
+            "time_s": 420.0,
+        },
+        {
+            "event_type": "hold",
+            "train_id": "T1",
+            "station_id": "32",
+            "platform_id": "rem_mcgill_0",
+            "time_s": 300.0,
+            "applied_s": 45.0,
+        },
+    ]
+
+    series = _time_series_records(event_records, [], 601.0, SHOWN)
+
+    assert len(series["buckets"]) == 3
+    assert series["buckets"][1]["average_passenger_delay_s"] == 60.0
+    assert series["buckets"][1]["passenger_count"] == 1
+    assert series["buckets"][2]["average_passenger_delay_s"] == 0.0
+    assert [hold["time_s"] for hold in series["hold_events"]] == [300.0]

@@ -9,12 +9,18 @@ import {
   formatErrorMagnitude,
   formatSeconds,
   formatThreshold,
-  formatToggle,
   strategyLabel,
 } from "../lib/run-settings";
 import { usePlaybackStore } from "../store/usePlaybackStore";
 import { useRunSettingsStore } from "../store/useRunSettingsStore";
 import type { RunSettings } from "../types/runSettings";
+
+const DISRUPTION_LABELS: Record<RunSettings["disruption_preset"], string> = {
+  none: "None",
+  platform_delay: "Platform delay",
+  line_suspension: "Line suspension",
+  uneven_headways: "Uneven headways",
+};
 
 /**
  * Label and display text for each setting, in reading order. The threshold
@@ -31,7 +37,7 @@ function summaryRows(settings: RunSettings): [label: string, text: string][] {
   rows.push(
     ["Error magnitude", formatErrorMagnitude(settings.error_magnitude)],
     ["Passenger flow", settings.passenger_flow],
-    ["Disruption", formatToggle(settings.disruption_enabled)],
+    ["Disruption", DISRUPTION_LABELS[settings.disruption_preset ?? "none"]],
   );
   return rows;
 }

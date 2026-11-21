@@ -4,6 +4,19 @@ import { stationViewData } from "../../src/data/stationViewData";
 import { parseStationViewData } from "../../src/lib/validateStationView";
 
 describe("parseStationViewData", () => {
+    it("keeps unfinished passenger outcomes and rejects duplicates", () => {
+        const { passenger_id, connection_id } = stationViewData.passenger_tracks[0];
+        const outcome = {
+            passenger_id, connection_id, alighting_s: 0, platform_arrival_s: null,
+            missed_train_ids: [], boarded_train_id: null, boarding_s: null,
+            departure_s: null, transfer_time_s: null, delay_s: null, status: "pending",
+        };
+        const run = { ...stationViewData, passenger_outcomes: [outcome] };
+        expect(parseStationViewData(run).passenger_outcomes).toEqual([outcome]);
+        expect(() => parseStationViewData({ ...run, passenger_outcomes: [outcome, outcome] }))
+            .toThrow("duplicate passenger outcome");
+    });
+
     it("accepts valid station-view data", () => {
         const result = parseStationViewData(stationViewData);
         expect(result.interchange.id).toBe("mcgill");

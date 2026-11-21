@@ -5,7 +5,10 @@ from urllib.parse import urlsplit
 
 from pydantic import BaseModel, field_validator
 
-DEFAULT_CORS_ORIGINS = ("http://localhost:5173",)
+DEFAULT_CORS_ORIGINS = (
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+)
 
 
 class Settings(BaseModel):

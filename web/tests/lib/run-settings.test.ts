@@ -143,7 +143,7 @@ describe("buildRunRequest", () => {
     const body = buildRunRequest("c", { ...DEFAULT_RUN_SETTINGS, strategy: "adaptive" });
     const sent = Object.keys(body).toSorted((a, b) => a.localeCompare(b));
 
-    expect(backendRequestFields()).toHaveLength(7);
+    expect(backendRequestFields()).toHaveLength(10);
     expect(sent).toStrictEqual(backendRequestFields());
   });
 
@@ -157,6 +157,9 @@ describe("buildRunRequest", () => {
       error_magnitude: 1,
       passenger_flow: "Normal",
       disruption_enabled: false,
+      disruption_preset: "none",
+      disruption_time_s: 120,
+      disruption_magnitude: 60,
     });
     // The API rejects the key even when its value is null, so it must be absent.
     expect("irregularity_threshold" in body).toBe(false);
@@ -168,7 +171,8 @@ describe("buildRunRequest", () => {
       const body = buildRunRequest("c", { ...DEFAULT_RUN_SETTINGS, strategy: name });
 
       expect(Object.keys(body)).toStrictEqual(["connection_id", "strategy", "max_hold_time",
-        "error_magnitude", "passenger_flow", "disruption_enabled"]);
+        "error_magnitude", "passenger_flow", "disruption_enabled", "disruption_preset",
+        "disruption_time_s", "disruption_magnitude"]);
     });
 
   it("includes the threshold as a number for adaptive", () => {
@@ -184,6 +188,9 @@ describe("buildRunRequest", () => {
       error_magnitude: 0,
       passenger_flow: "High",
       disruption_enabled: true,
+      disruption_preset: "none",
+      disruption_time_s: 120,
+      disruption_magnitude: 60,
       irregularity_threshold: 0.4,
     });
   });

@@ -17,6 +17,7 @@ import type {
     StationViewData,
     TrainMovementEvent,
     TransferCorridor,
+    TimeSeriesData,
 } from "../types/stationView";
 
 import { derivePassengerMovements } from "./passengerMovements";
@@ -80,13 +81,40 @@ export function parseStationViewData(
         (connection) => `Invalid connection: ${connection.id}`,
     );
     checkPassengerTracks(data.passenger_tracks, connectionIds, data.duration_s);
+    checkPassengerOutcomes(data);
     checkTrainEvents(data.train_events, data.platforms, data.duration_s);
+    checkTimeSeries(data.time_series, data.duration_s);
 
     // Return the validated data with passengers automatically derived
     return {
         ...data,
         passengers: derivePassengerMovements(data.passenger_tracks),
     };
+}
+
+/** Older runs and mock fixtures can omit the outcome collection. */
+function checkPassengerOutcomes({ passenger_outcomes, passenger_tracks, duration_s }: StationViewData): void {
+    if (passenger_outcomes === undefined) return;
+    if (!Array.isArray(passenger_outcomes)) throw new Error("Invalid passenger outcomes");
+
+    const tracks = new Map(passenger_tracks.map(track => [track.passenger_id, track.connection_id]));
+    const inRun = (time: unknown) => isNonNegativeNumber(time) && time <= duration_s;
+    for (const outcome of passenger_outcomes) {
+        if (!outcome || !tracks.has(outcome.passenger_id) ||
+            tracks.get(outcome.passenger_id) !== outcome.connection_id) {
+            throw new Error("Unknown or duplicate passenger outcome");
+        }
+        tracks.delete(outcome.passenger_id);
+        const times = [outcome.platform_arrival_s, outcome.boarding_s, outcome.departure_s,
+            outcome.transfer_time_s, outcome.delay_s];
+        if (!inRun(outcome.alighting_s) || times.some(time => time !== null && !inRun(time)) ||
+            !["made", "missed", "pending"].includes(outcome.status) ||
+            !Array.isArray(outcome.missed_train_ids) ||
+            outcome.missed_train_ids.some(id => typeof id !== "string") ||
+            (outcome.boarded_train_id !== null && typeof outcome.boarded_train_id !== "string")) {
+            throw new Error("Invalid passenger outcome");
+        }
+    }
 }
 
 /** Check the object itself, its schema version, metadata, map size and that every collection is a list. */
@@ -282,6 +310,52 @@ function checkTrainEvents(
         // train-event station_id equals backend stop_id.
         if (event.station_id !== platform.stop_id) {
             throw new Error(`Station/stop mismatch for ${event.train_id}`);
+        }
+    }
+}
+
+/** Validate optional analysis data without rejecting older mock/catalog payloads. */
+function checkTimeSeries(
+    timeSeries: TimeSeriesData | undefined,
+    duration_s: number,
+): void {
+    if (timeSeries === undefined) return;
+    if (
+        !isNonNegativeNumber(timeSeries.start_s) ||
+        !isNonNegativeNumber(timeSeries.end_s) ||
+        timeSeries.end_s !== duration_s ||
+        !isNonNegativeNumber(timeSeries.bucket_s) ||
+        timeSeries.bucket_s <= 0 ||
+        !Array.isArray(timeSeries.buckets) ||
+        !Array.isArray(timeSeries.hold_events)
+    ) {
+        throw new Error("Invalid time-series data");
+    }
+    let previousEnd = -Infinity;
+    for (const bucket of timeSeries.buckets) {
+        if (
+            !isNonNegativeNumber(bucket.start_s) ||
+            !isNonNegativeNumber(bucket.end_s) ||
+            bucket.start_s < previousEnd ||
+            bucket.end_s > duration_s ||
+            !isNonNegativeNumber(bucket.average_passenger_delay_s) ||
+            !Number.isInteger(bucket.passenger_count) ||
+            bucket.passenger_count < 0
+        ) {
+            throw new Error("Invalid delay bucket");
+        }
+        previousEnd = bucket.end_s;
+    }
+    for (const event of timeSeries.hold_events) {
+        if (
+            !isNonNegativeNumber(event.time_s) ||
+            event.time_s > duration_s ||
+            !isNonNegativeNumber(event.applied_s) ||
+            event.applied_s <= 0 ||
+            typeof event.train_id !== "string" ||
+            typeof event.platform_id !== "string"
+        ) {
+            throw new Error("Invalid hold event");
         }
     }
 }

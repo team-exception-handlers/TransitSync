@@ -8,6 +8,8 @@ import {
   createConnectionCatalogLoader,
   createConnectionRunLoader,
   parseConnectionSummaries,
+  createParameterProvenanceLoader, 
+  parseParameterProvenance
 } from "../../src/lib/simulation-api";
 
 // Minimal Response stand-in: the client only reads ok, status and json().
@@ -175,5 +177,51 @@ describe("createConnectionCatalogLoader", () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, [{ id: "x" }]));
     await expect(createConnectionCatalogLoader("http://api.test", fetchImpl)())
       .rejects.toThrow("Invalid connection summary in catalog response");
+  });
+});
+
+describe("parameter provenance loader", () => {
+  it("parses and normalizes /parameters response", async () => {
+    const mockFetch = async () =>
+      new Response(
+        JSON.stringify({
+          max_hold_time: {
+            classification: "estimated",
+            source_name: "Operational Thresholds",
+            source_link: "https://example.com/docs",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+
+    const load = createParameterProvenanceLoader("http://localhost:8000", mockFetch as typeof fetch);
+    const map = await load();
+    expect(map.max_hold_time?.classification).toBe("estimated");
+    expect(map.max_hold_time?.source_name).toBe("Operational Thresholds");
+  });
+
+  it("rejects non-object provenance payloads", () => {
+    expect(() => parseParameterProvenance([])).toThrow();
+  });
+
+  it("skips a malformed entry but keeps every other parameter's source", () => {
+    const map = parseParameterProvenance({
+      max_hold_time: "estimated",
+      strategy: { classification: "assumed", source_name: "Strategy registry", source_link: "" },
+    });
+
+    expect(map.max_hold_time).toBeUndefined();
+    expect(map.strategy?.source_name).toBe("Strategy registry");
+  });
+
+  it("drops an unknown classification so the badge reads Unspecified", () => {
+    const map = parseParameterProvenance({
+      walking_speed: { classification: "guessed", source_name: "Field notes", source_link: "" },
+      dwell: { classification: " Measured ", source_name: "Counts", source_link: "" },
+    });
+
+    expect(map.walking_speed?.classification).toBeNull();
+    expect(map.walking_speed?.source_name).toBe("Field notes");
+    expect(map.dwell?.classification).toBe("measured");
   });
 });

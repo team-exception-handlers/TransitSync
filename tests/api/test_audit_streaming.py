@@ -13,7 +13,12 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from api.simulation_run import _iter_json_lines, _playback_audit_lines
-from api.station_view import _estimate_records, _mode_switch_records, _playback_audit
+from api.station_view import (
+    _estimate_records,
+    _mode_switch_records,
+    _playback_audit,
+    _time_series_records,
+)
 from tests.api.test_station_view import SHOWN, _estimates, _switch
 
 
@@ -40,6 +45,25 @@ def test_log_reader_defers_decode_errors_until_the_bad_record(tmp_path):
     assert next(records) == {"kind": "estimates"}
     with pytest.raises(json.JSONDecodeError):
         next(records)
+
+
+def test_single_pass_audit_retains_explicit_timeline_holds():
+    """The new chart must retain audit holds after estimate adaptation consumes it."""
+    hold = {
+        "kind": "hold",
+        "time_s": 120.0,
+        "train_id": "T1",
+        "station_id": "32",
+        "platform_id": "green_mcgill_0",
+        "applied_s": 15.0,
+    }
+    records = [_switch(100.0, "rem_mcgill_0", "headway_regulation"), hold]
+    timeline = []
+    _playback_audit(iter(records), [], SHOWN, hold_records=timeline)
+    assert _time_series_records([], timeline, 3600, SHOWN) == _time_series_records(
+        [], records, 3600, SHOWN
+    )
+    assert timeline == [hold]
 
 
 @given(

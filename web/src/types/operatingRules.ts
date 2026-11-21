@@ -22,6 +22,21 @@ export interface OperatingRule {
   description: string;
 }
 
+/** One place where a run broke a rule; mirrors api/station_view.py RuleViolationResponse. */
+export interface RuleViolation {
+  rule: "max_hold_exceeded" | "headway_violation";
+  time_s: number;
+  /** The held train, or the platform with the short gap. */
+  subject_id: string;
+  message: string;
+}
+
+/** The post-run check of a simulated run's event log (#400). */
+export interface RuleCheck {
+  passed: boolean;
+  violations: RuleViolation[];
+}
+
 /** Mirrors OperatingRulesConfig.to_dict() exactly: field names and shape. */
 export interface OperatingRulesConfig {
   max_hold_time: number;
