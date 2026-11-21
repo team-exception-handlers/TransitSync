@@ -88,6 +88,36 @@ export interface TrainMovementEvent {
     scheduled_s: number;
 }
 
+export interface DelayBucket {
+    start_s: number;
+    end_s: number;
+    average_passenger_delay_s: number;
+    passenger_count: number;
+}
+
+export interface HoldEvent {
+    time_s: number;
+    train_id: string;
+    station_id: string;
+    platform_id: string;
+    applied_s: number;
+}
+
+export interface TimeSeriesData {
+    start_s: number;
+    end_s: number;
+    bucket_s: number;
+    buckets: DelayBucket[];
+    hold_events: HoldEvent[];
+}
+
+export interface ModeSwitchEvent {
+    time_s: number;
+    train_id: string;
+    from_mode: "connection_protection" | "headway_regulation";
+    to_mode: "connection_protection" | "headway_regulation";
+}
+
 // Raw mock data
 export interface MockInterchangeData {
     schema_version: 1;
@@ -150,4 +180,6 @@ export interface StationViewData
     extends Omit<MockInterchangeData, "platform_layouts"> {
     platforms: Platform[];
     passengers: PassengerMovement[]; // Derived movement data included
+    time_series?: TimeSeriesData;
+    mode_switches?: ModeSwitchEvent[];
 }

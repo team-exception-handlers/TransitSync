@@ -17,6 +17,7 @@ import type {
     StationViewData,
     TrainMovementEvent,
     TransferCorridor,
+    TimeSeriesData,
 } from "../types/stationView";
 
 import { derivePassengerMovements } from "./passengerMovements";
@@ -81,6 +82,7 @@ export function parseStationViewData(
     );
     checkPassengerTracks(data.passenger_tracks, connectionIds, data.duration_s);
     checkTrainEvents(data.train_events, data.platforms, data.duration_s);
+    checkTimeSeries(data.time_series, data.duration_s);
 
     // Return the validated data with passengers automatically derived
     return {
@@ -282,6 +284,52 @@ function checkTrainEvents(
         // train-event station_id equals backend stop_id.
         if (event.station_id !== platform.stop_id) {
             throw new Error(`Station/stop mismatch for ${event.train_id}`);
+        }
+    }
+}
+
+/** Validate optional analysis data without rejecting older mock/catalog payloads. */
+function checkTimeSeries(
+    timeSeries: TimeSeriesData | undefined,
+    duration_s: number,
+): void {
+    if (timeSeries === undefined) return;
+    if (
+        !isNonNegativeNumber(timeSeries.start_s) ||
+        !isNonNegativeNumber(timeSeries.end_s) ||
+        timeSeries.end_s !== duration_s ||
+        !isNonNegativeNumber(timeSeries.bucket_s) ||
+        timeSeries.bucket_s <= 0 ||
+        !Array.isArray(timeSeries.buckets) ||
+        !Array.isArray(timeSeries.hold_events)
+    ) {
+        throw new Error("Invalid time-series data");
+    }
+    let previousEnd = -Infinity;
+    for (const bucket of timeSeries.buckets) {
+        if (
+            !isNonNegativeNumber(bucket.start_s) ||
+            !isNonNegativeNumber(bucket.end_s) ||
+            bucket.start_s < previousEnd ||
+            bucket.end_s > duration_s ||
+            !isNonNegativeNumber(bucket.average_passenger_delay_s) ||
+            !Number.isInteger(bucket.passenger_count) ||
+            bucket.passenger_count < 0
+        ) {
+            throw new Error("Invalid delay bucket");
+        }
+        previousEnd = bucket.end_s;
+    }
+    for (const event of timeSeries.hold_events) {
+        if (
+            !isNonNegativeNumber(event.time_s) ||
+            event.time_s > duration_s ||
+            !isNonNegativeNumber(event.applied_s) ||
+            event.applied_s <= 0 ||
+            typeof event.train_id !== "string" ||
+            typeof event.platform_id !== "string"
+        ) {
+            throw new Error("Invalid hold event");
         }
     }
 }

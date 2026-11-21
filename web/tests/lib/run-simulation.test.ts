@@ -41,6 +41,9 @@ describe("runSimulation", () => {
       error_magnitude: 1,
       passenger_flow: "High",
       disruption_enabled: false,
+      disruption_preset: "none",
+      disruption_time_s: 120,
+      disruption_magnitude: 60,
       irregularity_threshold: 0.3,
     });
     expect(run.passengers).toHaveLength(stationViewData.passenger_tracks.length);
