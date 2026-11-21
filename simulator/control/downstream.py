@@ -11,6 +11,7 @@ import math
 from collections import defaultdict
 from collections.abc import Mapping
 from dataclasses import dataclass
+from functools import lru_cache
 from graphlib import CycleError, TopologicalSorter
 
 from simulator.control.break_even import BreakEvenWeights
@@ -84,32 +85,89 @@ def project_visits(
     Future holds start only if their projected decision is within the window.
     Raise ValueError for contradictory train/platform order or duplicate visits.
     """
+    return prepare_projection(observation, end_s)(holds)
+
+
+def prepare_projection(
+    observation: ObservationSnapshot, end_s: float, *, validated_holds=False
+):
+    """Prepare one immutable forecast's dependency order for repeated holds.
+
+    The graph, line IDs and departure history cannot change between candidates
+    of one decision. Keep them local to this call, never across observations.
+    Per-visit memoization reuses identical parent arrival/departure boundaries;
+    no hold combination, constraint, or objective calculation is skipped.
+    Each key includes the proposed hold and both parents' timing boundaries.
+    Recovery, occupancy and skipped-departure flags remain fixed visit inputs.
+    """
     end_s = finite_number("projection end_s", end_s, observation.time_s)
-    holds = {
-        key: finite_number("projected hold_s", seconds, 0)
-        for key, seconds in holds.items()
-    }
     visits = tuple(
         v for v in observation.future_visits if v.arrival_s <= end_s or v.arrived
     )
     by_key, trains, platforms, order = _visit_order(visits)
-    projected = {}
     last_departures = {p.platform_id: p.last_departure_s for p in observation.platforms}
     lines = {t.train_id: t.line_id for t in observation.trains}
-    for key in order:
-        visit = by_key[key]
-        prior_train = projected.get(trains.get(key))
-        prior_platform = projected.get(platforms.get(key))
-        arrival = _arrival(visit, prior_train, prior_platform, observation)
-        due = max(observation.time_s, arrival + visit.departure_s - visit.arrival_s)
-        hold = holds.get(key, 0.0) if visit.can_hold and due <= end_s else 0.0
-        departure = _departure(
-            visit, due + hold, prior_platform, last_departures, lines, observation
-        )
-        if visit.skips_departure:
-            due = departure = arrival
-        projected[key] = ProjectedVisit(visit, arrival, due, departure, hold)
-    return tuple(projected[v.key] for v in visits)
+    memo = {key: {} for key in order}
+
+    def project(holds):
+        # Only the planner may supply its already validated HoldSearch grid.
+        # Public project_visits still validates all external hold values.
+        if not validated_holds:
+            holds = {
+                key: finite_number("projected hold_s", seconds, 0)
+                for key, seconds in holds.items()
+            }
+        projected = {}
+        for key in order:
+            prior_train = projected.get(trains.get(key))
+            prior_platform = projected.get(platforms.get(key))
+            boundary = (
+                holds.get(key, 0.0),
+                _boundary(prior_train),
+                _boundary(prior_platform),
+            )
+            if boundary not in memo[key]:
+                memo[key][boundary] = _project_visit(
+                    by_key[key],
+                    prior_train,
+                    prior_platform,
+                    observation,
+                    end_s,
+                    holds.get(key, 0.0),
+                    last_departures,
+                    lines,
+                )
+            projected[key] = memo[key][boundary]
+        return tuple(projected[v.key] for v in visits)
+
+    return project
+
+
+def _boundary(prior):
+    """Only a parent's arrival/departure times affect this fixed child visit."""
+    return None if prior is None else (prior.arrival_s, prior.departure_s)
+
+
+def _project_visit(
+    visit,
+    prior_train,
+    prior_platform,
+    observation,
+    end_s,
+    requested,
+    last_departures,
+    lines,
+):
+    """Apply the unchanged movement rules once for a unique parent boundary."""
+    arrival = _arrival(visit, prior_train, prior_platform, observation)
+    due = max(observation.time_s, arrival + visit.departure_s - visit.arrival_s)
+    hold = requested if visit.can_hold and due <= end_s else 0.0
+    departure = _departure(
+        visit, due + hold, prior_platform, last_departures, lines, observation
+    )
+    if visit.skips_departure:
+        due = departure = arrival
+    return ProjectedVisit(visit, arrival, due, departure, hold)
 
 
 def _arrival(visit, prior_train, prior_platform, observation):
@@ -198,6 +256,81 @@ def evaluate_downstream(
         prior_delays[visit.train_id] = added
     waiting_ps = _waiting_cost(baseline, proposed, observation, weights, end_s)
     return DownstreamCost(onboard_ps, waiting_ps)
+
+
+def prepare_downstream(baseline, observation, weights, end_s):
+    """Prepare invariant cost inputs once for one decision's candidate search.
+
+    Cache each train's marginal contributions independently: its carried delay
+    depends only on its own projected departures, holds and fixed recovery.
+    Summation still follows the original visit order, without regrouping sums
+    that could change floating-point scores or tie-breaking.
+    """
+    by_train = defaultdict(list)
+    for base in sorted(baseline, key=lambda p: p.visit.key):
+        by_train[base.visit.train_id].append(base)
+    loads = {t.train_id: t.onboard_load for t in observation.trains}
+    full = {t.train_id for t in observation.trains if t.onboard_load >= t.capacity}
+    waiting = {p.platform_id: p.waiting_count for p in observation.platforms}
+    served = set()
+    services = []
+    for base in sorted(baseline, key=lambda p: (p.departure_s, p.visit.key)):
+        visit = base.visit
+        if (
+            visit.skips_departure
+            or visit.arrived
+            or visit.train_id in full
+            or visit.platform_id in served
+        ):
+            continue
+        services.append(base)
+        served.add(visit.platform_id)
+
+    @lru_cache(maxsize=8192)
+    def train_costs(train_id, timings):
+        return _train_costs(
+            by_train[train_id], timings, loads.get(train_id, 0), weights, end_s
+        )
+
+    def evaluate(candidate):
+        proposed = {p.visit.key: p for p in candidate}
+        onboard_ps = 0.0
+        for train_id, visits in by_train.items():
+            timings = tuple(
+                (proposed[p.visit.key].departure_s, proposed[p.visit.key].hold_s)
+                for p in visits
+                if p.visit.key in proposed
+            )
+            if len(timings) != len(visits):
+                # The public evaluator also accepts incomplete candidate lists.
+                return evaluate_downstream(
+                    baseline, candidate, observation, weights, end_s
+                )
+            for contribution in train_costs(train_id, timings):
+                onboard_ps += contribution
+        waiting_ps = 0.0
+        for base in services:
+            projected = proposed[base.visit.key]
+            delay = _added_delay(base, projected, end_s)
+            waiting_ps += (
+                waiting.get(base.visit.platform_id, 0) * delay * weights.w_wait
+            )
+        return DownstreamCost(onboard_ps, waiting_ps)
+
+    return evaluate
+
+
+def _train_costs(visits, timings, load, weights, end_s):
+    """Keep per-visit arithmetic and recovery order identical to the baseline."""
+    costs = []
+    prior = 0.0
+    for base, (departure_s, hold_s) in zip(visits, timings, strict=True):
+        added = max(0.0, min(end_s, departure_s) - min(end_s, base.departure_s))
+        carried = max(0.0, prior - base.visit.recovery_s)
+        extra = max(0.0, added - carried - hold_s)
+        costs.append(load * extra * weights.w_onboard)
+        prior = added
+    return tuple(costs)
 
 
 def _added_delay(base, projected, end_s):

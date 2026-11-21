@@ -10,12 +10,13 @@ Task #62 subtracts downstream costs from the joint local objective.
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
+from functools import lru_cache
 from types import MappingProxyType
 from typing import cast
 
 from simulator.control.bounded_search import plan_rank, search_grid
 from simulator.control.break_even import BreakEvenWeights, evaluate_hold
-from simulator.control.downstream import evaluate_downstream, project_visits
+from simulator.control.downstream import prepare_downstream, prepare_projection
 from simulator.control.expected_arrivals import TransferEstimate, total_expected_caught
 from simulator.control.hold_search import HoldSearchSettings
 from simulator.control.interface import ObservationSnapshot
@@ -96,18 +97,45 @@ class RollingHorizonPlanner:
         then lexicographically shorter holds (current decision first).
         """
         end_s = observation.time_s + self.settings.window_s
-        baseline = project_visits(observation, {}, end_s)
+        project = prepare_projection(observation, end_s, validated_holds=True)
+        baseline = project({})
         forecast = _forecast_observation(observation, baseline)
         points = self._points(forecast)
         headways = {p.key: self._headway(p, forecast) for p in points}
         choices = self._choices(points)
+        # Only forecast vehicles participate in candidate movement or costs.
+        # Retain every train in the actual observation/error/audit pipeline;
+        # this smaller read-only view avoids rebuilding full-day load maps.
+        train_ids = {p.visit.train_id for p in baseline}
+        scoring = replace(
+            observation,
+            trains=tuple(t for t in observation.trains if t.train_id in train_ids),
+        )
+        downstream_cost = prepare_downstream(baseline, scoring, self.weights, end_s)
+        # Candidate grids revisit identical local values and projected visits.
+        # Cache only pure results within this decision, retaining arithmetic
+        # order and bounded storage; later observations always start fresh.
+        value_hold = lru_cache(maxsize=8192)(evaluate_hold)
+
+        @lru_cache(maxsize=8192)
+        def shift(visit, due_s, hold_s):
+            return PlannedDecision(replace(visit, departure_s=due_s), hold_s)
 
         def evaluate(holds):
             decisions = tuple(
                 PlannedDecision(p, h) for p, h in zip(points, holds, strict=True)
             )
             return self._evaluate_plan(
-                decisions, observation, headways, baseline, end_s, 0
+                decisions,
+                scoring,
+                headways,
+                baseline,
+                end_s,
+                0,
+                project,
+                value_hold,
+                shift,
+                downstream_cost,
             )
 
         states, count, exact, total = search_grid(
@@ -140,29 +168,38 @@ class RollingHorizonPlanner:
         grid = self.hold_search.candidates()
         return (grid,) * len(points)
 
-    def _evaluate_plan(self, decisions, observation, headways, baseline, end_s, count):
+    def _evaluate_plan(
+        self,
+        decisions,
+        observation,
+        headways,
+        baseline,
+        end_s,
+        count,
+        project,
+        value_hold,
+        shift,
+        downstream_cost,
+    ):
         """Value local holds at projected decision times, then subtract knock-on cost.
 
         A future point pushed outside the window contributes no hold. Its
         train's existing delay still participates in downstream propagation.
         """
-        projected = project_visits(
-            observation, {d.visit.key: d.hold_s for d in decisions}, end_s
-        )
+        projected = project({d.visit.key: d.hold_s for d in decisions})
         by_key = {p.visit.key: p for p in projected}
         # Earlier holds can move a later decision's connection window. Reusing
         # that point's original clock would value the wrong part of the pulse.
         shifted = tuple(
-            PlannedDecision(
-                replace(d.visit, departure_s=by_key[d.visit.key].due_s),
+            shift(
+                d.visit,
+                by_key[d.visit.key].due_s,
                 by_key[d.visit.key].hold_s,
             )
             for d in decisions
         )
-        local = self._net(shifted, observation, headways)
-        downstream = evaluate_downstream(
-            baseline, projected, observation, self.weights, end_s
-        )
+        local = self._net(shifted, observation, headways, value_hold)
+        downstream = downstream_cost(projected)
         return HorizonPlan(
             decisions, local - downstream.total_ps, count, local, downstream.total_ps
         )
@@ -208,6 +245,7 @@ class RollingHorizonPlanner:
         decisions: tuple[PlannedDecision, ...],
         observation: ObservationSnapshot,
         headways: Mapping[tuple, float],
+        value_hold=evaluate_hold,
     ) -> float:
         """Sum local break-even gains, sharing each walking group only once.
 
@@ -225,7 +263,7 @@ class RollingHorizonPlanner:
             caught = 0.0
             if walking is not None:
                 caught = self._caught(visit, hold, walking, observation, covered)
-            result = evaluate_hold(
+            result = value_hold(
                 hold,
                 caught,
                 headways[visit.key],
