@@ -1,0 +1,1315 @@
+{
+  "base_commit": "8ddf153ecbbe29326658deefaa685a586b6a38ff",
+  "environment": {
+    "python": "3.13.2",
+    "os": "Windows-11-10.0.26200-SP0",
+    "logical_processors": 12,
+    "ram_bytes": 17064366080,
+    "fastapi": "0.162.0",
+    "pydantic": "2.14.3",
+    "numpy": "2.5.4"
+  },
+  "method": "Sequential uncached in-process HTTP requests; hourly median of five, changed-parameter and full-day one sample each. Backend bounds, not browser timings.",
+  "cases": {
+    "no_control": {
+      "hour": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 31.313879600027576,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":5.920369500061497,"simulation_s":5.244776099920273,"results_s":0.6605069000506774,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"},
+            {"duration_s":3600,"request_s":5.855626699980348,"simulation_s":5.177692500059493,"results_s":0.675065099960193,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"},
+            {"duration_s":3600,"request_s":5.860050599905662,"simulation_s":5.156101899920031,"results_s":0.700829099980183,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"},
+            {"duration_s":3600,"request_s":5.880042499979027,"simulation_s":5.166894600028172,"results_s":0.7102684000274166,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"},
+            {"duration_s":3600,"request_s":5.978884999989532,"simulation_s":5.316451300051995,"results_s":0.6598537000827491,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 13.279647900024429,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":2.3467494000215083,"simulation_s":2.092502399929799,"results_s":0.24178150005172938,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":129699840},
+            {"duration_s":3600,"request_s":2.4484637998975813,"simulation_s":2.1245021000504494,"results_s":0.3210311000002548,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":140308480},
+            {"duration_s":3600,"request_s":2.283690399955958,"simulation_s":2.0460251000477,"results_s":0.23464749997947365,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":143716352},
+            {"duration_s":3600,"request_s":2.2667904999107122,"simulation_s":2.0271736999275163,"results_s":0.23704759997781366,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":145534976},
+            {"duration_s":3600,"request_s":2.4084927000803873,"simulation_s":2.170311199966818,"results_s":0.23522560007404536,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":149553152}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      },
+      "parameters": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 13.02529860008508,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":5.672541700070724,"simulation_s":4.996054399991408,"results_s":0.6741388000082225,"response_bytes":585047,"response_sha256":"cc83953a6375a647cc4802dbeeb9c630f2000413d9d1405c95519e966ecfc006","peak_memory_bytes":565903360}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 6.019498899928294,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":2.2811767000239342,"simulation_s":2.0478023000760004,"results_s":0.23048259993083775,"response_bytes":585047,"response_sha256":"cc83953a6375a647cc4802dbeeb9c630f2000413d9d1405c95519e966ecfc006","peak_memory_bytes":135282688}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 120
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 120.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 120.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      },
+      "day": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 97.64192620001268,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":92576,"request_s":95.88077019993216,"simulation_s":84.537925700075,"results_s":11.329212099895813,"response_bytes":14382620,"response_sha256":"4f38f77b3f17d856d8f77678983d0d75cc4a69447dd57556e3118b3d5a4eb562","peak_memory_bytes":7080947712}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 31.049482899950817,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":92576,"request_s":29.34815149998758,"simulation_s":25.46546480001416,"results_s":3.87033419997897,"response_bytes":14382620,"response_sha256":"4f38f77b3f17d856d8f77678983d0d75cc4a69447dd57556e3118b3d5a4eb562","peak_memory_bytes":782938112}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      }
+    },
+    "schedule_based": {
+      "hour": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 31.554402700043283,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":6.142778799985535,"simulation_s":5.454722600057721,"results_s":0.6758765000849962,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"},
+            {"duration_s":3600,"request_s":5.868406799971126,"simulation_s":5.150733700022101,"results_s":0.7148827000055462,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"},
+            {"duration_s":3600,"request_s":5.994979300070554,"simulation_s":5.219210600014776,"results_s":0.7730499000754207,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"},
+            {"duration_s":3600,"request_s":6.146487900055945,"simulation_s":5.424572200048715,"results_s":0.7193643000209704,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"},
+            {"duration_s":3600,"request_s":5.944386100047268,"simulation_s":5.2831815999234095,"results_s":0.658232600078918,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 13.28433249995578,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":2.2866591999772936,"simulation_s":2.0389461000449955,"results_s":0.23512389999814332,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":130220032},
+            {"duration_s":3600,"request_s":2.25914019998163,"simulation_s":2.0216868999414146,"results_s":0.23443399998359382,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":140689408},
+            {"duration_s":3600,"request_s":2.3671050999546424,"simulation_s":2.133088600006886,"results_s":0.23085969989188015,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":144125952},
+            {"duration_s":3600,"request_s":2.260706100030802,"simulation_s":2.0014220000011846,"results_s":0.25664250005502254,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":146735104},
+            {"duration_s":3600,"request_s":2.666864600032568,"simulation_s":2.4292524000629783,"results_s":0.23477029998321086,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":149270528}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "schedule_based",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "schedule_based",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      },
+      "parameters": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 13.279838400078006,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":5.8180688000284135,"simulation_s":5.121713300002739,"results_s":0.6938318000175059,"response_bytes":585047,"response_sha256":"cc83953a6375a647cc4802dbeeb9c630f2000413d9d1405c95519e966ecfc006","peak_memory_bytes":565776384}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 5.767593000084162,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":2.274089200072922,"simulation_s":2.0382842000108212,"results_s":0.23322930000722408,"response_bytes":585047,"response_sha256":"cc83953a6375a647cc4802dbeeb9c630f2000413d9d1405c95519e966ecfc006","peak_memory_bytes":134791168}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "schedule_based",
+          "max_hold_time": 120
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "schedule_based",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 120.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 120.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      },
+      "day": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 87.88198329997249,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":92576,"request_s":85.86099330009893,"simulation_s":75.21357379993424,"results_s":10.632145100040361,"response_bytes":14382620,"response_sha256":"4f38f77b3f17d856d8f77678983d0d75cc4a69447dd57556e3118b3d5a4eb562","peak_memory_bytes":7221362688}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 31.302710200077854,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":92576,"request_s":29.56853389996104,"simulation_s":25.714670000015758,"results_s":3.8386498999316245,"response_bytes":14382620,"response_sha256":"4f38f77b3f17d856d8f77678983d0d75cc4a69447dd57556e3118b3d5a4eb562","peak_memory_bytes":784412672}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "schedule_based",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "schedule_based",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      }
+    },
+    "headway_regulation": {
+      "hour": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 30.549672900000587,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":5.726511499960907,"simulation_s":4.997658499982208,"results_s":0.7162424999987707,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":557096960},
+            {"duration_s":3600,"request_s":5.898060599924065,"simulation_s":5.201504199998453,"results_s":0.692811599932611,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":565088256},
+            {"duration_s":3600,"request_s":5.7897452000761405,"simulation_s":5.135301100090146,"results_s":0.650709200068377,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":568541184},
+            {"duration_s":3600,"request_s":5.741690600058064,"simulation_s":5.045683000003919,"results_s":0.6930045000044629,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":571863040},
+            {"duration_s":3600,"request_s":5.838752800016664,"simulation_s":5.1781620000256225,"results_s":0.6565682999789715,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":576806912}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 13.275786300073378,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":2.3627679999917746,"simulation_s":2.055473499931395,"results_s":0.29500839998945594,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":129679360},
+            {"duration_s":3600,"request_s":2.5081721000606194,"simulation_s":2.2653024999890476,"results_s":0.23947979998774827,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":139902976},
+            {"duration_s":3600,"request_s":2.2368427999317646,"simulation_s":2.002158200019039,"results_s":0.23153599991928786,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":142807040},
+            {"duration_s":3600,"request_s":2.3057691999711096,"simulation_s":2.066208399948664,"results_s":0.23577349993865937,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":145932288},
+            {"duration_s":3600,"request_s":2.2982008999679238,"simulation_s":2.0648932999465615,"results_s":0.23034230002667755,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":149942272}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "headway_regulation",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "headway_regulation",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "target_headways_s": {
+              "blue_edouard_montpetit_0": 270.0,
+              "blue_edouard_montpetit_1": 240.0,
+              "green_mcgill_0": 180.0,
+              "green_mcgill_1": 240.0,
+              "orange_gare_centrale_bonaventure_0": 240.0,
+              "orange_gare_centrale_bonaventure_1": 180,
+              "rem_edouard_montpetit_0": 210,
+              "rem_edouard_montpetit_1": 210,
+              "rem_gare_centrale_bonaventure_0": 210.0,
+              "rem_gare_centrale_bonaventure_1": 210.0,
+              "rem_mcgill_0": 210.0,
+              "rem_mcgill_1": 210.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      },
+      "parameters": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 13.025627999915741,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":5.887570700026117,"simulation_s":5.194795600022189,"results_s":0.6899691000580788,"response_bytes":585047,"response_sha256":"cc83953a6375a647cc4802dbeeb9c630f2000413d9d1405c95519e966ecfc006","peak_memory_bytes":564850688}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 5.76806450006552,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":2.2424023000057787,"simulation_s":2.0028266001027077,"results_s":0.23643230006564409,"response_bytes":585047,"response_sha256":"cc83953a6375a647cc4802dbeeb9c630f2000413d9d1405c95519e966ecfc006","peak_memory_bytes":135131136}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "headway_regulation",
+          "max_hold_time": 120
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "headway_regulation",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 120.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "target_headways_s": {
+              "blue_edouard_montpetit_0": 270.0,
+              "blue_edouard_montpetit_1": 240.0,
+              "green_mcgill_0": 180.0,
+              "green_mcgill_1": 240.0,
+              "orange_gare_centrale_bonaventure_0": 240.0,
+              "orange_gare_centrale_bonaventure_1": 180,
+              "rem_edouard_montpetit_0": 210,
+              "rem_edouard_montpetit_1": 210,
+              "rem_gare_centrale_bonaventure_0": 210.0,
+              "rem_gare_centrale_bonaventure_1": 210.0,
+              "rem_mcgill_0": 210.0,
+              "rem_mcgill_1": 210.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 120.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      },
+      "day": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 87.87549310002942,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":92576,"request_s":85.93026809999719,"simulation_s":74.25396020000335,"results_s":11.662616900051944,"response_bytes":14397905,"response_sha256":"362191ca1c3bf8fc43ecf1db324e209ad764bc43364bfea37bc97f9604c95b0e","peak_memory_bytes":7221551104}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 31.80395289999433,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":92576,"request_s":30.159979399992153,"simulation_s":26.09550580009818,"results_s":4.051697900053114,"response_bytes":14397905,"response_sha256":"362191ca1c3bf8fc43ecf1db324e209ad764bc43364bfea37bc97f9604c95b0e","peak_memory_bytes":783319040}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "headway_regulation",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "headway_regulation",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "target_headways_s": {
+              "blue_edouard_montpetit_0": 270.0,
+              "blue_edouard_montpetit_1": 240.0,
+              "green_mcgill_0": 180.0,
+              "green_mcgill_1": 240.0,
+              "orange_gare_centrale_bonaventure_0": 240.0,
+              "orange_gare_centrale_bonaventure_1": 180,
+              "rem_edouard_montpetit_0": 210,
+              "rem_edouard_montpetit_1": 210,
+              "rem_gare_centrale_bonaventure_0": 210.0,
+              "rem_gare_centrale_bonaventure_1": 210.0,
+              "rem_mcgill_0": 210.0,
+              "rem_mcgill_1": 210.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      }
+    },
+    "connection_protection": {
+      "hour": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 31.30381369998213,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":6.3869330999441445,"simulation_s":5.4753748999210075,"results_s":0.8984178999671713,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":562311168},
+            {"duration_s":3600,"request_s":5.798946599941701,"simulation_s":5.100745899952017,"results_s":0.6948475999524817,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":571346944},
+            {"duration_s":3600,"request_s":5.8320948999607936,"simulation_s":5.141056399908848,"results_s":0.6880405000410974,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":575397888},
+            {"duration_s":3600,"request_s":5.841815400053747,"simulation_s":5.175007399986498,"results_s":0.6634414000436664,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":578621440},
+            {"duration_s":3600,"request_s":5.970745499944314,"simulation_s":5.255879999953322,"results_s":0.7114631999284029,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":581988352}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 13.025286099989899,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":2.2669304999290034,"simulation_s":2.0094437999650836,"results_s":0.2435264999512583,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":130174976},
+            {"duration_s":3600,"request_s":2.267527399933897,"simulation_s":2.026034399983473,"results_s":0.23805279994849116,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":140046336},
+            {"duration_s":3600,"request_s":2.3793674999615178,"simulation_s":2.143850599997677,"results_s":0.2323607999132946,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":144613376},
+            {"duration_s":3600,"request_s":2.3066007000161335,"simulation_s":2.0507701999740675,"results_s":0.25203390000388026,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":148008960},
+            {"duration_s":3600,"request_s":2.362171499989927,"simulation_s":2.1164195999735966,"results_s":0.24253150005824864,"response_bytes":585047,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9","peak_memory_bytes":150634496}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "connection_protection",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      },
+      "parameters": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 13.025019699940458,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":5.710435000015423,"simulation_s":5.010634900070727,"results_s":0.6969570000655949,"response_bytes":585047,"response_sha256":"cc83953a6375a647cc4802dbeeb9c630f2000413d9d1405c95519e966ecfc006","peak_memory_bytes":566792192}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 6.0184120000340044,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":2.2832269000355154,"simulation_s":2.049157499917783,"results_s":0.23107450001407415,"response_bytes":585047,"response_sha256":"cc83953a6375a647cc4802dbeeb9c630f2000413d9d1405c95519e966ecfc006","peak_memory_bytes":136171520}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 120
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "connection_protection",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 120.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 120.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      },
+      "day": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 90.88394379999954,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":92576,"request_s":88.9501142000081,"simulation_s":77.5623254000675,"results_s":11.373357900069095,"response_bytes":14383471,"response_sha256":"af785f532cc710bdea6c06846c64c652fe7e3b17189b73e8255e3cba4a07c1f1","peak_memory_bytes":6871498752}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 32.05071739992127,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":92576,"request_s":30.447145999991335,"simulation_s":26.59627520001959,"results_s":3.836990399984643,"response_bytes":14383471,"response_sha256":"af785f532cc710bdea6c06846c64c652fe7e3b17189b73e8255e3cba4a07c1f1","peak_memory_bytes":792821760}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "connection_protection",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      }
+    },
+    "adaptive": {
+      "hour": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 30.805951999966055,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":5.958091099979356,"simulation_s":5.2440955999773,"results_s":0.7014584999997169,"response_bytes":585853,"response_sha256":"e5fa356b6b93a9cf30cdff7b017b8318715988b3c149a09b43049218d0e36667","peak_memory_bytes":562327552},
+            {"duration_s":3600,"request_s":5.790229700040072,"simulation_s":5.105381699977443,"results_s":0.6813587000360712,"response_bytes":585853,"response_sha256":"e5fa356b6b93a9cf30cdff7b017b8318715988b3c149a09b43049218d0e36667","peak_memory_bytes":570335232},
+            {"duration_s":3600,"request_s":5.928935099975206,"simulation_s":5.2244603000581264,"results_s":0.7008073999313638,"response_bytes":585853,"response_sha256":"e5fa356b6b93a9cf30cdff7b017b8318715988b3c149a09b43049218d0e36667","peak_memory_bytes":574263296},
+            {"duration_s":3600,"request_s":5.712298300000839,"simulation_s":5.083013099967502,"results_s":0.6259038000134751,"response_bytes":585853,"response_sha256":"e5fa356b6b93a9cf30cdff7b017b8318715988b3c149a09b43049218d0e36667","peak_memory_bytes":577724416},
+            {"duration_s":3600,"request_s":5.909850700059906,"simulation_s":5.16365930007305,"results_s":0.7432865999871865,"response_bytes":585853,"response_sha256":"e5fa356b6b93a9cf30cdff7b017b8318715988b3c149a09b43049218d0e36667","peak_memory_bytes":580947968}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 13.277583600021899,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":2.3420919999480247,"simulation_s":2.0823385999538004,"results_s":0.24653969996143132,"response_bytes":585853,"response_sha256":"e5fa356b6b93a9cf30cdff7b017b8318715988b3c149a09b43049218d0e36667","peak_memory_bytes":130473984},
+            {"duration_s":3600,"request_s":2.391374700004235,"simulation_s":2.1542820000322536,"results_s":0.2330595999956131,"response_bytes":585853,"response_sha256":"e5fa356b6b93a9cf30cdff7b017b8318715988b3c149a09b43049218d0e36667","peak_memory_bytes":140238848},
+            {"duration_s":3600,"request_s":2.3067643999820575,"simulation_s":2.067219899967313,"results_s":0.23620270006358624,"response_bytes":585853,"response_sha256":"e5fa356b6b93a9cf30cdff7b017b8318715988b3c149a09b43049218d0e36667","peak_memory_bytes":143421440},
+            {"duration_s":3600,"request_s":2.291996599989943,"simulation_s":2.05225700000301,"results_s":0.23613279999699444,"response_bytes":585853,"response_sha256":"e5fa356b6b93a9cf30cdff7b017b8318715988b3c149a09b43049218d0e36667","peak_memory_bytes":147423232},
+            {"duration_s":3600,"request_s":2.375365999992937,"simulation_s":2.114634900004603,"results_s":0.25756970001384616,"response_bytes":585853,"response_sha256":"e5fa356b6b93a9cf30cdff7b017b8318715988b3c149a09b43049218d0e36667","peak_memory_bytes":150491136}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "adaptive",
+          "max_hold_time": 300,
+          "irregularity_threshold": 0.2
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "adaptive",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "target_headways_s": {
+              "blue_edouard_montpetit_0": 270.0,
+              "blue_edouard_montpetit_1": 240.0,
+              "green_mcgill_0": 180.0,
+              "green_mcgill_1": 240.0,
+              "orange_gare_centrale_bonaventure_0": 240.0,
+              "orange_gare_centrale_bonaventure_1": 180,
+              "rem_edouard_montpetit_0": 210,
+              "rem_edouard_montpetit_1": 210,
+              "rem_gare_centrale_bonaventure_0": 210.0,
+              "rem_gare_centrale_bonaventure_1": 210.0,
+              "rem_mcgill_0": 210.0,
+              "rem_mcgill_1": 210.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            },
+            "irregularity_threshold": 0.2
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      },
+      "parameters": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 13.275826199911535,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":5.759203699999489,"simulation_s":5.10126919997856,"results_s":0.6552595000248402,"response_bytes":585853,"response_sha256":"dcb1c961568f6c8c59c136f97e969361e87357370233f252b13ffdd3f0736c47","peak_memory_bytes":565813248}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 6.01765090005938,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":3600,"request_s":2.2593896000180393,"simulation_s":2.023357199970633,"results_s":0.2331660999916494,"response_bytes":585853,"response_sha256":"dcb1c961568f6c8c59c136f97e969361e87357370233f252b13ffdd3f0736c47","peak_memory_bytes":136093696}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "adaptive",
+          "max_hold_time": 120,
+          "irregularity_threshold": 0.2
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "adaptive",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 120.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "target_headways_s": {
+              "blue_edouard_montpetit_0": 270.0,
+              "blue_edouard_montpetit_1": 240.0,
+              "green_mcgill_0": 180.0,
+              "green_mcgill_1": 240.0,
+              "orange_gare_centrale_bonaventure_0": 240.0,
+              "orange_gare_centrale_bonaventure_1": 180,
+              "rem_edouard_montpetit_0": 210,
+              "rem_edouard_montpetit_1": 210,
+              "rem_gare_centrale_bonaventure_0": 210.0,
+              "rem_gare_centrale_bonaventure_1": 210.0,
+              "rem_mcgill_0": 210.0,
+              "rem_mcgill_1": 210.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            },
+            "irregularity_threshold": 0.2
+          },
+          "operating_rules": {
+            "max_hold_time": 120.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      },
+      "day": {
+        "before": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 89.39087820006534,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":92576,"request_s":87.62579239998013,"simulation_s":76.0890774000436,"results_s":11.522649000049569,"response_bytes":14403473,"response_sha256":"05a439de0ea6453d0630d528d0778353e88b50bf8326e8e077c1677f0f2c0fa1","peak_memory_bytes":7092723712}
+          ]
+        },
+        "after": {
+          "execution": {
+            "status": "completed",
+            "elapsed_s": 31.799215400009416,
+            "returncode": 0
+          },
+          "samples": [
+            {"duration_s":92576,"request_s":30.117025499930605,"simulation_s":26.322286500013433,"results_s":3.7818895999807864,"response_bytes":14403473,"response_sha256":"05a439de0ea6453d0630d528d0778353e88b50bf8326e8e077c1677f0f2c0fa1","peak_memory_bytes":787484672}
+          ]
+        },
+        "response_bytes_match": true,
+        "request_settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "adaptive",
+          "max_hold_time": 300,
+          "irregularity_threshold": 0.2
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "adaptive",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "target_headways_s": {
+              "blue_edouard_montpetit_0": 270.0,
+              "blue_edouard_montpetit_1": 240.0,
+              "green_mcgill_0": 180.0,
+              "green_mcgill_1": 240.0,
+              "orange_gare_centrale_bonaventure_0": 240.0,
+              "orange_gare_centrale_bonaventure_1": 180,
+              "rem_edouard_montpetit_0": 210,
+              "rem_edouard_montpetit_1": 210,
+              "rem_gare_centrale_bonaventure_0": 210.0,
+              "rem_gare_centrale_bonaventure_1": 210.0,
+              "rem_mcgill_0": 210.0,
+              "rem_mcgill_1": 210.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            },
+            "irregularity_threshold": 0.2
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        }
+      }
+    },
+    "rolling_horizon": {
+      "hour": {
+        "before": {
+          "execution": {
+            "status": "timeout",
+            "elapsed_s": 120.41208340006415,
+            "returncode": 1
+          },
+          "samples": []
+        },
+        "after": {
+          "execution": {
+            "status": "timeout",
+            "elapsed_s": 120.37905399990268,
+            "returncode": 1
+          },
+          "samples": []
+        },
+        "response_bytes_match": null
+      },
+      "parameters": {
+        "before": {
+          "execution": {
+            "status": "timeout",
+            "elapsed_s": 60.29242919990793,
+            "returncode": 1
+          },
+          "samples": []
+        },
+        "after": {
+          "execution": {
+            "status": "timeout",
+            "elapsed_s": 60.28297819988802,
+            "returncode": 1
+          },
+          "samples": []
+        },
+        "response_bytes_match": null
+      },
+      "day": {
+        "before": {
+          "execution": {
+            "status": "timeout",
+            "elapsed_s": 120.37119330000132,
+            "returncode": 1
+          },
+          "samples": []
+        },
+        "after": {
+          "execution": {
+            "status": "timeout",
+            "elapsed_s": 120.40721299999859,
+            "returncode": 1
+          },
+          "samples": []
+        },
+        "response_bytes_match": null
+      }
+    }
+  },
+  "coordinated_planning_observation": {
+    "operation": "RollingHorizonPlanner.plan on the same captured production observation; not a full API request",
+    "repeats": 5,
+    "before": {
+      "samples": [
+        {"elapsed_s":21.222829800099134,"combinations_evaluated":41401,"sha256":"256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"},
+        {"elapsed_s":22.799586500041187,"combinations_evaluated":41401,"sha256":"256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"},
+        {"elapsed_s":22.271849099895917,"combinations_evaluated":41401,"sha256":"256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"},
+        {"elapsed_s":21.94564699998591,"combinations_evaluated":41401,"sha256":"256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"},
+        {"elapsed_s":22.569050900056027,"combinations_evaluated":41401,"sha256":"256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"}
+      ],
+      "median_s": 22.271849099895917,
+      "range_s": [
+        21.222829800099134,
+        22.799586500041187
+      ]
+    },
+    "after": {
+      "samples": [
+        {"elapsed_s":2.2585373000474647,"combinations_evaluated":41401,"sha256":"256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"},
+        {"elapsed_s":2.3318614000454545,"combinations_evaluated":41401,"sha256":"256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"},
+        {"elapsed_s":2.3018653000472113,"combinations_evaluated":41401,"sha256":"256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"},
+        {"elapsed_s":2.3721053999615833,"combinations_evaluated":41401,"sha256":"256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"},
+        {"elapsed_s":2.468321399996057,"combinations_evaluated":41401,"sha256":"256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"}
+      ],
+      "median_s": 2.3318614000454545,
+      "range_s": [
+        2.2585373000474647,
+        2.468321399996057
+      ]
+    },
+    "same_complete_plan_digest": true
+  },
+  "intermediate_full_day_no_control_samples": [
+    {"stage":"first_performance_pass","request_s":39.35680260008667,"simulation_s":31.311234100023285,"results_s":8.033528600004502,"peak_memory_bytes":780042240,"response_sha256":"4f38f77b3f17d856d8f77678983d0d75cc4a69447dd57556e3118b3d5a4eb562"},
+    {"stage":"snapshot_native_decoding","request_s":32.390846400056034,"simulation_s":26.45632040000055,"results_s":5.9226769000524655,"peak_memory_bytes":781635584,"response_sha256":"4f38f77b3f17d856d8f77678983d0d75cc4a69447dd57556e3118b3d5a4eb562"},
+    {"stage":"header_filtering_probe","request_s":29.3978141999105,"simulation_s":25.29831970005762,"results_s":4.087559899897315,"peak_memory_bytes":782344192,"response_sha256":"4f38f77b3f17d856d8f77678983d0d75cc4a69447dd57556e3118b3d5a4eb562"}
+  ],
+  "independent_performance_suite": {
+    "command": "python -m pytest tests/performance -m performance -q -s --performance-timeout=45",
+    "passed": 5,
+    "failed": 21,
+    "setup_errors": 4,
+    "duration_s": 353.6,
+    "notes": "Coordinated hourly/full-day fixtures timed out (four setup errors); changed-parameter experiment also timed out during its worker budget. Other failures are strict timing assertions.",
+    "samples": [
+      {"strategy":"adaptive","operation":"hour","duration_s":3600,"request_s":2.266600500093773,"simulation_s":2.0105733999516815,"results_s":0.24454820004757494,"peak_memory_bytes":137150464,"response_sha256":"e5fa356b6b93a9cf30cdff7b017b8318715988b3c149a09b43049218d0e36667"},
+      {"strategy":"connection_protection","operation":"hour","duration_s":3600,"request_s":2.5457960000494495,"simulation_s":2.1765273000346497,"results_s":0.35823130002245307,"peak_memory_bytes":138022912,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"},
+      {"strategy":"headway_regulation","operation":"hour","duration_s":3600,"request_s":2.4959118000697345,"simulation_s":2.2519330999348313,"results_s":0.23159840004518628,"peak_memory_bytes":137736192,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"},
+      {"strategy":"no_control","operation":"hour","duration_s":3600,"request_s":2.353989399969578,"simulation_s":2.0974363000132143,"results_s":0.24466049997135997,"peak_memory_bytes":137334784,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"},
+      {"strategy":"schedule_based","operation":"hour","duration_s":3600,"request_s":2.24228010000661,"simulation_s":2.000721300020814,"results_s":0.2311108000576496,"peak_memory_bytes":136839168,"response_sha256":"00961f99bd24cd92d1ac9d72ad94a591bbb05c781e145e26b0c728c6aa7901f9"},
+      {"strategy":"adaptive","operation":"parameters","duration_s":3600,"request_s":2.3868241000454873,"simulation_s":2.1488856999203563,"results_s":0.23514350003097206,"peak_memory_bytes":142352384,"response_sha256":"dcb1c961568f6c8c59c136f97e969361e87357370233f252b13ffdd3f0736c47"},
+      {"strategy":"connection_protection","operation":"parameters","duration_s":3600,"request_s":2.316218200023286,"simulation_s":2.0775305000133812,"results_s":0.23563619994092733,"peak_memory_bytes":141602816,"response_sha256":"cc83953a6375a647cc4802dbeeb9c630f2000413d9d1405c95519e966ecfc006"},
+      {"strategy":"headway_regulation","operation":"parameters","duration_s":3600,"request_s":2.3077923000091687,"simulation_s":2.072555199963972,"results_s":0.23201959999278188,"peak_memory_bytes":141983744,"response_sha256":"cc83953a6375a647cc4802dbeeb9c630f2000413d9d1405c95519e966ecfc006"},
+      {"strategy":"no_control","operation":"parameters","duration_s":3600,"request_s":2.2479114999296144,"simulation_s":2.0039844000712037,"results_s":0.24017519992776215,"peak_memory_bytes":142209024,"response_sha256":"cc83953a6375a647cc4802dbeeb9c630f2000413d9d1405c95519e966ecfc006"},
+      {"strategy":"schedule_based","operation":"parameters","duration_s":3600,"request_s":2.556046799989417,"simulation_s":2.3065417000325397,"results_s":0.24676959996577352,"peak_memory_bytes":141705216,"response_sha256":"cc83953a6375a647cc4802dbeeb9c630f2000413d9d1405c95519e966ecfc006"},
+      {"strategy":"adaptive","operation":"day","duration_s":92576,"request_s":33.77586550009437,"simulation_s":29.565099900006317,"results_s":4.1976570000406355,"peak_memory_bytes":793427968,"response_sha256":"05a439de0ea6453d0630d528d0778353e88b50bf8326e8e077c1677f0f2c0fa1"},
+      {"strategy":"connection_protection","operation":"day","duration_s":92576,"request_s":32.58477779990062,"simulation_s":28.667081300052814,"results_s":3.9066507999086753,"peak_memory_bytes":803614720,"response_sha256":"af785f532cc710bdea6c06846c64c652fe7e3b17189b73e8255e3cba4a07c1f1"},
+      {"strategy":"headway_regulation","operation":"day","duration_s":92576,"request_s":33.089913700008765,"simulation_s":28.991231599939056,"results_s":4.086900299997069,"peak_memory_bytes":790110208,"response_sha256":"362191ca1c3bf8fc43ecf1db324e209ad764bc43364bfea37bc97f9604c95b0e"},
+      {"strategy":"no_control","operation":"day","duration_s":92576,"request_s":30.513978499919176,"simulation_s":26.597249299986288,"results_s":3.9057579999789596,"peak_memory_bytes":790298624,"response_sha256":"4f38f77b3f17d856d8f77678983d0d75cc4a69447dd57556e3118b3d5a4eb562"},
+      {"strategy":"schedule_based","operation":"day","duration_s":92576,"request_s":33.144238500040956,"simulation_s":29.092024600016885,"results_s":4.04050870006904,"peak_memory_bytes":789725184,"response_sha256":"4f38f77b3f17d856d8f77678983d0d75cc4a69447dd57556e3118b3d5a4eb562"}
+    ]
+  }
+}
