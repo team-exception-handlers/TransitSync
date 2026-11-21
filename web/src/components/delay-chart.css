@@ -1,0 +1,12 @@
+/* AI contribution: 50% or more AI-generated */
+/* Chart styling for passenger delay buckets and hold/mode event markers. */
+.delay-chart { grid-column: 1 / -1; min-width: 0; padding: 18px 20px 10px; }
+.delay-chart-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.delay-chart-heading h2 { margin: 0; font-size: 18px; }
+.delay-chart-heading span { color: #5b6168; font-size: 12px; }
+.delay-chart-canvas { height: 280px; margin-top: 8px; }
+.delay-tooltip { display: flex; flex-direction: column; gap: 3px; min-width: 180px; padding: 10px 12px; border: 1px solid #d8dbd5; border-radius: 8px; background: #fff; box-shadow: 0 5px 18px rgb(22 25 29 / 12%); font-size: 12px; }
+.delay-tooltip strong { font-family: "IBM Plex Mono", monospace; }
+@media (max-width: 930px) {
+  .delay-chart-heading { align-items: flex-start; flex-direction: column; }
+}
