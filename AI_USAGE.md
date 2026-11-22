@@ -31,6 +31,10 @@ Benchmark passenger comparisons (#395): Codex (OpenAI), 50% or more AI-generated
 Files: scripts/benchmark_simulation.py, tests/scripts/test_benchmark_simulation.py.
 - **Verification:** benchmark both simulator subruns on the existing passenger-comparison route, distinguish final result preparation from total request time, and reject an invalid changed-parameter comparison
 
+Audit current-main performance acceptance (#395): Codex (OpenAI), 50% or more AI-generated; no PR opened.
+Files: docs/performance.md, docs/performance-readiness.md, docs/performance-readiness-results.json.
+- **Verification:** keep all strict failed targets, unfinished experiments, individual samples and unmerged endpoint limitations explicit; verify completed production response fingerprints against the integrated reference independently of timing
+
 Batch prediction-error draws without changing their sequence (#395): Codex (OpenAI), 50% or more AI-generated; no PR opened.
 Files: simulator/control/prediction_error.py, tests/simulator/control/test_prediction_copy.py.
 - **Verification:** compare full snapshots and the next 16 random values with the original scalar interface, across three seeds, four network sizes and three error magnitudes. Repeated snapshots cover draw boundaries; custom streams and dataclass subclasses retain their fallback paths

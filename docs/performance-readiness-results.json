@@ -1,0 +1,2122 @@
+{
+  "date": "2026-11-21",
+  "main_reference": "e5e0b6af8d92a2edd7b22d3dcd4932f727d57d11",
+  "integrated_reference": "f8eb2c43937b9a97673c5c61c967c987579fc21c",
+  "optimized_production_source": "70a8f8cd229ac3be9e86af7dec1e0a8fb040f0fc",
+  "benchmark_tooling_status": "Comparison/phase-reporting helper updates were uncommitted during measurement; production source revisions are recorded separately. Helpers are now included in the branch.",
+  "validation": {
+    "python_passed": 1849,
+    "performance_deselected": 30,
+    "existing_xfailed": 1,
+    "python_elapsed_s": 205.73,
+    "frontend_passed": 396,
+    "frontend_files": 34,
+    "frontend_statement_coverage_percent": 95.19,
+    "frontend_line_coverage_percent": 96.17
+  },
+  "performance_suite": {
+    "passed": 13,
+    "failed": 13,
+    "setup_errors": 4,
+    "elapsed_s": 322.4,
+    "worker_budget_s": 45,
+    "samples": [
+      {
+        "strategy": "adaptive",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "adaptive",
+          "max_hold_time": 300,
+          "irregularity_threshold": 0.2
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "adaptive",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "target_headways_s": {
+              "blue_edouard_montpetit_0": 270.0,
+              "blue_edouard_montpetit_1": 240.0,
+              "green_mcgill_0": 180.0,
+              "green_mcgill_1": 240.0,
+              "orange_gare_centrale_bonaventure_0": 240.0,
+              "orange_gare_centrale_bonaventure_1": 180,
+              "rem_edouard_montpetit_0": 210,
+              "rem_edouard_montpetit_1": 210,
+              "rem_gare_centrale_bonaventure_0": 210.0,
+              "rem_gare_centrale_bonaventure_1": 210.0,
+              "rem_mcgill_0": 210.0,
+              "rem_mcgill_1": 210.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            },
+            "irregularity_threshold": 0.2
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 2.058627499965951,
+        "simulation_s": 1.782905500032939,
+        "simulation_runs_s": [
+          1.782905500032939
+        ],
+        "results_s": 0.2625506999902427,
+        "response_bytes": 834569,
+        "response_sha256": "b28f5f2939b7a51e410edad54cb8acb8373c0541fb29ce2be3f767732fa9b2ff",
+        "peak_memory_bytes": 138452992
+      },
+      {
+        "strategy": "connection_protection",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "connection_protection",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 2.0447961000027135,
+        "simulation_s": 1.7622376000508666,
+        "simulation_runs_s": [
+          1.7622376000508666
+        ],
+        "results_s": 0.2711769000161439,
+        "response_bytes": 833763,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "peak_memory_bytes": 138182656
+      },
+      {
+        "strategy": "headway_regulation",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "headway_regulation",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "headway_regulation",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "target_headways_s": {
+              "blue_edouard_montpetit_0": 270.0,
+              "blue_edouard_montpetit_1": 240.0,
+              "green_mcgill_0": 180.0,
+              "green_mcgill_1": 240.0,
+              "orange_gare_centrale_bonaventure_0": 240.0,
+              "orange_gare_centrale_bonaventure_1": 180,
+              "rem_edouard_montpetit_0": 210,
+              "rem_edouard_montpetit_1": 210,
+              "rem_gare_centrale_bonaventure_0": 210.0,
+              "rem_gare_centrale_bonaventure_1": 210.0,
+              "rem_mcgill_0": 210.0,
+              "rem_mcgill_1": 210.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 1.993928199983202,
+        "simulation_s": 1.7323985999682918,
+        "simulation_runs_s": [
+          1.7323985999682918
+        ],
+        "results_s": 0.2502851999597624,
+        "response_bytes": 833763,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "peak_memory_bytes": 137588736
+      },
+      {
+        "strategy": "no_control",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 1.9770183999789879,
+        "simulation_s": 1.716073299990967,
+        "simulation_runs_s": [
+          1.716073299990967
+        ],
+        "results_s": 0.250735400011763,
+        "response_bytes": 833763,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "peak_memory_bytes": 137998336
+      },
+      {
+        "strategy": "schedule_based",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "schedule_based",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "schedule_based",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 1.9965370000572875,
+        "simulation_s": 1.7417032000375912,
+        "simulation_runs_s": [
+          1.7417032000375912
+        ],
+        "results_s": 0.2439948000246659,
+        "response_bytes": 833763,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "peak_memory_bytes": 138768384
+      },
+      {
+        "strategy": "adaptive",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "adaptive",
+          "max_hold_time": 120,
+          "irregularity_threshold": 0.2
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "adaptive",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 120.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "target_headways_s": {
+              "blue_edouard_montpetit_0": 270.0,
+              "blue_edouard_montpetit_1": 240.0,
+              "green_mcgill_0": 180.0,
+              "green_mcgill_1": 240.0,
+              "orange_gare_centrale_bonaventure_0": 240.0,
+              "orange_gare_centrale_bonaventure_1": 180,
+              "rem_edouard_montpetit_0": 210,
+              "rem_edouard_montpetit_1": 210,
+              "rem_gare_centrale_bonaventure_0": 210.0,
+              "rem_gare_centrale_bonaventure_1": 210.0,
+              "rem_mcgill_0": 210.0,
+              "rem_mcgill_1": 210.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            },
+            "irregularity_threshold": 0.2
+          },
+          "operating_rules": {
+            "max_hold_time": 120.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 2.0766581000061706,
+        "simulation_s": 1.8312441000016406,
+        "simulation_runs_s": [
+          1.8312441000016406
+        ],
+        "results_s": 0.2422365000238642,
+        "response_bytes": 834569,
+        "response_sha256": "ac8392ae03418680997401847760cfedcb3d7c303fed01f641f44a0750f02b81",
+        "peak_memory_bytes": 142905344
+      },
+      {
+        "strategy": "connection_protection",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 120
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "connection_protection",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 120.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 120.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 2.04609870002605,
+        "simulation_s": 1.7995805999962613,
+        "simulation_runs_s": [
+          1.7995805999962613
+        ],
+        "results_s": 0.24358250002842396,
+        "response_bytes": 833763,
+        "response_sha256": "caec8316134d167def79a31432b723ea460aa1723fd01d865d997321887375e8",
+        "peak_memory_bytes": 142761984
+      },
+      {
+        "strategy": "headway_regulation",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "headway_regulation",
+          "max_hold_time": 120
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "headway_regulation",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 120.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "target_headways_s": {
+              "blue_edouard_montpetit_0": 270.0,
+              "blue_edouard_montpetit_1": 240.0,
+              "green_mcgill_0": 180.0,
+              "green_mcgill_1": 240.0,
+              "orange_gare_centrale_bonaventure_0": 240.0,
+              "orange_gare_centrale_bonaventure_1": 180,
+              "rem_edouard_montpetit_0": 210,
+              "rem_edouard_montpetit_1": 210,
+              "rem_gare_centrale_bonaventure_0": 210.0,
+              "rem_gare_centrale_bonaventure_1": 210.0,
+              "rem_mcgill_0": 210.0,
+              "rem_mcgill_1": 210.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 120.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 2.0222349000396207,
+        "simulation_s": 1.774214299977757,
+        "simulation_runs_s": [
+          1.774214299977757
+        ],
+        "results_s": 0.2449020000640303,
+        "response_bytes": 833763,
+        "response_sha256": "caec8316134d167def79a31432b723ea460aa1723fd01d865d997321887375e8",
+        "peak_memory_bytes": 142045184
+      },
+      {
+        "strategy": "no_control",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 120
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 120.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 120.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 2.081756000057794,
+        "simulation_s": 1.8337508999975398,
+        "simulation_runs_s": [
+          1.8337508999975398
+        ],
+        "results_s": 0.24557619995903224,
+        "response_bytes": 833763,
+        "response_sha256": "caec8316134d167def79a31432b723ea460aa1723fd01d865d997321887375e8",
+        "peak_memory_bytes": 142827520
+      },
+      {
+        "strategy": "schedule_based",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "schedule_based",
+          "max_hold_time": 120
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "schedule_based",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 120.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 120.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 2.003288400010206,
+        "simulation_s": 1.748154200031422,
+        "simulation_runs_s": [
+          1.748154200031422
+        ],
+        "results_s": 0.25291039992589504,
+        "response_bytes": 833763,
+        "response_sha256": "caec8316134d167def79a31432b723ea460aa1723fd01d865d997321887375e8",
+        "peak_memory_bytes": 141594624
+      },
+      {
+        "strategy": "adaptive",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "adaptive",
+          "max_hold_time": 300,
+          "irregularity_threshold": 0.2
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "adaptive",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "target_headways_s": {
+              "blue_edouard_montpetit_0": 270.0,
+              "blue_edouard_montpetit_1": 240.0,
+              "green_mcgill_0": 180.0,
+              "green_mcgill_1": 240.0,
+              "orange_gare_centrale_bonaventure_0": 240.0,
+              "orange_gare_centrale_bonaventure_1": 180,
+              "rem_edouard_montpetit_0": 210,
+              "rem_edouard_montpetit_1": 210,
+              "rem_gare_centrale_bonaventure_0": 210.0,
+              "rem_gare_centrale_bonaventure_1": 210.0,
+              "rem_mcgill_0": 210.0,
+              "rem_mcgill_1": 210.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            },
+            "irregularity_threshold": 0.2
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 92576,
+        "request_s": 28.068179999943823,
+        "simulation_s": 23.73484099993948,
+        "simulation_runs_s": [
+          23.73484099993948
+        ],
+        "results_s": 4.321545399958268,
+        "response_bytes": 21499061,
+        "response_sha256": "6337dc5fc524ecf8b9cfd10dcd36e9fc001c70c207a7ca22b85e3b287bd2a989",
+        "peak_memory_bytes": 796459008
+      },
+      {
+        "strategy": "connection_protection",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "connection_protection",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 92576,
+        "request_s": 28.03513109998312,
+        "simulation_s": 23.822283699992113,
+        "simulation_runs_s": [
+          23.822283699992113
+        ],
+        "results_s": 4.200644899974577,
+        "response_bytes": 21467809,
+        "response_sha256": "8ba22e8852837e38510a36cd3cbb473c175f84e2f3ee80ca44e74158e7c0c73f",
+        "peak_memory_bytes": 801374208
+      },
+      {
+        "strategy": "headway_regulation",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "headway_regulation",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "headway_regulation",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "target_headways_s": {
+              "blue_edouard_montpetit_0": 270.0,
+              "blue_edouard_montpetit_1": 240.0,
+              "green_mcgill_0": 180.0,
+              "green_mcgill_1": 240.0,
+              "orange_gare_centrale_bonaventure_0": 240.0,
+              "orange_gare_centrale_bonaventure_1": 180,
+              "rem_edouard_montpetit_0": 210,
+              "rem_edouard_montpetit_1": 210,
+              "rem_gare_centrale_bonaventure_0": 210.0,
+              "rem_gare_centrale_bonaventure_1": 210.0,
+              "rem_mcgill_0": 210.0,
+              "rem_mcgill_1": 210.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 92576,
+        "request_s": 27.508064499939792,
+        "simulation_s": 23.222934799967334,
+        "simulation_runs_s": [
+          23.222934799967334
+        ],
+        "results_s": 4.273219799972139,
+        "response_bytes": 21524273,
+        "response_sha256": "fa46cb52e9226c128719a3f2747d83edbd2891465856e2ab93e30ff0492eb17b",
+        "peak_memory_bytes": 794001408
+      },
+      {
+        "strategy": "no_control",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 92576,
+        "request_s": 26.96883419994265,
+        "simulation_s": 22.671828599995933,
+        "simulation_runs_s": [
+          22.671828599995933
+        ],
+        "results_s": 4.285808099899441,
+        "response_bytes": 21470052,
+        "response_sha256": "652f1c5404728fc104c0e7a84e22a0e3940ceaeefe6aa44328a727926555e09c",
+        "peak_memory_bytes": 789782528
+      },
+      {
+        "strategy": "schedule_based",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "schedule_based",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "schedule_based",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 92576,
+        "request_s": 26.346601200057194,
+        "simulation_s": 22.29927019996103,
+        "simulation_runs_s": [
+          22.29927019996103
+        ],
+        "results_s": 4.035973499994725,
+        "response_bytes": 21470052,
+        "response_sha256": "652f1c5404728fc104c0e7a84e22a0e3940ceaeefe6aa44328a727926555e09c",
+        "peak_memory_bytes": 790536192
+      }
+    ]
+  },
+  "integrated_hour_before": {
+    "python": "3.13.2",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "commit": "4bd359cc286d11acf5b7e79df4f949875c5337c3",
+    "measurements": [
+      {
+        "strategy": "no_control",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 2.2338210000889376,
+        "simulation_s": 1.9708197999279946,
+        "results_s": 0.24913620005827397,
+        "response_bytes": 833763,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "peak_memory_bytes": 130748416
+      }
+    ],
+    "median_s": 2.2338210000889376,
+    "range_s": [
+      2.2338210000889376,
+      2.2338210000889376
+    ],
+    "profiled_s": 3.7814361999044195,
+    "profiled_request_s": 3.7446883999509737,
+    "profile_overhead_ratio": 1.6763601021755468
+  },
+  "integrated_day_before": {
+    "python": "3.13.2",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "commit": "f8eb2c43937b9a97673c5c61c967c987579fc21c",
+    "measurements": [
+      {
+        "strategy": "no_control",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 92576,
+        "request_s": 30.137595499982126,
+        "simulation_s": 25.98890160000883,
+        "simulation_runs_s": [
+          25.98890160000883
+        ],
+        "results_s": 4.129356999997981,
+        "response_bytes": 21470052,
+        "response_sha256": "652f1c5404728fc104c0e7a84e22a0e3940ceaeefe6aa44328a727926555e09c",
+        "peak_memory_bytes": 782716928
+      }
+    ],
+    "median_s": 30.137595499982126,
+    "range_s": [
+      30.137595499982126,
+      30.137595499982126
+    ]
+  },
+  "hour_after": {
+    "python": "3.13.2",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "commit": "70a8f8cd229ac3be9e86af7dec1e0a8fb040f0fc",
+    "measurements": [
+      {
+        "strategy": "no_control",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 1.9446505999658257,
+        "simulation_s": 1.6850323000689968,
+        "simulation_runs_s": [
+          1.6850323000689968
+        ],
+        "results_s": 0.24770389997866005,
+        "response_bytes": 833763,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "peak_memory_bytes": 130834432
+      },
+      {
+        "strategy": "no_control",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 1.8915597000159323,
+        "simulation_s": 1.650645500048995,
+        "simulation_runs_s": [
+          1.650645500048995
+        ],
+        "results_s": 0.23829500004649162,
+        "response_bytes": 833763,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "peak_memory_bytes": 141881344
+      },
+      {
+        "strategy": "no_control",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 1.9215446000453085,
+        "simulation_s": 1.67691979999654,
+        "simulation_runs_s": [
+          1.67691979999654
+        ],
+        "results_s": 0.24200150009710342,
+        "response_bytes": 833763,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "peak_memory_bytes": 144879616
+      },
+      {
+        "strategy": "no_control",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 1.965648700017482,
+        "simulation_s": 1.6934484000084922,
+        "simulation_runs_s": [
+          1.6934484000084922
+        ],
+        "results_s": 0.2698332000290975,
+        "response_bytes": 833763,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "peak_memory_bytes": 149274624
+      },
+      {
+        "strategy": "no_control",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 1.9339578000362962,
+        "simulation_s": 1.692787399981171,
+        "simulation_runs_s": [
+          1.692787399981171
+        ],
+        "results_s": 0.23884210002142936,
+        "response_bytes": 833763,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "peak_memory_bytes": 152973312
+      }
+    ],
+    "median_s": 1.9339578000362962,
+    "range_s": [
+      1.8915597000159323,
+      1.965648700017482
+    ],
+    "profiled_s": 3.5001950999721885,
+    "profiled_request_s": 3.4674201000016183,
+    "profile_overhead_ratio": 1.79291404390341
+  },
+  "day_after": {
+    "python": "3.13.2",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "commit": "70a8f8cd229ac3be9e86af7dec1e0a8fb040f0fc",
+    "measurements": [
+      {
+        "strategy": "no_control",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 92576,
+        "request_s": 26.1986004000064,
+        "simulation_s": 22.159069500048645,
+        "simulation_runs_s": [
+          22.159069500048645
+        ],
+        "results_s": 4.027364799985662,
+        "response_bytes": 21470052,
+        "response_sha256": "652f1c5404728fc104c0e7a84e22a0e3940ceaeefe6aa44328a727926555e09c",
+        "peak_memory_bytes": 782745600
+      },
+      {
+        "strategy": "no_control",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 92576,
+        "request_s": 26.87331409996841,
+        "simulation_s": 22.79855199996382,
+        "simulation_runs_s": [
+          22.79855199996382
+        ],
+        "results_s": 4.0716863999841735,
+        "response_bytes": 21470052,
+        "response_sha256": "652f1c5404728fc104c0e7a84e22a0e3940ceaeefe6aa44328a727926555e09c",
+        "peak_memory_bytes": 896958464
+      },
+      {
+        "strategy": "no_control",
+        "endpoint": "/simulation/run",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "00:00:00",
+          "duration_s": 92576,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T04:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "no_control",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 92576,
+        "request_s": 27.055049699964,
+        "simulation_s": 22.838850799947977,
+        "simulation_runs_s": [
+          22.838850799947977
+        ],
+        "results_s": 4.213706100010313,
+        "response_bytes": 21470052,
+        "response_sha256": "652f1c5404728fc104c0e7a84e22a0e3940ceaeefe6aa44328a727926555e09c",
+        "peak_memory_bytes": 982495232
+      }
+    ],
+    "median_s": 26.87331409996841,
+    "range_s": [
+      26.1986004000064,
+      27.055049699964
+    ]
+  },
+  "comparison_completed": {
+    "python": "3.13.2",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "commit": "70a8f8cd229ac3be9e86af7dec1e0a8fb040f0fc",
+    "measurements": [
+      {
+        "strategy": "connection_protection",
+        "endpoint": "/simulation/passenger-comparison",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "connection_protection",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 3.885715499985963,
+        "simulation_s": 3.394758899929002,
+        "simulation_runs_s": [
+          1.6877141000004485,
+          1.7070447999285534
+        ],
+        "results_s": 0.23914940003305674,
+        "response_bytes": 494855,
+        "response_sha256": "7badd870f01cc1552fa246b75f4d90a0978bb026fe2c8c4571f36a8f63eb1f85",
+        "peak_memory_bytes": 135364608
+      },
+      {
+        "strategy": "connection_protection",
+        "endpoint": "/simulation/passenger-comparison",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "connection_protection",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 3.922698999987915,
+        "simulation_s": 3.4208172999788076,
+        "simulation_runs_s": [
+          1.6907523999689147,
+          1.7300649000098929
+        ],
+        "results_s": 0.24331920000258833,
+        "response_bytes": 494855,
+        "response_sha256": "7badd870f01cc1552fa246b75f4d90a0978bb026fe2c8c4571f36a8f63eb1f85",
+        "peak_memory_bytes": 147984384
+      },
+      {
+        "strategy": "connection_protection",
+        "endpoint": "/simulation/passenger-comparison",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 300
+        },
+        "scenario": {
+          "dataset_id": "reference-network",
+          "date": "2026-10-05",
+          "start_time": "07:00:00",
+          "duration_s": 3600,
+          "repetitions": 1,
+          "master_seed": 42,
+          "interchanges": [
+            "mcgill"
+          ],
+          "timezone": "America/Toronto",
+          "dst_fold": null,
+          "resolved_start_utc": "2026-10-05T11:00:00+00:00",
+          "resolved_start_utc_offset": "-04:00",
+          "control": {
+            "strategy": "connection_protection",
+            "hold_search": {
+              "step_s": 5.0,
+              "max_hold_s": 300.0
+            },
+            "weights": {
+              "w_wait": 2.0,
+              "w_onboard": 1.0
+            },
+            "prediction_error": {
+              "arrival_kappa": 1.0,
+              "transfer_kappa": 1.0,
+              "load_kappa": 1.0
+            },
+            "connection_headways_s": {
+              "green_mcgill_0": 180.0
+            }
+          },
+          "operating_rules": {
+            "max_hold_time": 300.0,
+            "min_safe_gap": 60.0,
+            "rule_action_map": {
+              "max_hold_exceeded": "CLAMP",
+              "headway_violation": "REFUSE",
+              "one_hop_violation": "REFUSE"
+            }
+          }
+        },
+        "duration_s": 3600,
+        "request_s": 3.9790078999940306,
+        "simulation_s": 3.5116665998939425,
+        "simulation_runs_s": [
+          1.7327514999778941,
+          1.7789150999160483
+        ],
+        "results_s": 0.23542280006222427,
+        "response_bytes": 494855,
+        "response_sha256": "7badd870f01cc1552fa246b75f4d90a0978bb026fe2c8c4571f36a8f63eb1f85",
+        "peak_memory_bytes": 156667904
+      }
+    ],
+    "median_s": 3.922698999987915,
+    "range_s": [
+      3.885715499985963,
+      3.9790078999940306
+    ]
+  },
+  "coordinated_hour_before": {
+    "status": "unfinished",
+    "observed_worker_elapsed_s": 545.9571853,
+    "completed_request_s": null,
+    "worker_budget_s": 500,
+    "reason": "No response within the extended baseline experiment"
+  },
+  "coordinated_comparison_after": {
+    "status": "unfinished",
+    "worker_budget_s": 120,
+    "completed_request_s": null,
+    "reason": "Benchmark timed out; API completion time is unknown",
+    "observed_worker_elapsed_s": 120.03655940003227
+  },
+  "captured_planner_after": {
+    "samples": [
+      {
+        "elapsed_s": 1.8408542999532074,
+        "combinations_evaluated": 41401,
+        "sha256": "256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"
+      },
+      {
+        "elapsed_s": 1.8655245000263676,
+        "combinations_evaluated": 41401,
+        "sha256": "256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"
+      },
+      {
+        "elapsed_s": 1.9065977000864223,
+        "combinations_evaluated": 41401,
+        "sha256": "256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"
+      },
+      {
+        "elapsed_s": 1.8571379999630153,
+        "combinations_evaluated": 41401,
+        "sha256": "256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"
+      },
+      {
+        "elapsed_s": 1.842841099947691,
+        "combinations_evaluated": 41401,
+        "sha256": "256884d677f2749fcf917d1410c126f91366def382b75cc3b2fe42a9e789fba8"
+      }
+    ],
+    "median_s": 1.8571379999630153,
+    "range_s": [
+      1.8408542999532074,
+      1.9065977000864223
+    ]
+  },
+  "correctness_verification": {
+    "reference": "f8eb2c43937b9a97673c5c61c967c987579fc21c",
+    "purpose": "fingerprint-only correctness runs concurrent with CI; timings deliberately not used for benchmarking",
+    "verified": [
+      {
+        "strategy": "adaptive",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "adaptive",
+          "max_hold_time": 300,
+          "irregularity_threshold": 0.2
+        },
+        "duration_s": 3600,
+        "response_sha256": "b28f5f2939b7a51e410edad54cb8acb8373c0541fb29ce2be3f767732fa9b2ff",
+        "response_bytes": 834569
+      },
+      {
+        "strategy": "connection_protection",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 300
+        },
+        "duration_s": 3600,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "response_bytes": 833763
+      },
+      {
+        "strategy": "headway_regulation",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "headway_regulation",
+          "max_hold_time": 300
+        },
+        "duration_s": 3600,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "response_bytes": 833763
+      },
+      {
+        "strategy": "no_control",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "duration_s": 3600,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "response_bytes": 833763
+      },
+      {
+        "strategy": "schedule_based",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "schedule_based",
+          "max_hold_time": 300
+        },
+        "duration_s": 3600,
+        "response_sha256": "6cb4bc8e34ea84d94cc2f12df967ee8ae479c0a4a924a6a2742da68bdef7602c",
+        "response_bytes": 833763
+      },
+      {
+        "strategy": "adaptive",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "adaptive",
+          "max_hold_time": 120,
+          "irregularity_threshold": 0.2
+        },
+        "duration_s": 3600,
+        "response_sha256": "ac8392ae03418680997401847760cfedcb3d7c303fed01f641f44a0750f02b81",
+        "response_bytes": 834569
+      },
+      {
+        "strategy": "connection_protection",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 120
+        },
+        "duration_s": 3600,
+        "response_sha256": "caec8316134d167def79a31432b723ea460aa1723fd01d865d997321887375e8",
+        "response_bytes": 833763
+      },
+      {
+        "strategy": "headway_regulation",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "headway_regulation",
+          "max_hold_time": 120
+        },
+        "duration_s": 3600,
+        "response_sha256": "caec8316134d167def79a31432b723ea460aa1723fd01d865d997321887375e8",
+        "response_bytes": 833763
+      },
+      {
+        "strategy": "no_control",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 120
+        },
+        "duration_s": 3600,
+        "response_sha256": "caec8316134d167def79a31432b723ea460aa1723fd01d865d997321887375e8",
+        "response_bytes": 833763
+      },
+      {
+        "strategy": "schedule_based",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "schedule_based",
+          "max_hold_time": 120
+        },
+        "duration_s": 3600,
+        "response_sha256": "caec8316134d167def79a31432b723ea460aa1723fd01d865d997321887375e8",
+        "response_bytes": 833763
+      },
+      {
+        "strategy": "adaptive",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "adaptive",
+          "max_hold_time": 300,
+          "irregularity_threshold": 0.2
+        },
+        "duration_s": 92576,
+        "response_sha256": "6337dc5fc524ecf8b9cfd10dcd36e9fc001c70c207a7ca22b85e3b287bd2a989",
+        "response_bytes": 21499061
+      },
+      {
+        "strategy": "connection_protection",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 300
+        },
+        "duration_s": 92576,
+        "response_sha256": "8ba22e8852837e38510a36cd3cbb473c175f84e2f3ee80ca44e74158e7c0c73f",
+        "response_bytes": 21467809
+      },
+      {
+        "strategy": "headway_regulation",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "headway_regulation",
+          "max_hold_time": 300
+        },
+        "duration_s": 92576,
+        "response_sha256": "fa46cb52e9226c128719a3f2747d83edbd2891465856e2ab93e30ff0492eb17b",
+        "response_bytes": 21524273
+      },
+      {
+        "strategy": "no_control",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "no_control",
+          "max_hold_time": 300
+        },
+        "duration_s": 92576,
+        "response_sha256": "652f1c5404728fc104c0e7a84e22a0e3940ceaeefe6aa44328a727926555e09c",
+        "response_bytes": 21470052
+      },
+      {
+        "strategy": "schedule_based",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "schedule_based",
+          "max_hold_time": 300
+        },
+        "duration_s": 92576,
+        "response_sha256": "652f1c5404728fc104c0e7a84e22a0e3940ceaeefe6aa44328a727926555e09c",
+        "response_bytes": 21470052
+      },
+      {
+        "endpoint": "/simulation/passenger-comparison",
+        "strategy": "connection_protection",
+        "settings": {
+          "connection_id": "mcgill-rem-green",
+          "strategy": "connection_protection",
+          "max_hold_time": 300
+        },
+        "duration_s": 3600,
+        "response_sha256": "7badd870f01cc1552fa246b75f4d90a0978bb026fe2c8c4571f36a8f63eb1f85",
+        "response_bytes": 494855
+      }
+    ]
+  },
+  "python_validation_tail": [
+    "........................................................................ [ 77%]",
+    "........................................................................ [ 81%]",
+    "........................................................................ [ 85%]",
+    "........................................................................ [ 89%]",
+    "........................................................................ [ 93%]",
+    "........................................................................ [ 97%]",
+    "..................................................                       [100%]",
+    "=============================== tests coverage ================================",
+    "_______________ coverage: platform win32, python 3.13.2-final-0 _______________",
+    "",
+    "Coverage XML written to file coverage.xml",
+    "1849 passed, 30 deselected, 1 xfailed in 205.73s (0:03:25)"
+  ],
+  "frontend_validation_tail": [
+    "  ...lation-api.ts |   95.78 |    87.35 |     100 |   98.78 | 333               ",
+    "  ...tationView.ts |   87.15 |    76.29 |   96.96 |      87 | ...13-115,323-358 ",
+    " src/store         |   96.72 |    89.15 |     100 |   96.87 |                   ",
+    "  ...ybackStore.ts |   96.52 |    89.15 |     100 |   96.73 | 95,332,344        ",
+    "-------------------|---------|----------|---------|---------|-------------------",
+    "",
+    "=============================== Coverage summary ===============================",
+    "Statements   : 95.19% ( 1188/1248 )",
+    "Branches     : 86.77% ( 768/885 )",
+    "Functions    : 96.74% ( 357/369 )",
+    "Lines        : 96.17% ( 1006/1046 )",
+    "================================================================================"
+  ]
+}

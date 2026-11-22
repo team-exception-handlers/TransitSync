@@ -1,5 +1,9 @@
 # Simulation performance
 
+For the current-main integration and task acceptance audit, see
+[Performance task readiness](performance-readiness.md). The measurements below
+describe the earlier base and are retained as historical before/after evidence.
+
 These local changes use main `8ddf153ecbbe29326658deefaa685a586b6a38ff` as
 the reference. They preserve the one-hour API default, response schema, random
 draw order, hold grid, planning window, search budget, and audit fields.
