@@ -1,8 +1,13 @@
 {
-  "connection_id": {
+  "rem_schedule": {
     "classification": "published",
-    "source_name": "TransitSync GTFS Network Schedule",
-    "source_link": "https://developers.google.com/transit/gtfs"
+    "source_name": "Schedule data from the Réseau express métropolitain (REM), used under CC BY 4.0, processed and modified",
+    "source_link": "https://rem.info"
+  },
+  "stm_schedule": {
+    "classification": "published",
+    "source_name": "Schedule data from the Société de transport de Montréal (STM), used under CC BY 4.0, processed and modified",
+    "source_link": "https://www.stm.info"
   },
   "strategy": {
     "classification": "assumed",
@@ -10,6 +15,11 @@
     "source_link": ""
   },
   "max_hold_time": {
+    "classification": "estimated",
+    "source_name": "TransitSync Operational Thresholds",
+    "source_link": ""
+  },
+  "min_safe_gap": {
     "classification": "estimated",
     "source_name": "TransitSync Operational Thresholds",
     "source_link": ""

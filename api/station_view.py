@@ -8,10 +8,11 @@ are points on the selected transfer path; event and run times are seconds.
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict
-from typing import Literal, cast
+from typing import Annotated, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.passenger_metrics import PassengerMetrics, compute_passenger_metrics
 from api.passenger_outcomes import PassengerOutcome, build_passenger_outcomes
 from api.passenger_tracks import build_passenger_tracks
 from api.station_layout import (
@@ -256,6 +257,9 @@ class TimeSeriesResponse(BaseModel):
     hold_events: list[HoldEventResponse]
 
 
+RunId = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
+
+
 class SimulationRunResponse(StationLayoutResponse):
     """Station-view map data together with one run's dynamic playback records.
 
@@ -263,10 +267,16 @@ class SimulationRunResponse(StationLayoutResponse):
     """
 
     schema_version: Literal[1] = 1
+    run_id: RunId
     start_clock_s: float = Field(ge=0, allow_inf_nan=False)
     duration_s: float = Field(gt=0, allow_inf_nan=False)
     passenger_tracks: list[PassengerTrackResponse]
     passenger_outcomes: list[PassengerOutcome] = Field(default_factory=list)
+    passenger_metrics: PassengerMetrics = Field(
+        default_factory=lambda data: compute_passenger_metrics(
+            data["passenger_outcomes"]
+        )
+    )
     train_events: list[TrainMovementResponse]
     decisions: list[DecisionResponse]
     # Empty for every strategy except adaptive. Added without a schema bump
@@ -289,6 +299,8 @@ def build_station_view_response(
     event_records: Sequence[dict[str, object]],
     transfers: TransferComponent,
     decision_records: Sequence[dict[str, object]] = (),
+    *,
+    run_id: str,
 ) -> SimulationRunResponse:
     """Adapt static layout and simulator events to the station-view response.
 
@@ -302,6 +314,7 @@ def build_station_view_response(
     decisions = _decision_records(event_records, shown_platforms)
     response = SimulationRunResponse(
         **layout.model_dump(),
+        run_id=run_id,
         schema_version=1,
         start_clock_s=scenario_start_clock_s(scenario),
         duration_s=float(scenario.duration_s),

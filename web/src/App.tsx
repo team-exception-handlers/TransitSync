@@ -10,8 +10,9 @@
  * the user moves between screens and every screen shows the same run.
  */
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ConnectionSelector } from "./components/connection-selector";
+import { ProvenanceBadge } from "./components/provenance-badge";
 import { connectionRuns } from "./data/connection-runs";
 import { stationViewData } from "./data/stationViewData";
 import { startPlaybackClock } from "./lib/playback-clock";
@@ -19,11 +20,13 @@ import {
   configuredApiUrl,
   createConnectionCatalogLoader,
   createConnectionRunLoader,
+  createParameterProvenanceLoader,
   runComparison,
   runSimulation,
   type ComparisonRunner,
   type ConnectionCatalogLoader,
   type ConnectionRunLoader,
+  type ParameterProvenanceLoader,
   type ScenarioRunner,
 } from "./lib/simulation-api";
 import { usePlaybackStore } from "./store/usePlaybackStore";
@@ -33,6 +36,7 @@ import { PlaceholderView } from "./views/placeholder-view";
 import { ResultsView } from "./views/results-view";
 import { SetupView } from "./views/setup-view";
 import { StationView } from "./views/station-view";
+import type { ParameterProvenanceMap } from "./types/provenance";
 
 // Built once per page load. Without VITE_API_URL the app stays on its bundled
 // mock runs, which is also what the component tests render.
@@ -54,6 +58,11 @@ const defaultConnectionCatalogLoader: ConnectionCatalogLoader | null = apiUrl ==
   ? null
   : createConnectionCatalogLoader(apiUrl);
 
+// Reads where each setting came from for the provenance badges (US-7.1).
+const defaultParameterProvenanceLoader: ParameterProvenanceLoader | null = apiUrl === null
+  ? null
+  : createParameterProvenanceLoader(apiUrl);
+
 interface AppProps {
   // Injectable for tests; null keeps the app on the mock catalog.
   runLoader?: ConnectionRunLoader | null;
@@ -63,6 +72,8 @@ interface AppProps {
   connectionCatalogLoader?: ConnectionCatalogLoader | null;
   // Injectable for tests; null shows the Compare screen's "no API" note.
   comparisonRunner?: ComparisonRunner | null;
+  // Injectable for tests; null leaves every provenance badge "Unspecified".
+  parameterProvenanceLoader?: ParameterProvenanceLoader | null;
 }
 
 export default function App({
@@ -70,7 +81,10 @@ export default function App({
   scenarioRunner = defaultScenarioRunner,
   comparisonRunner = defaultComparisonRunner,
   connectionCatalogLoader = defaultConnectionCatalogLoader,
+  parameterProvenanceLoader = defaultParameterProvenanceLoader,
 }: Readonly<AppProps>) {
+  // Loaded once here and passed down, so every screen shows the same sources.
+  const [provenance, setProvenance] = useState<ParameterProvenanceMap>({});
   // Leased by the shell so playback keeps its position across screen changes.
   useEffect(startPlaybackClock, []);
   const selectedConnectionId = usePlaybackStore((state) => state.selectedConnectionId);
@@ -116,12 +130,27 @@ export default function App({
     return () => controller.abort();
   }, [runLoader, selectedConnectionId]);
 
+  useEffect(() => {
+    if (parameterProvenanceLoader === null) return;
+    const controller = new AbortController();
+    parameterProvenanceLoader(controller.signal)
+      .then((entries) => {
+        if (!controller.signal.aborted) {
+          setProvenance(entries);
+        }
+      })
+      .catch(() => {
+        // Keep empty provenance map; panels handle missing entries gracefully.
+      });
+    return () => controller.abort();
+  }, [parameterProvenanceLoader]);
+
   // One entry per sidebar item; only the active one is mounted.
   const screens: Record<AppView, ReactNode> = {
-    station: <StationView />,
+    station: <StationView provenance={provenance} />,
     compare: <CompareView runner={comparisonRunner} />,
     results: <ResultsView />,
-    setup: <SetupView runner={scenarioRunner} />,
+    setup: <SetupView runner={scenarioRunner} provenance={provenance} />,
     sources: <PlaceholderView title="Sources" story="US-7.2" />,
   };
 
@@ -136,6 +165,14 @@ export default function App({
           </div>
         </div>
         <ConnectionSelector />
+        {/* The connections come from the REM and STM GTFS feeds. Both are CC BY 4.0,
+            so each badge carries the credit and links to its own feed (#313). */}
+        <div className="schedule-sources">
+          <ProvenanceBadge parameterKey="rem_schedule" label="REM schedule"
+            provenance={provenance.rem_schedule} />
+          <ProvenanceBadge parameterKey="stm_schedule" label="STM schedule"
+            provenance={provenance.stm_schedule} />
+        </div>
       </header>
 
       <div className="workspace">

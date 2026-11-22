@@ -25,10 +25,12 @@ import {
 } from "../lib/run-settings";
 import type { DisruptionPreset } from "../types/runSettings";
 import type { ScenarioRunner } from "../lib/simulation-api";
+import type { ParameterProvenanceMap } from "../types/provenance";
 import { usePlaybackStore } from "../store/usePlaybackStore";
 import { useRunSettingsStore } from "../store/useRunSettingsStore";
 import { SettingChoice } from "./setting-choice";
 import { SettingSlider } from "./setting-slider";
+import { ProvenanceBadge } from "./provenance-badge";
 import "./run-settings.css";
 
 const ERROR_MAGNITUDE_HELP =
@@ -50,13 +52,15 @@ const MAX_HOLD_HELP =
 interface RunSettingsPanelProps {
   /** Sends one run to the API; null when no API is configured (mock runs only). */
   runner: ScenarioRunner | null;
+  /** Parameter sources from GET /parameters, shown as a badge under each setting. */
+  provenance?: ParameterProvenanceMap;
 }
 
 /**
  * The panel reads the selected connection and run status from the playback
  * store, so it needs no props beyond the function that performs a run.
  */
-export function RunSettingsPanel({ runner }: Readonly<RunSettingsPanelProps>) {
+export function RunSettingsPanel({ runner, provenance }: Readonly<RunSettingsPanelProps>) {
   const titleId = useId();
   const strategyGroup = useId();
   const draft = useRunSettingsStore((state) => state.draft);
@@ -123,7 +127,11 @@ export function RunSettingsPanel({ runner }: Readonly<RunSettingsPanelProps>) {
 
       <div className="run-settings-body">
         <fieldset className="strategy-list">
+          {/* The badge sits after the legend, not inside it: the legend is the
+              group's accessible name and should read just "Strategy". */}
           <legend>Strategy</legend>
+          <ProvenanceBadge parameterKey="strategy" label="Strategy"
+            provenance={provenance?.strategy} />
           {STRATEGY_OPTIONS.map((option) => (
             <label key={option.name} className="strategy-option">
               <input type="radio" name={strategyGroup} value={option.name}
@@ -142,19 +150,27 @@ export function RunSettingsPanel({ runner }: Readonly<RunSettingsPanelProps>) {
             value={draft.irregularity_threshold} range={THRESHOLD_RANGE}
             format={formatThreshold} disabled={draft.strategy !== "adaptive"}
             onChange={(value) => update({ irregularity_threshold: value })} />
+          <ProvenanceBadge parameterKey="irregularity_threshold" label="Irregularity threshold"
+            provenance={provenance?.irregularity_threshold} />
         </fieldset>
 
         <div className="run-settings-values">
           <SettingSlider label="Maximum hold" value={draft.max_hold_time}
             range={MAX_HOLD_RANGE} format={formatSeconds} help={MAX_HOLD_HELP}
             onChange={(value) => update({ max_hold_time: value })} />
+          <ProvenanceBadge parameterKey="max_hold_time" label="Maximum hold"
+            provenance={provenance?.max_hold_time} />
           <SettingSlider label="Error magnitude" value={draft.error_magnitude}
             range={ERROR_MAGNITUDE_RANGE} format={formatErrorMagnitude}
             help={ERROR_MAGNITUDE_HELP}
             onChange={(value) => update({ error_magnitude: value })} />
+          <ProvenanceBadge parameterKey="error_magnitude" label="Error magnitude"
+            provenance={provenance?.error_magnitude} />
           <SettingChoice label="Passenger flow" options={PASSENGER_FLOWS}
             value={draft.passenger_flow} format={(flow) => flow}
             onChange={(flow) => update({ passenger_flow: flow })} />
+                    <ProvenanceBadge parameterKey="passenger_flow" label="Passenger flow"
+            provenance={provenance?.passenger_flow} />
           <SettingChoice label="Disruption" options={DISRUPTION_PRESETS}
             value={draft.disruption_preset ?? "none"} format={(preset) => DISRUPTION_LABELS[preset]}
             note={DISRUPTION_HELP}
@@ -162,6 +178,8 @@ export function RunSettingsPanel({ runner }: Readonly<RunSettingsPanelProps>) {
               disruption_preset: preset,
               disruption_enabled: preset === "platform_delay",
             })} />
+          <ProvenanceBadge parameterKey="disruption_enabled" label="Disruption"
+            provenance={provenance?.disruption_enabled} />
           {(draft.disruption_preset ?? "none") !== "none" && (
             <>
               <SettingSlider label="Disruption start"

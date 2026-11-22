@@ -16,6 +16,7 @@ import { SimulationClock } from "../components/simulation-clock";
 import { SpeedSelector } from "../components/speed-selector";
 import { StationCanvas } from "../components/station-canvas";
 import { usePlaybackStore, type RunStatus } from "../store/usePlaybackStore";
+import type { ParameterProvenanceMap } from "../types/provenance";
 
 // Subtitle under the heading, so viewers always know whether they are looking
 // at simulator output or synthetic data.
@@ -28,8 +29,13 @@ const RUN_STATUS_TEXT: Record<RunStatus, string> = {
 // A failed re-run leaves the earlier simulator output on screen, not a mock.
 const RERUN_FAILED_TEXT = "Run failed · showing the previous simulation run";
 
+interface StationViewProps {
+  /** Where each setting came from (US-7.1), for the rules and decision badges. */
+  provenance?: ParameterProvenanceMap;
+}
+
 /** Lay out the station map, the right-hand panels and the playback bar. */
-export function StationView() {
+export function StationView({ provenance }: Readonly<StationViewProps>) {
   const runStatus = usePlaybackStore((state) => state.runStatus);
   const runError = usePlaybackStore((state) => state.runError);
   const data = usePlaybackStore((state) => state.data);
@@ -63,8 +69,8 @@ export function StationView() {
       {/* Right-hand panels: simulation time, operating rules, decisions. */}
       <aside className="inspector">
         <SimulationClock />
-        <OperatingRulesPanel />
-        <DecisionView />
+        <OperatingRulesPanel provenance={provenance} />
+        <DecisionView provenance={provenance} />
       </aside>
 
       <section className="panel playback-region">

@@ -19,6 +19,8 @@ import type { LineId, StationViewData } from "../types/stationView";
 import type { RunSettings } from "../types/runSettings";
 import { buildRunRequest } from "./run-settings";
 import { parseStationViewData } from "./validateStationView";
+import type { ParameterProvenance, ParameterProvenanceMap } from "../types/provenance";
+import { normalizeClassification } from "../types/provenance";
 
 /** Loads one run for a connection ID; the store accepts any function of this shape. */
 export type ConnectionRunLoader = (
@@ -374,4 +376,69 @@ export function runComparison(
 ): Promise<SimulationComparison> {
   return requestRun("/simulation/comparison", connectionId, settings, options,
     (payload) => parseSimulationComparison(payload, connectionId));
+}
+
+export type ParameterProvenanceLoader = (
+  signal?: AbortSignal,
+) => Promise<ParameterProvenanceMap>;
+
+function isProvenanceEntryRecord(
+  value: unknown,
+): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Validate and normalize the `/parameters` provenance response into a map
+ * keyed by parameter name. Throws if the top-level payload is not a JSON object;
+ * a single malformed entry is skipped instead, so it cannot hide every badge.
+ */
+export function parseParameterProvenance(
+  payload: unknown,
+): ParameterProvenanceMap {
+  if (!isProvenanceEntryRecord(payload)) {
+    throw new Error("Parameter provenance response is not an object");
+  }
+
+  const result: ParameterProvenanceMap = {};
+  for (const [key, rawEntry] of Object.entries(payload)) {
+    // Skip one malformed entry, like an unknown classification: that parameter
+    // reads "Unspecified" while every other badge still shows its source.
+    if (!isProvenanceEntryRecord(rawEntry)) continue;
+
+    const entry: ParameterProvenance = {
+      classification: normalizeClassification(
+        typeof rawEntry.classification === "string"
+          ? rawEntry.classification
+          : null,
+      ),
+      source_name:
+        typeof rawEntry.source_name === "string" ? rawEntry.source_name : "",
+      source_link:
+        typeof rawEntry.source_link === "string" ? rawEntry.source_link : "",
+    };
+    result[key] = entry;
+  }
+
+  return result;
+}
+
+/**
+ * Build a loader that GETs `${baseUrl}/parameters` and returns the validated
+ * provenance map. `fetchImpl` is for tests.
+ */
+export function createParameterProvenanceLoader(
+  baseUrl: string,
+  fetchImpl: typeof fetch = fetch,
+): ParameterProvenanceLoader {
+  return async (signal) => {
+    const response = await fetchImpl(`${baseUrl}/parameters`, { signal });
+    if (!response.ok) {
+      throw new SimulationRunError(
+        `Could not load parameter provenance (HTTP ${response.status}).`,
+        response.status,
+      );
+    }
+    return parseParameterProvenance(await response.json());
+  };
 }

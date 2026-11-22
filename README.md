@@ -132,6 +132,8 @@ The same run can be started without the front end from the Swagger page with `PO
 
 Valid connection IDs are `gare_centrale_bonaventure-rem-orange`, `mcgill-rem-green` and `edouard_montpetit-rem-blue`, and `GET /connections` lists them. Valid strategies are `no_control`, `schedule_based`, `headway_regulation`, `connection_protection`, `rolling_horizon` and `adaptive`.
 
+Copy the `run_id` from the run response into `GET /simulation/runs/{run_id}/results` in Swagger. The response contains `passenger_metrics`, the `time_series` delay buckets and hold markers, and `passenger_outcomes` for passenger-level charts. The API keeps the eight most recently used runs in memory. If a run was evicted or the API restarted, submit the same settings again to repopulate the cache.
+
 ### 4. Environment variables
 
 | File | Variable | Purpose |

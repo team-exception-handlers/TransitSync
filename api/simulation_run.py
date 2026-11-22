@@ -17,6 +17,7 @@ from collections.abc import Mapping, Sequence
 from concurrent.futures import Future
 from copy import deepcopy
 from dataclasses import replace
+from hashlib import sha256
 from pathlib import Path
 from threading import RLock
 from typing import Literal
@@ -25,6 +26,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from api.connection_data import index_connections
 from api.network_data import DATASET_ID, dataset_metadata, load_reference_network
+from api.run_results import RunResultsResponse
 from api.station_layout import Connection, StationLayoutResponse
 from api.station_layout import Platform as LayoutPlatform
 from api.station_view import SimulationRunResponse, build_station_view_response
@@ -136,6 +138,11 @@ class SimulationRunRequest(BaseModel):
         default=None, ge=0, allow_inf_nan=False, strict=True
     )
 
+    @property
+    def run_id(self) -> str:
+        """Identify this settings combination in the application's run cache."""
+        return sha256(self.model_dump_json().encode("utf-8")).hexdigest()
+
     @model_validator(mode="after")
     def validate_adaptive_threshold(self) -> SimulationRunRequest:
         """Require a threshold only when adaptive mode is requested."""
@@ -194,7 +201,7 @@ class SimulationRunService:
         concurrently. Cached payloads are reconstructed into typed responses.
         Least-recently-used entries are evicted after the configured cache limit.
         """
-        cache_key = request.model_dump_json()
+        cache_key = request.run_id
         with self._cache_lock:
             cached = self._cache.get(cache_key)
             if cached is not None:
@@ -225,6 +232,16 @@ class SimulationRunService:
             self._in_flight.pop(cache_key, None)
         future.set_result(response)
         return response
+
+    def results(self, run_id: str) -> RunResultsResponse | None:
+        """Read completed results and refresh their position in the shared LRU."""
+        with self._cache_lock:
+            cached = self._cache.get(run_id)
+            if cached is None:
+                return None
+            self._cache.move_to_end(run_id)
+        # Published cache entries are never mutated. Validate only result sections.
+        return RunResultsResponse.model_validate(cached)
 
     def _run_uncached(self, request: SimulationRunRequest) -> SimulationRunResponse:
         """Run and serialize one validated settings combination.
@@ -275,6 +292,7 @@ class SimulationRunService:
                 event_records,
                 run_state["transfers"],
                 decision_records,
+                run_id=request.run_id,
             )
 
     def starting_conditions(self, connection_id: str) -> Scenario:

@@ -13,6 +13,8 @@ import { operatingRules, operatingRulesConfig } from "../data/operating-rules";
 import { runOperatingRules, runRuleCheck } from "../lib/runOperatingRules";
 import { formatTime } from "../lib/time";
 import { usePlaybackStore } from "../store/usePlaybackStore";
+import type { ParameterProvenanceMap } from "../types/provenance";
+import { ProvenanceBadge } from "./provenance-badge";
 import type { RuleCheck, RuleViolation } from "../types/operatingRules";
 
 /** What each rule means, worded for the violation list. */
@@ -57,7 +59,14 @@ function RuleCheckResult({ check, startClockS }: Readonly<{ check: RuleCheck; st
   );
 }
 
-export function OperatingRulesPanel() {
+interface OperatingRulesPanelProps {
+  /** Parameter sources from GET /parameters, shown beside each limit. */
+  provenance?: ParameterProvenanceMap;
+}
+
+export function OperatingRulesPanel({
+  provenance,
+}: Readonly<OperatingRulesPanelProps>) {
   const data = usePlaybackStore((state) => state.data);
   const fromRun = useMemo(() => runOperatingRules(data), [data]);
   // Mock playback and older cached runs have no check, so nothing is shown.
@@ -71,11 +80,21 @@ export function OperatingRulesPanel() {
       <dl className="operating-rules-values">
         <div>
           <dt>Max hold time</dt>
-          <dd>{config.max_hold_time}s</dd>
+          <dd><span>{config.max_hold_time}s</span>{" "}
+            <ProvenanceBadge
+              parameterKey="max_hold_time"
+              label="Maximum hold"
+              provenance={provenance?.max_hold_time}
+            /></dd>
         </div>
         <div>
           <dt>Min safe gap</dt>
-          <dd><span>{config.min_safe_gap}s</span> <small>Not enforced yet</small></dd>
+          <dd><span>{config.min_safe_gap}s</span> {" "}
+            <ProvenanceBadge
+              parameterKey="min_safe_gap"
+              label="Minimum safe gap"
+              provenance={provenance?.min_safe_gap}
+            />{" "}<small>Not enforced yet</small></dd>
         </div>
       </dl>
 

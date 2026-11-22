@@ -8,7 +8,7 @@ from typing import Literal
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from api.connection_data import (
     ConnectionDataResponse,
@@ -17,6 +17,7 @@ from api.connection_data import (
     list_connections,
 )
 from api.passenger_outcomes import PassengerComparison
+from api.run_results import RunResultsResponse
 from api.settings import Settings
 from api.simulation_comparison import (
     NO_HOLDING_STRATEGY,
@@ -30,7 +31,7 @@ from api.simulation_run import (
     UnknownConnectionError,
 )
 from api.station_layout import StationLayoutResponse, load_station_layouts
-from api.station_view import SimulationRunResponse
+from api.station_view import RunId, SimulationRunResponse
 from simulator.engine.runner import RunError
 from simulator.parameter_provenance import load_parameter_provenance
 
@@ -41,6 +42,18 @@ class HealthResponse(BaseModel):
     """Typed successful health-check response whose status is always ``ok``."""
 
     status: Literal["ok"]
+
+
+def _cached_results(service: SimulationRunService, run_id: str) -> RunResultsResponse:
+    """Translate missing or unreadable result sections to API errors."""
+    try:
+        results = service.results(run_id)
+    except ValidationError as error:
+        log.exception("Invalid cached results for run %s", run_id)
+        raise HTTPException(500, "Cached run results are invalid") from error
+    if results is None:
+        raise HTTPException(404, "Run is not in the cache")
+    return results
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -157,6 +170,21 @@ def _add_simulation_routes(
             raise HTTPException(
                 status_code=500, detail="Simulation run failed"
             ) from error
+
+    @application.get(
+        "/simulation/runs/{run_id}/results",
+        tags=["simulation"],
+        responses={
+            404: {"description": "Run is unknown or has been evicted"},
+            500: {"description": "Cached run results are incomplete or invalid"},
+        },
+    )
+    def run_results(run_id: RunId) -> RunResultsResponse:
+        """Read statistics and chart data using the ID returned by POST /simulation/run.
+
+        Unknown or evicted runs return 404. Malformed identifiers return 422.
+        """
+        return _cached_results(simulation_runs, run_id)
 
     @application.post("/simulation/passenger-comparison", tags=["simulation"])
     def compare_passengers(settings: SimulationRunRequest) -> PassengerComparison:

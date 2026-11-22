@@ -4,6 +4,34 @@ import { stationViewData } from "../../src/data/stationViewData";
 import { parseStationViewData } from "../../src/lib/validateStationView";
 
 describe("parseStationViewData", () => {
+    it("keeps the results ID and rejects malformed IDs", () => {
+        const run_id = "abc0".repeat(16);
+        expect(parseStationViewData({ ...stationViewData, run_id }).run_id).toBe(run_id);
+        expect(() => parseStationViewData({ ...stationViewData, run_id: "mcgill" }))
+            .toThrow("Invalid simulation run ID");
+    });
+
+    const metrics = {
+        total_affected_passengers: 3, successful_connections: 0, missed_connections: 1,
+        average_transfer_time_s: 12.5, average_passenger_delay_s: null,
+    };
+
+    it("accepts optional metrics with pending passengers and an unknown average", () => {
+        expect(parseStationViewData(stationViewData).passenger_metrics).toBeUndefined();
+        expect(parseStationViewData({ ...stationViewData, passenger_metrics: metrics }).passenger_metrics)
+            .toEqual(metrics);
+    });
+
+    it.each([
+        null, [], {}, { ...metrics, total_affected_passengers: "3" },
+        { ...metrics, successful_connections: -1 }, { ...metrics, missed_connections: 0.5 },
+        { ...metrics, missed_connections: 4 }, { ...metrics, average_transfer_time_s: -2 },
+        { ...metrics, average_passenger_delay_s: Infinity }, { ...metrics, average_transfer_time_s: undefined },
+    ])("rejects malformed passenger metrics %#", (value) => {
+        expect(() => parseStationViewData({ ...stationViewData, passenger_metrics: value }))
+            .toThrow("Invalid passenger metrics");
+    });
+
     it("keeps unfinished passenger outcomes and rejects duplicates", () => {
         const { passenger_id, connection_id } = stationViewData.passenger_tracks[0];
         const outcome = {
