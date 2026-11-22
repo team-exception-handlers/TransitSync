@@ -84,8 +84,7 @@ class PassengerGenerator:
             raise ValueError("id_prefix must be a non-empty string")
         self._id_prefix = id_prefix
         self._next_id = 1
-        self._count_stream = stream_manager.get_stream("group_sizes")
-        self._destination_stream = stream_manager.get_stream("destinations")
+        self._streams = stream_manager
 
     def generate(
         self,
@@ -95,12 +94,15 @@ class PassengerGenerator:
         start_s: float,
         end_s: float,
         transfer_fractions: Mapping[str, float],
+        key: tuple[str | float, ...] = (),
     ) -> list[Passenger]:
         """Generate one batch for a demand window measured in seconds.
 
         Fractions cover all modelled destinations and must sum to 1. A returned
         batch has no platform arrival timestamps: releasing and spreading it is
         the responsibility of task #18. All inputs are checked before RNG draws.
+        ``key`` names what the batch belongs to (a feeder arrival), so paired
+        runs give it the same draws whatever drew before it (#192).
         """
         if not isinstance(demand_profile, DemandProfile):
             raise ValueError("demand_profile must be a DemandProfile")
@@ -110,13 +112,14 @@ class PassengerGenerator:
         expected = demand_profile.expected_count(start_s, end_s)
         if expected == 0:
             return []
+        streams = self._streams.keyed(*key)
         try:
-            count = int(self._count_stream.poisson(expected))
+            count = int(streams.get_stream("group_sizes").poisson(expected))
         except ValueError as error:
             raise ValueError(
                 "demand_profile expected count is too large to sample"
             ) from error
-        chosen = self._destination_stream.choice(
+        chosen = streams.get_stream("destinations").choice(
             destinations, size=count, p=probabilities
         )
         passengers = [

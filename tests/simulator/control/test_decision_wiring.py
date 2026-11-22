@@ -2,6 +2,7 @@
 """Strategy decisions inside full runs (US-2.1 #38, #39, US-2.3 #46)."""
 
 import json
+from functools import partial
 from types import SimpleNamespace
 
 import pytest
@@ -132,7 +133,7 @@ class SeenBy:
 
 def run_with_error(tmp_path, settings):
     recorder = SeenBy()
-    stream = StreamManager(7).get_stream("prediction_errors")
+    stream = partial(StreamManager(7).keyed_normal, "prediction_errors")
     model = PredictionErrorModel(settings, stream)
     run(tmp_path, DecisionPipeline(recorder, enforcer=recorder, error_model=model))
     return recorder
