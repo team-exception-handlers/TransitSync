@@ -60,18 +60,30 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => ({
     // The request body is the key: two settings objects that send the same
     // body give the same runs, so the pair on screen can be reused.
     const settingsKey = JSON.stringify(buildRunRequest(connectionId, settings));
+    if (signal?.aborted) return false;
     const loaded = get();
-    if (signal?.aborted || (loaded.holding !== null && loaded.settingsKey === settingsKey)) {
+    if (loaded.holding !== null && loaded.settingsKey === settingsKey) {
+      // The pair on screen is the one asked for. A load for other settings
+      // may have been abandoned or failed meanwhile, so drop anything still
+      // in flight and clear its "loading" or "error" status.
+      latestLoad += 1;
+      if (loaded.status !== "ready") set({ status: "ready", error: null });
       return false;
     }
     const load = ++latestLoad;
     // An aborted request (the user left the screen or changed connection) and
     // a request overtaken by a newer one are both dropped without a trace.
     const isCurrent = () => load === latestLoad && !signal?.aborted;
+    // An aborted load that no newer one replaced must not leave the status at
+    // "loading": it falls back to the pair already shown, if any.
+    const dropLoad = () => {
+      if (load === latestLoad) set({ status: get().holding === null ? "idle" : "ready" });
+      return false;
+    };
     set({ status: "loading", error: null });
     try {
       const pair = await runner(connectionId, settings, signal);
-      if (!isCurrent()) return false;
+      if (!isCurrent()) return dropLoad();
       set({
         connectionId,
         settingsKey,
@@ -83,7 +95,7 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => ({
       });
       return true;
     } catch (error) {
-      if (!isCurrent()) return false;
+      if (!isCurrent()) return dropLoad();
       // The previous pair stays on screen; only the failure is reported.
       const reason = error instanceof Error ? error.message : String(error);
       set({ status: "error", error: reason });

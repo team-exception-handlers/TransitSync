@@ -9,9 +9,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import App from "../../src/App";
 import { stationViewData } from "../../src/data/stationViewData";
+import { DEFAULT_RUN_SETTINGS } from "../../src/lib/run-settings";
 import type { ComparisonRunner, SimulationComparison } from "../../src/lib/simulation-api";
 import { EMPTY_COMPARISON, useComparisonStore } from "../../src/store/useComparisonStore";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
+import { useRunSettingsStore } from "../../src/store/useRunSettingsStore";
 import { useViewStore } from "../../src/store/useViewStore";
 import type { StationViewData, TimeSeriesData } from "../../src/types/stationView";
 
@@ -59,6 +61,7 @@ beforeEach(() => {
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
   useViewStore.setState({ activeView: "station" });
   useComparisonStore.setState(EMPTY_COMPARISON);
+  useRunSettingsStore.setState({ draft: DEFAULT_RUN_SETTINGS, applied: {} });
   usePlaybackStore.setState({ data: null, currentTime_s: 0, selectedConnectionId: null,
     availableRuns: [], availableConnections: null, isPlaying: false, updatedAt_ms: null });
 });
@@ -77,6 +80,15 @@ describe("CompareView", () => {
     expect(within(panel(HOLDING_TITLE)).getByLabelText(/^With holding/)).toBeDefined();
     expect(screen.getByText("Same starting conditions: 2026-10-05 · seed 42")).toBeDefined();
     expect(screen.getByText("Both runs loaded · one shared playback clock")).toBeDefined();
+  });
+
+  it("runs the API defaults, not unrun slider values, before anything is run", async () => {
+    // The user moved a slider but never clicked "Run scenario".
+    useRunSettingsStore.getState().update({ passenger_flow: "High" });
+
+    const runner = await openCompare();
+
+    expect(runner).toHaveBeenCalledWith(expect.any(String), DEFAULT_RUN_SETTINGS, expect.anything());
   });
 
   it("keeps both panels on the same time through seek, play and pause", async () => {

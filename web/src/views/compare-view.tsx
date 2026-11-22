@@ -15,7 +15,7 @@ import { PlaybackControls } from "../components/playback-controls";
 import { PlaybackTimeline } from "../components/PlaybackTimeline";
 import { SpeedSelector } from "../components/speed-selector";
 import { StationCanvas } from "../components/station-canvas";
-import { strategyLabel } from "../lib/run-settings";
+import { DEFAULT_RUN_SETTINGS, strategyLabel } from "../lib/run-settings";
 import type { ComparisonRunner } from "../lib/simulation-api";
 import { useComparisonStore, type ComparisonStatus } from "../store/useComparisonStore";
 import { usePlaybackStore } from "../store/usePlaybackStore";
@@ -39,12 +39,14 @@ const STATUS_TEXT: Record<ComparisonStatus, string> = {
 /**
  * Load the pair for the selected connection and its settings, and restart
  * playback at 0 when a new pair arrives so both sides begin together.
- * Settings are the ones last run for this connection, else the panel draft.
+ * Settings are the ones last run for this connection, else the API defaults
+ * that the station view's first run uses. Never the panel draft: values the
+ * user has not run yet would make Compare disagree with the station view.
  */
 function useComparisonLoader(runner: ComparisonRunner | null) {
   const connectionId = usePlaybackStore((state) => state.selectedConnectionId);
   const settings = useRunSettingsStore((state) =>
-    (connectionId === null ? undefined : state.applied[connectionId]) ?? state.draft);
+    (connectionId === null ? undefined : state.applied[connectionId]) ?? DEFAULT_RUN_SETTINGS);
 
   useEffect(() => {
     if (runner === null || connectionId === null) return;

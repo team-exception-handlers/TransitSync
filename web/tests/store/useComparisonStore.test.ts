@@ -85,6 +85,55 @@ describe("useComparisonStore", () => {
 
     expect(await result).toBe(false);
     expect(useComparisonStore.getState().holding).toBeNull();
+    // Nothing is loading any more and there is no pair to fall back to.
+    expect(useComparisonStore.getState().status).toBe("idle");
+  });
+
+  it("is ready again when an aborted load is followed by a request for the pair shown", async () => {
+    await load(vi.fn<ComparisonRunner>(async () => pairFor("connection_protection")));
+    const shown = useComparisonStore.getState().holding;
+
+    // The user changes settings, then leaves Compare before the runs return.
+    const { runner, pending } = deferredRunner();
+    const controller = new AbortController();
+    const abandoned = load(runner, { ...DEFAULT_RUN_SETTINGS, passenger_flow: "High" }, controller.signal);
+    expect(useComparisonStore.getState().status).toBe("loading");
+    controller.abort();
+    pending[0].reject(new DOMException("Aborted", "AbortError"));
+    expect(await abandoned).toBe(false);
+    expect(useComparisonStore.getState().status).toBe("ready");
+
+    // Coming back with the original settings reuses the pair without a fetch.
+    const reuse = vi.fn<ComparisonRunner>();
+    expect(await load(reuse)).toBe(false);
+    expect(reuse).not.toHaveBeenCalled();
+    expect(useComparisonStore.getState().status).toBe("ready");
+    expect(useComparisonStore.getState().holding).toBe(shown);
+  });
+
+  it("reusing the pair shown clears a loading status and drops the load in flight", async () => {
+    await load(vi.fn<ComparisonRunner>(async () => pairFor("connection_protection")));
+    const shown = useComparisonStore.getState().holding;
+
+    // A load for other settings is still running when the original ones come back.
+    const { runner, pending } = deferredRunner();
+    const inFlight = load(runner, { ...DEFAULT_RUN_SETTINGS, passenger_flow: "High" });
+    expect(await load(runner)).toBe(false);
+    expect(useComparisonStore.getState().status).toBe("ready");
+
+    pending[0].resolve(pairFor("stale", 200));
+    expect(await inFlight).toBe(false);
+    expect(useComparisonStore.getState().holding).toBe(shown);
+    expect(useComparisonStore.getState().status).toBe("ready");
+  });
+
+  it("reusing the pair shown clears an earlier failure", async () => {
+    await load(vi.fn<ComparisonRunner>(async () => pairFor("connection_protection")));
+    const failing = vi.fn<ComparisonRunner>(async () => { throw new Error("Server down"); });
+    await load(failing, { ...DEFAULT_RUN_SETTINGS, passenger_flow: "Low" });
+
+    expect(await load(failing)).toBe(false);
+    expect(useComparisonStore.getState()).toMatchObject({ status: "ready", error: null });
   });
 
   it("keeps the previous pair and reports the error when a load fails", async () => {
