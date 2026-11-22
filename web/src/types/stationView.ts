@@ -194,6 +194,13 @@ export interface StationViewData
     extends Omit<MockInterchangeData, "platform_layouts"> {
     platforms: Platform[];
     passenger_outcomes?: PassengerOutcome[];
+    passenger_metrics?: {
+        total_affected_passengers: number;
+        successful_connections: number;
+        missed_connections: number;
+        average_transfer_time_s: number | null;
+        average_passenger_delay_s: number | null;
+    };
     passengers: PassengerMovement[]; // Derived movement data included
     time_series?: TimeSeriesData;
     mode_switches?: ModeSwitchEvent[];

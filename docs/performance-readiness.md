@@ -7,6 +7,13 @@ charts, operating-rule response and parameter provenance changes. No PR was
 opened. Historical measurements remain in `performance.md`; the observations
 here supersede its earlier statement that no comparison endpoint exists.
 
+Main subsequently merged passenger metrics in `7fcd758` during validation.
+That additive response change is also integrated. The timing and 16-response
+fingerprint matrix below remains pinned to the earlier measured schema;
+streamed-versus-complete-reader contract tests are rerun with the metrics field.
+Those earlier digests must not be compared directly with a response containing
+the additional field. The failed targets are not certified by this final merge.
+
 ## Acceptance audit
 
 | Task | Implemented and verified | Remaining acceptance gap |
@@ -57,6 +64,7 @@ These are individual independent samples, not medians. Retain slow observations
 and apply the limits literally: startup values near 2 s are not a robust browser
 pass. The raw sample file records full precision, settings, response fingerprints
 and scenario data.
+They are retained in [the raw measurement report](performance-readiness-results.json).
 
 Measured production sources correspond to commit `70a8f8c`; benchmark helper
 updates were still uncommitted during collection and are included in this
@@ -65,11 +73,14 @@ the raw report distinguishes timed experiments from concurrent correctness runs.
 
 ## Regression and quality checks
 
-- Python CI-equivalent coverage run: **1,849 passed, 30 performance checks deselected, one existing expected failure** in 205.73 s
-- Frontend coverage run: **396 passed** across 34 files; 95.19% statements and 96.17% lines
+- Final passenger-metrics integration: **1,852 Python tests passed, 30 performance checks deselected, one existing expected failure**, with coverage, in 197.81 s
+- Final passenger-metrics frontend integration: **407 tests passed** across 34 files; 95.23% statements and 96.20% lines
+- Measured-stage Python coverage run: **1,849 passed, 30 performance checks deselected, one existing expected failure** in 205.73 s
+- Measured-stage frontend coverage run: **396 passed** across 34 files; 95.19% statements and 96.17% lines
 - Frontend typecheck and lint: passed
 - Standard Ruff, formatting and extended rules on changed Python files: passed
-- All 15 completed independent simulation responses, plus the completed comparison response, match the integrated reference fingerprints exactly
+- All 15 measured-stage independent simulation responses, plus the completed comparison response, match the integrated reference fingerprints exactly
+- Full-response streamed/complete-reader equivalence and real Coordinated comparison fixtures also pass with the final passenger-metrics schema
 - Seeded Coordinated decision/audit regressions and the captured production-plan digest: unchanged
 
 Fingerprint-only reference runs were performed alongside CI; their execution

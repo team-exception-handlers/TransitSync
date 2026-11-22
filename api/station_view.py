@@ -14,6 +14,7 @@ from typing import Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.passenger_metrics import PassengerMetrics, compute_passenger_metrics
 from api.passenger_outcomes import PassengerOutcome, build_passenger_outcomes
 from api.passenger_tracks import build_passenger_tracks
 from api.station_layout import (
@@ -269,6 +270,11 @@ class SimulationRunResponse(StationLayoutResponse):
     duration_s: float = Field(gt=0, allow_inf_nan=False)
     passenger_tracks: list[PassengerTrackResponse]
     passenger_outcomes: list[PassengerOutcome] = Field(default_factory=list)
+    passenger_metrics: PassengerMetrics = Field(
+        default_factory=lambda data: compute_passenger_metrics(
+            data["passenger_outcomes"]
+        )
+    )
     train_events: list[TrainMovementResponse]
     decisions: list[DecisionResponse]
     # Empty for every strategy except adaptive. Added without a schema bump

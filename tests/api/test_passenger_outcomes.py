@@ -71,6 +71,11 @@ def test_comparison_matches_each_cached_run():
         ).json()
         assert comparison[key] == run["passenger_outcomes"]
         assert comparison[key]
+        metrics = run["passenger_metrics"]
+        assert metrics["total_affected_passengers"] == len(comparison[key])
+        assert metrics["missed_connections"] == sum(
+            passenger["status"] == "missed" for passenger in comparison[key]
+        )
         assert [o["passenger_id"] for o in comparison[key]] == [
             t["passenger_id"] for t in run["passenger_tracks"]
         ]

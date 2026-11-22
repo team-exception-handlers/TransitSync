@@ -1,6 +1,7 @@
 {
   "date": "2026-11-21",
   "main_reference": "e5e0b6af8d92a2edd7b22d3dcd4932f727d57d11",
+  "final_integration_main": "7fcd75861f00e93e899a7854f9272f2a9450e89c",
   "integrated_reference": "f8eb2c43937b9a97673c5c61c967c987579fc21c",
   "optimized_production_source": "70a8f8cd229ac3be9e86af7dec1e0a8fb040f0fc",
   "benchmark_tooling_status": "Comparison/phase-reporting helper updates were uncommitted during measurement; production source revisions are recorded separately. Helpers are now included in the branch.",
@@ -13,6 +14,16 @@
     "frontend_files": 34,
     "frontend_statement_coverage_percent": 95.19,
     "frontend_line_coverage_percent": 96.17
+  },
+  "final_integration_validation": {
+    "python_passed": 1852,
+    "performance_deselected": 30,
+    "existing_xfailed": 1,
+    "python_elapsed_s": 197.81,
+    "frontend_passed": 407,
+    "frontend_files": 34,
+    "frontend_statement_coverage_percent": 95.23,
+    "frontend_line_coverage_percent": 96.2
   },
   "performance_suite": {
     "passed": 13,
@@ -2117,6 +2128,34 @@
     "Branches     : 86.77% ( 768/885 )",
     "Functions    : 96.74% ( 357/369 )",
     "Lines        : 96.17% ( 1006/1046 )",
+    "================================================================================"
+  ],
+  "final_integration_python_validation_tail": [
+    "........................................................................ [ 77%]",
+    "........................................................................ [ 81%]",
+    "........................................................................ [ 85%]",
+    "........................................................................ [ 89%]",
+    "........................................................................ [ 93%]",
+    "........................................................................ [ 97%]",
+    ".....................................................                    [100%]",
+    "=============================== tests coverage ================================",
+    "_______________ coverage: platform win32, python 3.13.2-final-0 _______________",
+    "",
+    "Coverage XML written to file coverage.xml",
+    "1852 passed, 30 deselected, 1 xfailed in 197.81s (0:03:17)"
+  ],
+  "final_integration_frontend_validation_tail": [
+    "  ...lation-api.ts |   95.78 |    87.35 |     100 |   98.78 | 333               ",
+    "  ...tationView.ts |   88.33 |     78.8 |   97.22 |   88.07 | ...29-131,339-374 ",
+    " src/store         |   96.72 |    89.15 |     100 |   96.87 |                   ",
+    "  ...ybackStore.ts |   96.52 |    89.15 |     100 |   96.73 | 95,332,344        ",
+    "-------------------|---------|----------|---------|---------|-------------------",
+    "",
+    "=============================== Coverage summary ===============================",
+    "Statements   : 95.23% ( 1199/1259 )",
+    "Branches     : 87.01% ( 784/901 )",
+    "Functions    : 96.77% ( 360/372 )",
+    "Lines        : 96.2% ( 1015/1055 )",
     "================================================================================"
   ]
 }
