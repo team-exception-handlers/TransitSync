@@ -10,6 +10,10 @@ than just CPU time. Each fresh application excludes cache hits between samples.
 The worker-thread profile is separate from these timings because tracing itself
 adds substantial overhead. Response hashes and optional full captures protect
 output equivalence independently of any timing target.
+Comparison timing includes both complete service calls and their adaptation.
+The individual simulator durations make that extra work visible; results_s
+starts only after the final simulator returns, so it is not a sum of both
+subruns' result-preparation phases. Captured logs belong to that final subrun.
 """
 
 import argparse
@@ -72,14 +76,28 @@ def _peak_memory_bytes():
     return counters.peak
 
 
-def measure(strategy, *, full_day=False, capture=None, changed=False, profiler=None):
+def measure(
+    strategy,
+    *,
+    full_day=False,
+    capture=None,
+    changed=False,
+    profiler=None,
+    compare=False,
+):
     """Return seconds and response fingerprint for one fresh, uncached request.
 
     A full service day starts at midnight and includes the feed's final service
     timestamp, including GTFS times beyond 24:00. Override duration_s directly,
     leaving the API's one-hour default and request schema intact.
     Optional capture preserves exact logs and response bytes for regression QA.
+    ``compare`` measures the fresh baseline-plus-selected comparison request;
+    results_s covers preparation after its final simulation completes.
     """
+    if compare and changed:
+        raise ValueError(
+            "comparison measurements require fresh settings, without changed"
+        )
     if capture is not None:
         # Python callers must obey the same artifact boundary as the CLI.
         capture = capture.resolve()
@@ -89,6 +107,7 @@ def measure(strategy, *, full_day=False, capture=None, changed=False, profiler=N
     original_run = simulation_run.run_scenario
     original_service_run = simulation_run.SimulationRunService.run
     timing = {}
+    endpoint = "/simulation/passenger-comparison" if compare else "/simulation/run"
 
     def load(service, *args, **kwargs):
         """Override only this experiment's immutable scenario after validation.
@@ -119,7 +138,7 @@ def measure(strategy, *, full_day=False, capture=None, changed=False, profiler=N
         """
         started = perf_counter()
         result = original_run(*args, **kwargs)
-        timing["simulation_s"] = perf_counter() - started
+        timing.setdefault("simulation_runs_s", []).append(perf_counter() - started)
         if capture is not None:
             capture.mkdir(parents=True, exist_ok=True)
             for source in (result.events_path, result.decisions_path):
@@ -153,19 +172,22 @@ def measure(strategy, *, full_day=False, capture=None, changed=False, profiler=N
                         # time only the different, uncached parameter request.
                         previous = {**settings, "max_hold_time": 300}
                         client.post("/simulation/run", json=previous).raise_for_status()
+                        timing["simulation_runs_s"] = []
                     started = perf_counter()
-                    response = client.post("/simulation/run", json=settings)
+                    response = client.post(endpoint, json=settings)
                     finished = perf_counter()
     response.raise_for_status()
     if capture is not None:
         (capture / "response.json").write_bytes(response.content)
     return {
         "strategy": strategy,
+        "endpoint": endpoint,
         "settings": settings,
         "scenario": timing["scenario"],
         "duration_s": timing["duration_s"],
         "request_s": finished - started,
-        "simulation_s": timing["simulation_s"],
+        "simulation_s": sum(timing["simulation_runs_s"]),
+        "simulation_runs_s": timing["simulation_runs_s"],
         "results_s": finished - timing["completed_at"],
         "response_bytes": len(response.content),
         "response_sha256": hashlib.sha256(response.content).hexdigest(),
@@ -188,10 +210,13 @@ def main():
     parser.add_argument("--changed", action="store_true")
     parser.add_argument("--capture", action="store_true")
     parser.add_argument("--profile", action="store_true")
+    parser.add_argument("--compare", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.repeats < 1:
         parser.error("--repeats must be positive")
+    if args.compare and args.changed:
+        parser.error("--compare measures fresh pairs; use --changed for single runs")
     root = Path.cwd().resolve()
     output = args.output.resolve()
     if not output.is_relative_to(root):
@@ -199,7 +224,12 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     measurements = []
     for index in range(args.repeats):
-        result = measure(args.strategy, full_day=args.full_day, changed=args.changed)
+        result = measure(
+            args.strategy,
+            full_day=args.full_day,
+            changed=args.changed,
+            compare=args.compare,
+        )
         measurements.append(result)
         print(json.dumps({"repeat": index + 1, **result}), flush=True)
         # Preserve completed observations even if a later expensive run is
@@ -228,6 +258,7 @@ def main():
             full_day=args.full_day,
             changed=args.changed,
             profiler=profiler,
+            compare=args.compare,
         )
         summary["profiled_s"] = perf_counter() - started
         summary["profiled_request_s"] = profiled["request_s"]
@@ -239,6 +270,7 @@ def main():
             full_day=args.full_day,
             changed=args.changed,
             capture=output / "contract",
+            compare=args.compare,
         )
     (output / "measurements.json").write_text(
         json.dumps(summary, indent=2) + "\n", encoding="utf-8"
