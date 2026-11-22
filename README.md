@@ -109,7 +109,7 @@ Open `web/.env` and set `VITE_API_URL=http://localhost:8000`, then run:
 npm run dev
 ```
 
-Open <http://localhost:5173>. Without `VITE_API_URL`, the front end still starts but only replays the bundled sample runs.
+Open <http://localhost:5173>. Set `VITE_API_URL=http://127.0.0.1:8000` before starting Vite to enable the Run scenario button. Without `VITE_API_URL`, the front end still starts but only replays bundled sample runs.
 
 ### 3. Using the app
 
@@ -132,13 +132,15 @@ The same run can be started without the front end from the Swagger page with `PO
 
 Valid connection IDs are `gare_centrale_bonaventure-rem-orange`, `mcgill-rem-green` and `edouard_montpetit-rem-blue`, and `GET /connections` lists them. Valid strategies are `no_control`, `schedule_based`, `headway_regulation`, `connection_protection`, `rolling_horizon` and `adaptive`.
 
+Copy the `run_id` from the run response into `GET /simulation/runs/{run_id}/results` in Swagger. The response contains `passenger_metrics`, the `time_series` delay buckets and hold markers, and `passenger_outcomes` for passenger-level charts. The API keeps the eight most recently used runs in memory. If a run was evicted or the API restarted, submit the same settings again to repopulate the cache.
+
 ### 4. Environment variables
 
 | File | Variable | Purpose |
 |---|---|---|
 | `.env` (copy of `.env.example`) | `SUPABASE_DB_URL` | Supabase PostgreSQL connection string. Only needed for the data extraction scripts |
 | `.env` | `SUPABASE_SSL_ROOT_CERT` | Optional path to the Supabase CA certificate |
-| Process environment | `TRANSITSYNC_CORS_ORIGINS` | Comma-separated browser origins the API accepts. Defaults to `http://localhost:5173` |
+| Process environment | `TRANSITSYNC_CORS_ORIGINS` | Comma-separated browser origins the API accepts. Defaults to `http://localhost:5173,http://127.0.0.1:5173` |
 | `web/.env` (copy of `web/.env.example`) | `VITE_API_URL` | Backend address for the front end, for example `http://localhost:8000` |
 
 `.env` files are git-ignored. Never commit a real connection string or key. The API reads `TRANSITSYNC_CORS_ORIGINS` from the shell, not from `.env`. To allow another origin in PowerShell:

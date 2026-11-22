@@ -206,4 +206,32 @@ describe("DecisionView", () => {
     // The held train's next arrival is outside the view, so it has no row
     expect(within(row).queryByText("stm:T9 arrival")).toBeNull();
   });
+
+  /** Max hold's source, as GET /parameters returns it (#311). */
+  const provenance = {
+    max_hold_time: {
+      classification: "estimated" as const,
+      source_name: "TransitSync Operational Thresholds",
+      source_link: "",
+    },
+  };
+  const at = { time_s: 60, train_id: "stm:T9", station_id: "32", platform_id: "green_mcgill_0" };
+
+  it("shows the max hold source on a clamped decision, which the max hold rule caused", () => {
+    loadSimulated([{ ...at, requested_s: 400, applied_s: 300, reason: "clamped to max hold 300 s" }]);
+    render(<DecisionView provenance={provenance} />);
+
+    const badge = screen.getByTestId("provenance-max_hold_time");
+    expect(badge.textContent).toBe("EstimatedTransitSync Operational Thresholds");
+  });
+
+  it("shows no max hold source on a hold refused by the one-hop rule", () => {
+    loadSimulated([
+      { ...at, requested_s: 60, applied_s: 0, reason: "refused: one-hop constraint violation" },
+    ]);
+    render(<DecisionView provenance={provenance} />);
+
+    expect(screen.getByRole("listitem").getAttribute("data-status")).toBe("refused");
+    expect(screen.queryByTestId("provenance-max_hold_time")).toBeNull();
+  });
 });

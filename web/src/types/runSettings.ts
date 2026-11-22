@@ -18,6 +18,13 @@ export type StrategyName =
 /** Demand levels the API maps to fixed passenger-per-minute rates. */
 export type PassengerFlow = "Low" | "Normal" | "High";
 
+/** Prepared disruption choices; none preserves the baseline run. */
+export type DisruptionPreset =
+  | "none"
+  | "platform_delay"
+  | "line_suspension"
+  | "uneven_headways";
+
 /** The values the run settings panel edits, in backend units. */
 export interface RunSettings {
   strategy: StrategyName;
@@ -35,8 +42,13 @@ export interface RunSettings {
    */
   error_magnitude: number;
   passenger_flow: PassengerFlow;
-  /** Injects the demo's 60-second delay on the REM feeder train. */
+  /** Legacy compatibility value; the preset picker is the user-facing control. */
   disruption_enabled: boolean;
+  disruption_preset?: DisruptionPreset;
+  /** Disruption start in relative simulation seconds. */
+  disruption_time_s?: number;
+  /** Seconds of delay or suspension duration (headway magnitude is seconds). */
+  disruption_magnitude?: number;
 }
 
 /** JSON body of one run request; the threshold key is absent unless Adaptive. */
@@ -47,5 +59,8 @@ export interface RunRequestBody {
   error_magnitude: number;
   passenger_flow: PassengerFlow;
   disruption_enabled: boolean;
+  disruption_preset: DisruptionPreset;
+  disruption_time_s: number;
+  disruption_magnitude: number;
   irregularity_threshold?: number;
 }

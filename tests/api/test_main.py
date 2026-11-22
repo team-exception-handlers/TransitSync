@@ -33,6 +33,22 @@ def test_health_endpoint_returns_typed_response_and_default_cors_origin(
     assert response.headers["access-control-allow-origin"] == "http://localhost:5173"
 
 
+def test_health_endpoint_allows_loopback_development_origin(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Allow the 127.0.0.1 Vite origin by the default CORS configuration."""
+    monkeypatch.delenv("TRANSITSYNC_CORS_ORIGINS", raising=False)
+    client = TestClient(create_app())
+
+    response = client.get(
+        "/health",
+        headers={"Origin": "http://127.0.0.1:5173"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:5173"
+
+
 def test_station_layout_endpoint_serves_map_platforms_and_transfer_edges() -> None:
     """Serve the front-end's McGill coordinates with joined platform metadata.
 
@@ -423,3 +439,22 @@ def test_get_parameters_endpoint(client: TestClient) -> None:
         first_key = next(iter(data))
         assert "classification" in data[first_key]
         assert "source_name" in data[first_key]
+
+
+@pytest.mark.parametrize(
+    ("key", "link", "agency"),
+    [
+        ("rem_schedule", "https://rem.info", "(REM)"),
+        ("stm_schedule", "https://www.stm.info", "(STM)"),
+    ],
+)
+def test_schedule_feeds_link_to_their_data_with_the_licence_credit(
+    client: TestClient, key: str, link: str, agency: str
+) -> None:
+    """Both GTFS feeds are CC BY 4.0, so the app must credit and link each one."""
+    entry = client.get("/parameters").json()[key]
+
+    assert entry["classification"] == "published"
+    assert entry["source_link"] == link
+    assert agency in entry["source_name"]
+    assert "CC BY 4.0" in entry["source_name"]

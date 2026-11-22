@@ -1,0 +1,64 @@
+/* AI contribution: 50% or more AI-generated */
+/*
+ * Styles for parameter provenance badges, source labels, and external source
+ * links across panels and decision views (US-7.1, Task 7.1.2).
+ */
+/* Badge, source name and link sit on one line and wrap together in narrow panels. */
+.provenance-meta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+/* The pill is outlined in its own text colour, so it stays visible on any panel background. */
+.provenance-badge {
+  display: inline-block;
+  padding: 0.12rem 0.45rem;
+  border-radius: 999px;
+  font-weight: 600;
+  border: 1px solid currentColor;
+}
+
+/* Measured: green, the most trusted level (field data). */
+.provenance-badge--measured {
+  color: #155724;
+  background-color: #d4edda;
+}
+
+/* Estimated: amber, modelled or fitted values that carry some error. */
+.provenance-badge--estimated {
+  color: #856404;
+  background-color: #fff3cd;
+}
+
+/* Published: blue, taken from an official source such as the GTFS feeds. */
+.provenance-badge--published {
+  color: #0c5460;
+  background-color: #d1ecf1;
+}
+
+/* Assumed: grey, a placeholder until better data exists. */
+.provenance-badge--assumed {
+  color: #383d41;
+  background-color: #e2e3e5;
+}
+
+/* Unspecified: lighter grey, so a missing entry looks unsourced rather than assumed. */
+.provenance-badge--unknown {
+  color: #555;
+  background-color: #f1f1f1;
+}
+
+.provenance-source {
+  color: inherit;
+  opacity: 0.9;
+}
+
+/* Underlined so the link is recognisable without relying on colour. */
+.provenance-link {
+  font-weight: 600;
+  text-decoration: underline;
+}
