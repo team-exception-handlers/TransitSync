@@ -29,6 +29,13 @@ export const CLASSIFICATION_MEANINGS: Record<ConfidenceClassification, string> =
   assumed: "A modelling choice waiting on stakeholder confirmation.",
 };
 
+/**
+ * "Used in this run" text for an input every run uses but Run settings
+ * cannot change, such as min_safe_gap. `/parameters` sends no values, so the
+ * number itself cannot be shown yet.
+ */
+export const FIXED_VALUE = "Fixed value";
+
 /** One row of the Sources table; null fields mean nothing is recorded. */
 export interface SourceRow {
   name: string;
@@ -82,16 +89,17 @@ function formatDisruption(settings: RunSettings): string {
 
 /** The run's settings as shown in Run settings, keyed by parameter name. */
 export function runValues(settings: RunSettings): Record<string, string> {
-  const values: Record<string, string> = {
+  return {
     strategy: strategyLabel(settings.strategy),
     max_hold_time: formatSeconds(settings.max_hold_time),
     error_magnitude: formatErrorMagnitude(settings.error_magnitude),
     passenger_flow: settings.passenger_flow,
     disruption_enabled: formatDisruption(settings),
+    // The API uses the error magnitude as kappa for every estimate (simulation_run.py).
+    kappa: formatErrorMagnitude(settings.error_magnitude),
+    // The threshold is only sent for Adaptive, so other runs did not use it.
+    irregularity_threshold: settings.strategy === "adaptive"
+      ? formatThreshold(settings.irregularity_threshold)
+      : "Not used by this strategy",
   };
-  // The threshold is only sent for Adaptive, so other runs did not use it.
-  if (settings.strategy === "adaptive") {
-    values.irregularity_threshold = formatThreshold(settings.irregularity_threshold);
-  }
-  return values;
 }

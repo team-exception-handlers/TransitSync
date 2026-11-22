@@ -19,6 +19,8 @@
 
 /* Orange plus the words "No source recorded yet", so it reads without color. */
 .source-missing { color: #b4470c; }
+/* Muted so a "Fixed value" or "—" does not read like a number from the run. */
+.value-unset { color: #5b6168; }
 
 .source-details {
   display: grid;

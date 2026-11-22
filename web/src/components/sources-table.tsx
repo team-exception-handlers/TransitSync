@@ -38,7 +38,14 @@ function SourceDetails({ row }: Readonly<{ row: SourceRow }>) {
   );
 }
 
-export function SourcesTable({ rows }: Readonly<{ rows: readonly SourceRow[] }>) {
+/**
+ * `unsetValue` fills "Used in this run" for rows without a run value: "—"
+ * when nothing ran, FIXED_VALUE when a run used the simulator's own value.
+ */
+export function SourcesTable({ rows, unsetValue = "—" }: Readonly<{
+  rows: readonly SourceRow[];
+  unsetValue?: string;
+}>) {
   const filterLabel = useId();
   const [filter, setFilter] = useState<Filter>("all");
   const [open, setOpen] = useState<string | null>(null);
@@ -68,7 +75,7 @@ export function SourcesTable({ rows }: Readonly<{ rows: readonly SourceRow[] }>)
               <Fragment key={row.name}>
                 <tr>
                   <th scope="row">{row.label}</th>
-                  <td>{row.value ?? "—"}</td>
+                  <td className={row.value ? undefined : "value-unset"}>{row.value ?? unsetValue}</td>
                   <td>{row.classification ? CLASSIFICATION_LABELS[row.classification] : "—"}</td>
                   <td className={row.sourceName ? undefined : "source-missing"}>
                     {row.sourceName ?? "No source recorded yet"}

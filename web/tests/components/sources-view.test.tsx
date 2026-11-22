@@ -71,6 +71,19 @@ describe("SourcesView", () => {
     expect(rowOf("Passenger flow").getByText("No source recorded yet")).toBeDefined();
   });
 
+  it("marks inputs every run uses but Run settings cannot change as fixed, not blank", () => {
+    usePlaybackStore.setState({ selectedConnectionId: "mcgill", simulatedConnectionIds: ["mcgill"] });
+    render(<SourcesView provenance={{
+      ...PROVENANCE,
+      min_safe_gap: { classification: "assumed", source_name: "Operational thresholds", source_link: "" },
+    }} />);
+
+    expect(rowOf("min_safe_gap").getByText("Fixed value")).toBeDefined();
+    expect(screen.getByText(/Fixed value means the run used the simulator's own value/)).toBeDefined();
+    // A real run value is still shown as the value, not as fixed
+    expect(rowOf("Maximum hold").queryByText("Fixed value")).toBeNull();
+  });
+
   it("uses the API defaults for a run loaded without Run scenario", () => {
     usePlaybackStore.setState({ selectedConnectionId: "mcgill", simulatedConnectionIds: ["mcgill"] });
     render(<SourcesView provenance={PROVENANCE} />);
@@ -95,9 +108,15 @@ describe("SourcesView", () => {
 });
 
 describe("runValues", () => {
-  it("only includes the threshold when the strategy is Adaptive", () => {
-    expect(runValues(DEFAULT_RUN_SETTINGS)).not.toHaveProperty("irregularity_threshold");
+  it("only gives the threshold a value when the strategy is Adaptive", () => {
+    expect(runValues(DEFAULT_RUN_SETTINGS).irregularity_threshold).toBe("Not used by this strategy");
     expect(runValues({ ...DEFAULT_RUN_SETTINGS, strategy: "adaptive" }).irregularity_threshold).toBe("0.25");
+  });
+
+  it("shows kappa as the error magnitude, since the API uses one as the other", () => {
+    const values = runValues({ ...DEFAULT_RUN_SETTINGS, error_magnitude: 1.5 });
+    expect(values.kappa).toBe(values.error_magnitude);
+    expect(values.kappa).toBe("1.5");
   });
 
   it("shows the disruption preset with its start and size", () => {

@@ -6,7 +6,7 @@
  * settings.
  */
 import { useMemo } from "react";
-import { buildSourceRows, runValues } from "../lib/parameter-sources";
+import { buildSourceRows, FIXED_VALUE, runValues } from "../lib/parameter-sources";
 import { DEFAULT_RUN_SETTINGS } from "../lib/run-settings";
 import { usePlaybackStore } from "../store/usePlaybackStore";
 import { useRunSettingsStore } from "../store/useRunSettingsStore";
@@ -29,10 +29,14 @@ export function SourcesView({ provenance }: Readonly<{ provenance: ParameterProv
     <section className="panel sources-view" aria-labelledby="sources-title">
       <span className="clock-heading">Sources</span>
       <h1 id="sources-title">Where each value comes from</h1>
-      {!simulated && <p className="sources-empty">Mock playback uses no run settings, so no values are shown.</p>}
+      <p className="sources-empty">
+        {simulated
+          ? `${FIXED_VALUE} means the run used the simulator's own value, which Run settings cannot change.`
+          : "Mock playback uses no run settings, so no values are shown."}
+      </p>
       {rows.length === 0
         ? <p className="sources-empty">No sources could be loaded from the simulation API.</p>
-        : <SourcesTable rows={rows} />}
+        : <SourcesTable rows={rows} unsetValue={simulated ? FIXED_VALUE : "—"} />}
     </section>
   );
 }
