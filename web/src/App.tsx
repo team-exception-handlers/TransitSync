@@ -8,6 +8,7 @@
  * for that connection's simulator run output (#79); all panels read the run
  * and playback position from the shared Zustand store, so they switch together.
  * The run settings panel re-runs the selected connection with chosen settings.
+ * The sidebar switches between the station view and the Sources screen (#320).
  */
 
 import { useEffect, useState } from "react";
@@ -37,6 +38,7 @@ import { RunSettingsPanel } from "./components/run-settings-panel";
 import { RunSummary } from "./components/run-summary";
 import { PlaybackControls } from "./components/playback-controls";
 import { SpeedSelector } from "./components/speed-selector";
+import { SourcesView } from "./components/sources-view";
 import { DelayChart } from "./components/DelayChart";
 import { usePlaybackStore, type RunStatus } from "./store/usePlaybackStore";
 
@@ -66,6 +68,13 @@ const RUN_STATUS_TEXT: Record<RunStatus, string> = {
   simulated: "Simulation run · demo scenario output",
   error: "Showing mock playback · simulation run unavailable",
 };
+// Screens the sidebar can open; the station view is the default.
+type View = "station" | "sources";
+const VIEWS: readonly { id: View; label: string }[] = [
+  { id: "station", label: "Station view" },
+  { id: "sources", label: "Sources" },
+];
+
 // A failed re-run leaves the earlier simulator output on screen, not a mock.
 const RERUN_FAILED_TEXT = "Run failed · showing the previous simulation run";
 
@@ -86,6 +95,7 @@ export default function App({
   parameterProvenanceLoader = defaultParameterProvenanceLoader,
 }: Readonly<AppProps>) {
   const [provenance, setProvenance] = useState<ParameterProvenanceMap>({});
+  const [view, setView] = useState<View>("station");
   useEffect(startPlaybackClock, []);
   const runStatus = usePlaybackStore((state) => state.runStatus);
   const runError = usePlaybackStore((state) => state.runError);
@@ -210,14 +220,25 @@ export default function App({
             Workspace
           </div>
 
-          <div className="nav-current">
-            Station view
-          </div>
+          <nav aria-label="Workspace">
+            {VIEWS.map((item) => (
+              <button key={item.id} type="button" className="nav-item"
+                aria-current={view === item.id ? "page" : undefined}
+                onClick={() => setView(item.id)}>{item.label}</button>
+            ))}
+          </nav>
 
         </aside>
 
+        {/* SOURCES: replaces the dashboard; playback keeps its position. */}
+        {view === "sources" && (
+          <main className="content content--sources">
+            <SourcesView provenance={provenance} />
+          </main>
+        )}
+
         {/* DASHBOARD */}
-        <main className="content">
+        {view === "station" && <main className="content">
 
           {/* STATION VIEW */}
           <section
@@ -262,9 +283,10 @@ export default function App({
           <DelayChart />
 
           {/* RUN SETTINGS */}
-          <RunSettingsPanel runner={scenarioRunner} provenance={provenance}/>
+          <RunSettingsPanel runner={scenarioRunner} provenance={provenance}
+            onShowSources={() => setView("sources")} />
 
-        </main>
+        </main>}
 
       </div>
 

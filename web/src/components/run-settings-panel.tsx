@@ -54,13 +54,15 @@ interface RunSettingsPanelProps {
   runner: ScenarioRunner | null;
   /** Parameter sources from GET /parameters, shown as a badge under each setting. */
   provenance?: ParameterProvenanceMap;
+  /** Opens the Sources screen (#320); the link is hidden when not given. */
+  onShowSources?: () => void;
 }
 
 /**
  * The panel reads the selected connection and run status from the playback
  * store, so it needs no props beyond the function that performs a run.
  */
-export function RunSettingsPanel({ runner, provenance }: Readonly<RunSettingsPanelProps>) {
+export function RunSettingsPanel({ runner, provenance, onShowSources }: Readonly<RunSettingsPanelProps>) {
   const titleId = useId();
   const strategyGroup = useId();
   const draft = useRunSettingsStore((state) => state.draft);
@@ -104,6 +106,11 @@ export function RunSettingsPanel({ runner, provenance }: Readonly<RunSettingsPan
       <div className="run-settings-header">
         <h2 id={titleId} className="clock-heading">Run settings</h2>
         <div className="run-settings-actions">
+          {onShowSources && (
+            <button type="button" className="playback-button" onClick={onShowSources}>
+              Where these values come from
+            </button>
+          )}
           <button type="button" className="playback-button" onClick={reset}>
             Reset to defaults
           </button>
