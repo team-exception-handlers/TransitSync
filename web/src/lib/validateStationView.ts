@@ -140,6 +140,10 @@ function checkHeader(value: unknown): StationViewData {
     }
 
     const data = value as StationViewData;
+    if (data.run_id !== undefined &&
+        (typeof data.run_id !== "string" || !/^[0-9a-f]{64}$/.test(data.run_id))) {
+        throw new Error("Invalid simulation run ID");
+    }
 
     if (data.schema_version !== 1) {
         throw new Error("Unsupported station view schema version");
