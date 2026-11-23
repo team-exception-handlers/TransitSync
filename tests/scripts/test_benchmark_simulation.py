@@ -1,14 +1,75 @@
 # AI contribution: 50% or more AI-generated
-"""Benchmark checks that hold before any simulation is timed.
+"""Benchmark guards and scenario overrides without running simulations.
 
 The CLI checks its output root, and direct Python callers must retain that
-boundary too. These tests exercise failure paths without timing a simulation.
+boundary too. These tests exercise failures and record inputs with a fake runner.
 """
+
+from dataclasses import replace
+from datetime import time
+from types import SimpleNamespace
 
 import pytest
 
 import scripts.benchmark_simulation as benchmark
 from scripts.benchmark_simulation import _installed_version, measure
+
+
+@pytest.fixture
+def recorded_scenario(monkeypatch):
+    """Record benchmark inputs with nonzero clock fields and empty run outputs.
+
+    Component construction still supplies the API's real response adapter, but
+    no scheduled event is executed, including for the full service day.
+    """
+    recorded = {}
+    service = benchmark.simulation_run.SimulationRunService
+    original_load = service._load_scenario
+
+    def load(instance, *args, **kwargs):
+        original = original_load(instance, *args, **kwargs)
+        scenario = replace(
+            original,
+            start_time=time(7, 30, 45, 123456),
+            resolved_start=original.resolved_start.replace(
+                hour=7, minute=30, second=45, microsecond=123456
+            ),
+        )
+        recorded["source"] = scenario
+        recorded["service_end_s"] = instance._dataset.service_day_end_s_by_interchange[
+            scenario.interchanges[0]
+        ]
+        return scenario
+
+    def run(scenario, stream_factory, component_factory, output_dir):
+        recorded["run"] = scenario
+        component_factory(scenario, stream_factory(scenario.master_seed))
+        events = output_dir / "events.jsonl"
+        decisions = output_dir / "decisions.jsonl"
+        events.write_text("", encoding="utf-8")
+        decisions.write_text("", encoding="utf-8")
+        return SimpleNamespace(events_path=events, decisions_path=decisions)
+
+    monkeypatch.setattr(service, "_load_scenario", load)
+    monkeypatch.setattr(benchmark.simulation_run, "run_scenario", run)
+    return recorded
+
+
+@pytest.mark.parametrize("full_day", [False, True], ids=["hour", "full-day"])
+def test_benchmark_clock_and_duration_override(recorded_scenario, full_day):
+    """Midnight resets every clock field; ordinary runs retain their settings."""
+    result = measure("no_control", full_day=full_day)
+    source, actual = recorded_scenario["source"], recorded_scenario["run"]
+    expected_clock = time() if full_day else source.start_time
+    expected_duration = recorded_scenario["service_end_s"] if full_day else 3600
+    assert actual.start_time == expected_clock
+    assert actual.resolved_start.time() == expected_clock
+    assert actual.resolved_start.date() == source.resolved_start.date()
+    assert actual.resolved_start.tzinfo is source.resolved_start.tzinfo
+    assert actual.duration_s == expected_duration
+    assert result["duration_s"] == expected_duration
+    assert source.duration_s == 3600
+    assert recorded_scenario["service_end_s"] > 86400
 
 
 def test_capture_cannot_escape_the_repository_root(tmp_path, monkeypatch):

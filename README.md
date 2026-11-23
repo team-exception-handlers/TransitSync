@@ -164,8 +164,11 @@ docker compose config     # validate the container configuration
 Performance target tests are opt-in, so CI and a plain `pytest` skip them. They time uncached API requests against the targets on the Performance wiki page and print one table of results:
 
 ```powershell
-pytest tests/performance -m performance -s
+pytest tests/performance -m performance
+pytest tests/performance -m performance --performance-timeout=300
 ```
+
+The second command increases the worker budget from 120 to 300 seconds for slower strategies, without changing the performance targets. The budget includes process startup and any priming run; a slow run may still time out. Keep `tests/performance` in the command so pytest loads the timeout option. The summary table prints without `-s`; add `-s` to show raw JSON timings for every completed measurement.
 
 Front end checks run from `web/`:
 

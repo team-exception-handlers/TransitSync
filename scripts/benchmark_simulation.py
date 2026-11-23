@@ -130,7 +130,9 @@ def measure(
                 scenario,
                 duration_s=end_s,
                 start_time=time(),
-                resolved_start=scenario.resolved_start.replace(hour=0),
+                resolved_start=scenario.resolved_start.replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                ),
             )
         timing["duration_s"] = scenario.duration_s
         timing["scenario"] = scenario.to_dict()
