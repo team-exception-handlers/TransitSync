@@ -1,12 +1,13 @@
 # AI contribution: 50% or more AI-generated
-"""Passenger connection results from the ordered event log of one demo run."""
+"""Passenger connection results from the ordered event log of one demo run,
+and the same passengers matched across a paired comparison (#240)."""
 
 from bisect import bisect_left
 from collections import defaultdict
 from collections.abc import Sequence
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field
 
 from api.station_layout import Connection
 
@@ -33,11 +34,56 @@ class PassengerOutcome(BaseModel):
     status: Literal["made", "missed", "pending"] = "pending"
 
 
+class MatchedPassenger(BaseModel):
+    """One passenger in both runs; a side is null if that run never created them."""
+
+    passenger_id: str
+    selected_strategy: PassengerOutcome | None
+    without_holding: PassengerOutcome | None
+
+
 class PassengerComparison(BaseModel):
     """Passenger outcomes for the no-holding baseline and the selected strategy."""
 
     without_holding: list[PassengerOutcome]
     selected_strategy: list[PassengerOutcome]
+
+    @computed_field
+    @property
+    def matched_passengers(self) -> list[MatchedPassenger]:
+        """Each passenger's outcome in both runs, in passenger ID order."""
+        return match_passengers(self.selected_strategy, self.without_holding)
+
+
+def _by_id(outcomes: Sequence[PassengerOutcome]) -> dict[str, PassengerOutcome]:
+    """Index one run's outcomes, rejecting a passenger ID seen twice."""
+    by_id = {outcome.passenger_id: outcome for outcome in outcomes}
+    if len(by_id) != len(outcomes):
+        raise ValueError("passenger outcomes repeat a passenger ID")
+    return by_id
+
+
+def match_passengers(
+    selected: Sequence[PassengerOutcome], baseline: Sequence[PassengerOutcome]
+) -> list[MatchedPassenger]:
+    """Pair two runs' outcomes by passenger ID, which paired runs share (#240).
+
+    A passenger can be in one run only, e.g. when a hold moves their feeder
+    arrival past the run end or changes their group's size. One ID on two
+    connections means the runs are not a pair, so it raises ``ValueError``.
+    """
+    held, base = _by_id(selected), _by_id(baseline)
+    for passenger_id in held.keys() & base.keys():
+        if held[passenger_id].connection_id != base[passenger_id].connection_id:
+            raise ValueError(f"passenger {passenger_id} is on two connections")
+    return [
+        MatchedPassenger(
+            passenger_id=passenger_id,
+            selected_strategy=held.get(passenger_id),
+            without_holding=base.get(passenger_id),
+        )
+        for passenger_id in sorted(held.keys() | base.keys())
+    ]
 
 
 def build_passenger_outcomes(

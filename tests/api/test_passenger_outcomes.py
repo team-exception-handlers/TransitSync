@@ -62,6 +62,10 @@ def test_comparison_matches_each_cached_run():
     response = client.post("/simulation/passenger-comparison", json=settings)
     assert response.status_code == 200
     comparison = response.json()
+    # Both runs come from one seed, so every passenger is in both (#240)
+    matched = comparison["matched_passengers"]
+    assert [m["selected_strategy"] for m in matched] == comparison["selected_strategy"]
+    assert [m["without_holding"] for m in matched] == comparison["without_holding"]
     for key, strategy in [
         ("without_holding", "no_control"),
         ("selected_strategy", "connection_protection"),
