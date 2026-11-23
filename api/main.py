@@ -19,6 +19,12 @@ from api.connection_data import (
 from api.passenger_outcomes import PassengerComparison
 from api.run_results import RunResultsResponse
 from api.settings import Settings
+from api.simulation_comparison import (
+    NO_HOLDING_STRATEGY,
+    SimulationComparisonResponse,
+    no_holding_request,
+    run_comparison,
+)
 from api.simulation_run import (
     SimulationRunRequest,
     SimulationRunService,
@@ -123,6 +129,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         return data
 
+    _add_simulation_routes(application, simulation_runs)
+
+    @application.get("/parameters", tags=["parameters"])
+    def get_parameters():
+        """Return classification and source metadata for all simulation parameters."""
+        return load_parameter_provenance()
+
+    return application
+
+
+def _add_simulation_routes(
+    application: FastAPI, simulation_runs: SimulationRunService
+) -> None:
+    """Register the routes that run simulations through the shared run cache.
+
+    Kept apart from ``create_app`` so that function stays under the complexity
+    limit. Every route here maps an unknown connection to 404 and a simulator,
+    file or value failure to a logged 500.
+    """
+
     @application.post(
         "/simulation/run",
         response_model=SimulationRunResponse,
@@ -163,24 +189,40 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @application.post("/simulation/passenger-comparison", tags=["simulation"])
     def compare_passengers(settings: SimulationRunRequest) -> PassengerComparison:
         """Return cached outcomes for matched settings with and without control."""
-        baseline_settings = settings.model_dump(
-            exclude={"irregularity_threshold", "error_magnitude", "max_hold_time"}
-        )
-        baseline_settings["strategy"] = "no_control"
-        baseline = run_simulation(
-            SimulationRunRequest.model_validate(baseline_settings)
-        ).passenger_outcomes
+        # Same baseline builder as /simulation/comparison, so both endpoints
+        # pair runs the same way and share one cached no-control run.
+        baseline = run_simulation(no_holding_request(settings)).passenger_outcomes
         selected = baseline
-        if settings.strategy != "no_control":
+        if settings.strategy != NO_HOLDING_STRATEGY:
             selected = run_simulation(settings).passenger_outcomes
         return PassengerComparison(without_holding=baseline, selected_strategy=selected)
 
-    @application.get("/parameters", tags=["parameters"])
-    def get_parameters():
-        """Return classification and source metadata for all simulation parameters."""
-        return load_parameter_provenance()
+    @application.post(
+        "/simulation/comparison",
+        tags=["simulation"],
+        responses={
+            404: {"description": "Unknown connection"},
+            500: {"description": "Simulation comparison failed"},
+        },
+    )
+    def compare_runs(settings: SimulationRunRequest) -> SimulationComparisonResponse:
+        """Run the same connection with and without holding (US-4.1).
 
-    return application
+        Both runs share the scenario's date and seed. Invalid settings return
+        422, unknown connections 404 and simulator failures 500.
+        """
+        try:
+            return run_comparison(simulation_runs, settings)
+        except UnknownConnectionError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+        except (OSError, RunError, ValueError) as error:
+            log.exception(
+                "simulation comparison failed for connection %s",
+                settings.connection_id,
+            )
+            raise HTTPException(
+                status_code=500, detail="Simulation comparison failed"
+            ) from error
 
 
 app = create_app()
