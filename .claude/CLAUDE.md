@@ -87,7 +87,10 @@ These come from the Mathematical Foundations wiki page. Do not break them.
 
 ## Skills
 
-- Project skills: `code-workflow`, `sim-logic`, `gtfs-data`, `python-tests`, `sonar-clean-code`
+- Project skills: `code-workflow`, `sim-logic`, `gtfs-data`, `python-tests`, `sonar-clean-code`, `grilling`
+- Use `grilling` when someone asks to be grilled or to stress-test a plan, design or decision (for example a strategy, a scenario config or a task breakdown) before any code is written
+- `grilling` is also in `.agents/skills/grilling/` so Codex picks it up. Keep both copies identical
+- Codex reads `AGENTS.md` at the repo root, which sends it to this file. Keep project rules here, not in `AGENTS.md`
 - Follow `sonar-clean-code` whenever writing or changing code, tests or CI config, so new code adds no SonarQube issues
 - The generic skills (`code-quality`, `testing-strategy`, `performance`, `security-audit`) assume a `src/` layout, `uv` and Python 3.10. In this repo, read `src/` as `simulator/`, `api/` and `scripts/`, install with pip and `requirements*.txt`, and target Python 3.12
 - If a skill conflicts with this file, this file wins
