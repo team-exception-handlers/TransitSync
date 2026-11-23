@@ -145,6 +145,26 @@ describe("CompareView", () => {
     expect(screen.queryByRole("region", { name: "No holding" })).toBeNull();
   });
 
+  it("hides the previous connection's runs when loading a new connection fails", async () => {
+    const runner = vi.fn<ComparisonRunner>(async () => PAIR);
+    await openCompare(runner);
+    const { availableRuns, selectedConnectionId } = usePlaybackStore.getState();
+    const other = availableRuns.flatMap((run) => run.connections)
+      .find((connection) => connection.id !== selectedConnectionId);
+    if (other === undefined) throw new Error("The mock runs need a second connection");
+
+    runner.mockRejectedValueOnce(new Error("The simulation run failed on the server (HTTP 500)."));
+    act(() => usePlaybackStore.getState().selectConnection(other.id));
+
+    expect((await screen.findByRole("alert")).textContent).toContain("HTTP 500");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toContain(other.label);
+    // The stored pair is for the first connection, so neither panel nor its
+    // starting conditions may sit under the new heading.
+    expect(screen.queryByRole("region", { name: "No holding" })).toBeNull();
+    expect(screen.queryByRole("region", { name: HOLDING_TITLE })).toBeNull();
+    expect(screen.queryByText(/Same starting conditions/)).toBeNull();
+  });
+
   it("reports a failed load as an alert", async () => {
     const failing = vi.fn<ComparisonRunner>(async () => {
       throw new Error("The simulation run failed on the server (HTTP 500).");

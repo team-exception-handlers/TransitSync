@@ -83,8 +83,9 @@ export function CompareView({ runner }: Readonly<CompareViewProps>) {
   // on a load, not on each clock tick.
   const comparison = useComparisonStore();
   // Heading names the connection the shared selector picked.
+  const selectedConnectionId = usePlaybackStore((state) => state.selectedConnectionId);
   const connectionLabel = usePlaybackStore((state) =>
-    state.data?.connections.find((item) => item.id === state.selectedConnectionId)?.label);
+    state.data?.connections.find((item) => item.id === selectedConnectionId)?.label);
 
   if (runner === null) {
     return (
@@ -99,14 +100,17 @@ export function CompareView({ runner }: Readonly<CompareViewProps>) {
   }
 
   const { holding, noHolding, startingConditions, holdingStrategy } = comparison;
-  // Panels appear only once a full pair exists; a failed reload keeps the old
-  // pair, so the alert shows above runs that are still valid to compare.
-  // No holding comes first, matching the reading order "before → after".
+  // The stored pair is shown only while it belongs to the selected connection.
+  // A failed reload for new settings keeps the old pair, so the alert shows
+  // above runs that are still valid to compare; after a connection switch the
+  // old pair would sit under the new heading, so it is hidden until the new
+  // pair loads. No holding comes first, matching "before → after".
+  const pairIsForSelection = comparison.connectionId === selectedConnectionId;
   return (
     <>
       <div className="comparison-heading">
         <h1 className="view-title">Compare · {connectionLabel ?? "No connection"}</h1>
-        {startingConditions && (
+        {pairIsForSelection && startingConditions && (
           <p className="comparison-conditions">
             Same starting conditions: {startingConditions.serviceDate} · seed{" "}
             {startingConditions.masterSeed}
@@ -119,7 +123,7 @@ export function CompareView({ runner }: Readonly<CompareViewProps>) {
         )}
       </div>
 
-      {holding && noHolding && holdingStrategy && (
+      {pairIsForSelection && holding && noHolding && holdingStrategy && (
         <div className="comparison-panels">
           <ComparisonPanel title="No holding" run={noHolding} />
           <ComparisonPanel

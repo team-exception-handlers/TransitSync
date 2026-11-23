@@ -136,6 +136,24 @@ describe("useComparisonStore", () => {
     expect(useComparisonStore.getState()).toMatchObject({ status: "ready", error: null });
   });
 
+  it("is idle, not ready, when a load for another connection is aborted", async () => {
+    await load(vi.fn<ComparisonRunner>(async () => pairFor("connection_protection")));
+
+    // The user switches connection, then leaves Compare before the runs return.
+    const { runner, pending } = deferredRunner();
+    const controller = new AbortController();
+    const abandoned = useComparisonStore.getState()
+      .loadComparison("edouard_montpetit-rem-blue", DEFAULT_RUN_SETTINGS, runner, controller.signal);
+    controller.abort();
+    pending[0].reject(new DOMException("Aborted", "AbortError"));
+
+    expect(await abandoned).toBe(false);
+    // The stored pair is for the old connection, so the screen hides it and
+    // "ready" would describe runs the user cannot see.
+    expect(useComparisonStore.getState().connectionId).toBe(CONNECTION);
+    expect(useComparisonStore.getState().status).toBe("idle");
+  });
+
   it("keeps the previous pair and reports the error when a load fails", async () => {
     await load(vi.fn<ComparisonRunner>(async () => pairFor("connection_protection")));
     const shown = useComparisonStore.getState().holding;

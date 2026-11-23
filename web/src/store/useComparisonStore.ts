@@ -75,9 +75,14 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => ({
     // a request overtaken by a newer one are both dropped without a trace.
     const isCurrent = () => load === latestLoad && !signal?.aborted;
     // An aborted load that no newer one replaced must not leave the status at
-    // "loading": it falls back to the pair already shown, if any.
+    // "loading". It falls back to "ready" only when the pair in the store is
+    // for this connection; a pair for another connection is hidden on screen,
+    // so "ready" would describe runs the user cannot see.
     const dropLoad = () => {
-      if (load === latestLoad) set({ status: get().holding === null ? "idle" : "ready" });
+      if (load !== latestLoad) return false;
+      const shown = get();
+      const pairIsForThisConnection = shown.holding !== null && shown.connectionId === connectionId;
+      set({ status: pairIsForThisConnection ? "ready" : "idle" });
       return false;
     };
     set({ status: "loading", error: null });
