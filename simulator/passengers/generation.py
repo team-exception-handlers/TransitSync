@@ -71,10 +71,11 @@ class PassengerGenerator:
     """Create passenger batches with reproducible counts and destinations.
 
     Use one generator per run to keep IDs unique across origins and batches.
-    Multiple generators need distinct ``id_prefix`` values. Numeric suffixes use
-    at least 12 digits. Time windows are supplied by the caller, which is
-    responsible for avoiding double-counting demand across repeated or overlapping
-    windows for the same passenger source.
+    Multiple generators need distinct ``id_prefix`` values. Unkeyed batches use
+    a counter of at least 12 digits; keyed batches use their key, one per batch.
+    Time windows are supplied by the caller, which is responsible for avoiding
+    double-counting demand across repeated or overlapping windows for the same
+    passenger source.
     """
 
     def __init__(
@@ -102,7 +103,8 @@ class PassengerGenerator:
         batch has no platform arrival timestamps: releasing and spreading it is
         the responsibility of task #18. All inputs are checked before RNG draws.
         ``key`` names what the batch belongs to (a feeder arrival), so paired
-        runs give it the same draws whatever drew before it (#192).
+        runs give it the same draws and passenger IDs whatever drew before it
+        (#192, #240).
         """
         if not isinstance(demand_profile, DemandProfile):
             raise ValueError("demand_profile must be a DemandProfile")
@@ -124,11 +126,23 @@ class PassengerGenerator:
         )
         passengers = [
             Passenger(
-                passenger_id=f"{self._id_prefix}-{self._next_id + index:012d}",
+                passenger_id=self._passenger_id(key, index),
                 origin=origin,
                 destination=str(destination),
             )
             for index, destination in enumerate(chosen)
         ]
-        self._next_id += count
+        if not key:
+            self._next_id += count
         return passengers
+
+    def _passenger_id(self, key: tuple[str | float, ...], index: int) -> str:
+        """Name a keyed passenger after its batch key and place in the batch.
+
+        A run-wide counter shifts every later ID when a hold changes one
+        group's size, so paired runs would give one person two IDs (#240).
+        """
+        if not key:
+            return f"{self._id_prefix}-{self._next_id + index:012d}"
+        batch = "-".join(str(part) for part in key)
+        return f"{self._id_prefix}-{batch}-{index + 1:04d}"

@@ -104,6 +104,20 @@ def test_ids_keep_text_sort_order_across_one_million_passengers(monkeypatch):
     ]
 
 
+def test_keyed_batches_name_passengers_after_their_key(monkeypatch):
+    # Keyed IDs come from the feeder arrival, so they leave the counter alone
+    # and a later unkeyed batch still starts at 1 (#240)
+    generator, _ = generator_with_count(monkeypatch, count=2)
+    keyed = generate(generator, key=("mcgill", "rem-1", 1))
+    unkeyed = generate(generator)
+
+    assert len(keyed) > 1
+    assert [p.passenger_id for p in keyed] == [
+        f"passenger-mcgill-rem-1-1-{n:04d}" for n in range(1, len(keyed) + 1)
+    ]
+    assert unkeyed[0].passenger_id == "passenger-000000000001"
+
+
 def test_zero_share_destinations_are_never_assigned(monkeypatch):
     generator, _ = generator_with_count(monkeypatch, count=10)
     passengers = generate(
