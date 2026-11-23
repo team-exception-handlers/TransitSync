@@ -25,4 +25,5 @@ max-statements = 50
 testpaths = ["tests"]
 pythonpath = ["."]
 # importlib mode stops tests/simulator from shadowing the simulator package
-addopts = "--import-mode=importlib"
+addopts = "--import-mode=importlib -m 'not performance'"
+markers = ["performance: opt-in uncached API timing targets (run with -m performance -s)"]
