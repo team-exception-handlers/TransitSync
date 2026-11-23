@@ -161,6 +161,12 @@ ruff format --check .     # formatting
 docker compose config     # validate the container configuration
 ```
 
+Performance target tests are opt-in, so CI and a plain `pytest` skip them. They time uncached API requests against the targets on the Performance wiki page and print one table of results:
+
+```powershell
+pytest tests/performance -m performance -s
+```
+
 Front end checks run from `web/`:
 
 ```powershell
