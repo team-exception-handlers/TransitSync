@@ -86,12 +86,22 @@ describe("sidebar navigation", () => {
     expect(navItem("Station view").getAttribute("aria-current")).toBeNull();
   });
 
-  it("shows a placeholder naming the story that fills Sources", () => {
-    render(<App runLoader={null} />);
+  it("shows the Sources table on Sources", () => {
+    render(<App runLoader={null} parameterProvenanceLoader={null} />);
     openView("Sources");
 
-    expect(screen.getByRole("heading", { name: "Sources" })).toBeDefined();
-    expect(screen.getByText("This screen is filled by US-7.2.")).toBeDefined();
+    expect(screen.getByRole("heading", { name: "Where each value comes from" })).toBeDefined();
+    expect(navItem("Sources").getAttribute("aria-current")).toBe("page");
+  });
+
+  it("opens Sources from the link in Run settings on Scenario setup", () => {
+    render(<App runLoader={null} scenarioRunner={null} parameterProvenanceLoader={null} />);
+    openView("Scenario setup");
+
+    fireEvent.click(screen.getByRole("button", { name: "Where these values come from" }));
+
+    expect(screen.getByRole("heading", { name: "Where each value comes from" })).toBeDefined();
+    expect(navItem("Sources").getAttribute("aria-current")).toBe("page");
   });
 
   it("shows the side-by-side comparison screen on Compare", () => {

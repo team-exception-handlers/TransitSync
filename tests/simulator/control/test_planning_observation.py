@@ -2,6 +2,7 @@
 """Forward snapshots include returns, existing holds and prediction errors (#61)."""
 
 from dataclasses import FrozenInstanceError, replace
+from functools import partial
 
 import pytest
 
@@ -72,7 +73,8 @@ def test_existing_hold_is_fixed_and_carried_into_following_visits():
 def test_future_times_receive_prediction_error_without_changing_dwell():
     seen = snapshot()
     model = PredictionErrorModel(
-        PredictionErrorSettings(), StreamManager(7).get_stream("prediction_errors")
+        PredictionErrorSettings(),
+        partial(StreamManager(7).keyed_normal, "prediction_errors"),
     )
     estimated = model.apply(seen)
     future = estimated.future_visits[1]
@@ -85,7 +87,7 @@ def test_perfect_information_keeps_complete_future_view_unchanged():
     seen = snapshot()
     model = PredictionErrorModel(
         PredictionErrorSettings(0, 0, 0),
-        StreamManager(7).get_stream("prediction_errors"),
+        partial(StreamManager(7).keyed_normal, "prediction_errors"),
     )
     assert model.apply(seen) == seen
 

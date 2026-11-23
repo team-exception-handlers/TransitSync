@@ -13,14 +13,17 @@ interface SetupViewProps {
   runner: ScenarioRunner | null;
   /** Where each setting came from (US-7.1), shown beside each run setting. */
   provenance?: ParameterProvenanceMap;
+  /** Opens the Sources screen from "Where these values come from" (#320). */
+  onShowSources?: () => void;
 }
 
 /** Wrap the run settings panel with this screen's title. */
-export function SetupView({ runner, provenance }: Readonly<SetupViewProps>) {
+export function SetupView({ runner, provenance, onShowSources }: Readonly<SetupViewProps>) {
   return (
     <>
       <h1 className="view-title">Scenario setup</h1>
-      <RunSettingsPanel runner={runner} provenance={provenance} />
+      <RunSettingsPanel runner={runner} provenance={provenance}
+        onShowSources={onShowSources} />
     </>
   );
 }

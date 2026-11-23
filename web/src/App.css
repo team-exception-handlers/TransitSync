@@ -145,7 +145,8 @@ body {
 
 /* Sidebar items are buttons (#408); the current screen keeps the dark
    highlight the static label used, and aria-current drives it so the look
-   and the screen-reader state cannot disagree. */
+   and the screen-reader state cannot disagree. The current item is also bold
+   so it does not rely on color alone. */
 .nav-item {
   height: 44px;
 
@@ -174,6 +175,8 @@ body {
   background-color: #16191d;
 
   color: #ffffff;
+
+  font-weight: 600;
 }
 
 /* MAIN CONTENT LAYOUT */

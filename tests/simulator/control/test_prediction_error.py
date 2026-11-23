@@ -2,6 +2,8 @@
 """Tests for the prediction error model (US-2.1, Task 2.1.3, #39)."""
 
 import math
+from dataclasses import replace
+from functools import partial
 
 import numpy as np
 import pytest
@@ -21,12 +23,12 @@ from simulator.engine.random_streams import StreamManager
 
 
 class FixedDraws:
-    """Generator stand-in returning the given standard normal values in order."""
+    """Keyed draw stand-in returning the given standard normal values in order."""
 
     def __init__(self, *values):
         self.values = list(values)
 
-    def standard_normal(self):
+    def __call__(self, *_key):
         return self.values.pop(0)
 
 
@@ -51,7 +53,7 @@ def snapshot(arrival_s=220.0, load=300, still_walking=12, group_size=15):
 
 
 def prediction_stream(seed=7):
-    return StreamManager(seed).get_stream("prediction_errors")
+    return partial(StreamManager(seed).keyed_normal, "prediction_errors")
 
 
 def test_sigma_grows_with_horizon():
@@ -109,16 +111,19 @@ def test_perfect_information_returns_true_values():
     assert seen == truth
 
 
-def test_perfect_information_uses_the_stream_like_any_other_magnitude():
-    # Same draws at every kappa, so a sweep compares the same errors scaled
-    streams = [prediction_stream(), prediction_stream()]
-    for settings, stream in zip(
-        (PredictionErrorSettings(0, 0, 0), PredictionErrorSettings()),
-        streams,
-        strict=True,
-    ):
-        PredictionErrorModel(settings, stream).apply(snapshot())
-    assert streams[0].random() == streams[1].random()
+def test_every_kappa_scales_the_same_error():
+    # Same e at every kappa, so a sweep compares the same errors scaled (#192)
+    truth = snapshot()
+    errors = [
+        PredictionErrorModel(PredictionErrorSettings(kappa), prediction_stream())
+        .apply(truth)
+        .trains[0]
+        .predicted_arrival_s
+        - truth.trains[0].predicted_arrival_s
+        for kappa in (0.5, 1.0)
+    ]
+    assert errors[0] != 0
+    assert errors[1] == pytest.approx(2 * errors[0])
 
 
 def test_counts_never_go_below_zero():
@@ -156,10 +161,13 @@ def test_error_spread_matches_kappa_times_sigma(kappa, horizon_s):
         PredictionErrorSettings(arrival_kappa=kappa), prediction_stream()
     )
     truth = snapshot(arrival_s=100.0 + horizon_s)
+    # Each scheduled departure is a different decision, so it gets its own e
     errors = [
-        model.apply(truth).trains[0].predicted_arrival_s
+        model.apply(replace(truth, scheduled_departure_s=130.0 + k))
+        .trains[0]
+        .predicted_arrival_s
         - truth.trains[0].predicted_arrival_s
-        for _ in range(4000)
+        for k in range(4000)
     ]
     expected = kappa * arrival_sigma_s(horizon_s)
     assert np.std(errors) == pytest.approx(expected, rel=0.05)
@@ -195,3 +203,19 @@ def test_settings_save_as_floats():
         "transfer_kappa": 0.5,
         "load_kappa": 0.0,
     }
+
+
+def test_each_error_ignores_other_trains_groups_and_their_order():
+    # Keyed by what is predicted (#192): reversing the trains and adding a
+    # group drawn first leaves every shared estimate unchanged
+    truth = snapshot()
+    other = IncomingTransfer("g0", "P2", 30, 120.0, 150.0, 80.0, 30)
+    busier = replace(
+        truth,
+        trains=truth.trains[::-1],
+        incoming_transfers=(other, *truth.incoming_transfers),
+    )
+    model = PredictionErrorModel(PredictionErrorSettings(), prediction_stream())
+    plain, busy = model.apply(truth), model.apply(busier)
+    assert busy.trains[::-1] == plain.trains
+    assert busy.incoming_transfers[1] == plain.incoming_transfers[0]

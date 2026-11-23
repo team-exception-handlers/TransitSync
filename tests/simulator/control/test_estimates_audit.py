@@ -8,6 +8,7 @@ no next stop, and group g1 has 12 of its 15 passengers still walking.
 
 import json
 from dataclasses import replace
+from functools import partial
 from types import SimpleNamespace
 
 import pytest
@@ -31,12 +32,12 @@ from simulator.trains.train_component import TrainComponent
 
 
 class FixedDraws:
-    """Generator stand-in returning the given standard normal values in order."""
+    """Keyed draw stand-in returning the given standard normal values in order."""
 
     def __init__(self, *values):
         self.values = list(values)
 
-    def standard_normal(self):
+    def __call__(self, *_key):
         return self.values.pop(0)
 
 
@@ -72,7 +73,7 @@ def make_trains():
 def run_with_kappa(tmp_path, kappa):
     """Run with every kappa set to ``kappa``; return the pipeline and records."""
     settings = PredictionErrorSettings(kappa, kappa, kappa)
-    stream = StreamManager(7).get_stream("prediction_errors")
+    stream = partial(StreamManager(7).keyed_normal, "prediction_errors")
     decision = DecisionPipeline(error_model=PredictionErrorModel(settings, stream))
     result = run_scenario(
         SimpleNamespace(master_seed=7, duration_s=1000.0),

@@ -57,7 +57,9 @@ def test_walk_records_preserve_all_walks_in_an_immutable_snapshot() -> None:
     snapshot = component.walk_records()
 
     assert snapshot
-    assert {walk.group_id for walk in snapshot.values()} == {"passenger-group-000001"}
+    assert {walk.group_id for walk in snapshot.values()} == {
+        "passenger-group-mcgill-rem-100-1"
+    }
     assert component.incoming_transfers() == ()
     with pytest.raises(TypeError):
         snapshot["extra"] = next(iter(snapshot.values()))

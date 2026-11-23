@@ -13,6 +13,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { ConnectionSelector } from "./components/connection-selector";
 import { ProvenanceBadge } from "./components/provenance-badge";
+import { SourcesView } from "./components/sources-view";
 import { connectionRuns } from "./data/connection-runs";
 import { stationViewData } from "./data/stationViewData";
 import { startPlaybackClock } from "./lib/playback-clock";
@@ -32,7 +33,6 @@ import {
 import { usePlaybackStore } from "./store/usePlaybackStore";
 import { VIEWS, useViewStore, type AppView } from "./store/useViewStore";
 import { CompareView } from "./views/compare-view";
-import { PlaceholderView } from "./views/placeholder-view";
 import { ResultsView } from "./views/results-view";
 import { SetupView } from "./views/setup-view";
 import { StationView } from "./views/station-view";
@@ -150,8 +150,9 @@ export default function App({
     station: <StationView provenance={provenance} />,
     compare: <CompareView runner={comparisonRunner} />,
     results: <ResultsView />,
-    setup: <SetupView runner={scenarioRunner} provenance={provenance} />,
-    sources: <PlaceholderView title="Sources" story="US-7.2" />,
+    setup: <SetupView runner={scenarioRunner} provenance={provenance}
+      onShowSources={() => setView("sources")} />,
+    sources: <SourcesView provenance={provenance} />,
   };
 
   return (

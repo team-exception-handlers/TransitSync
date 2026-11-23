@@ -32,6 +32,7 @@ The manifest must keep the selected settings so results can be reproduced.
 import json
 import math
 from datetime import date
+from functools import partial
 
 import pytest
 
@@ -90,7 +91,8 @@ def build_components(scenario, streams, rate_per_min):
         builder=ObservationBuilder([transfers]),
         enforcer=OperatingRulesEnforcer(scenario.operating_rules),
         error_model=PredictionErrorModel(
-            scenario.control.prediction_error, streams.get_stream("prediction_errors")
+            scenario.control.prediction_error,
+            partial(streams.keyed_normal, "prediction_errors"),
         ),
     )
     trains = TrainComponent(

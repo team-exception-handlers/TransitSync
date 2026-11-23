@@ -1,7 +1,7 @@
 # AI contribution: 50% or more AI-generated
 """Paired holding and no-holding runs for the side-by-side view (US-4.1, #230).
 
-Runs use the committed McGill scenario, so no external service is needed.
+Runs use the committed Édouard-Montpetit scenario, so no external service is needed.
 """
 
 import pytest
@@ -15,9 +15,11 @@ from api.simulation_comparison import (
 )
 from api.simulation_run import SimulationRunRequest, SimulationRunService
 
-# High demand: at Normal the McGill run has no transfer worth a hold.
+# High demand at Édouard-Montpetit: since the keyed draws (#192) the seeded
+# McGill runs have no transfer worth a hold at any demand, so the holding side
+# would show no holds.
 SETTINGS = {
-    "connection_id": "mcgill-rem-green",
+    "connection_id": "edouard_montpetit-rem-blue",
     "strategy": "connection_protection",
     "passenger_flow": "High",
 }
@@ -33,7 +35,7 @@ def client() -> TestClient:
 
 @pytest.fixture(scope="module")
 def comparison(client: TestClient) -> dict:
-    """Return the McGill connection-protection comparison payload."""
+    """Return the Édouard-Montpetit connection-protection comparison payload."""
     response = client.post("/simulation/comparison", json=SETTINGS)
     assert response.status_code == 200
     return response.json()

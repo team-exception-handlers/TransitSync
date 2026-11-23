@@ -2,6 +2,7 @@
 """#61 integration with real pulsed transfers, rules, movements and audit files."""
 
 import json
+from functools import partial
 from types import SimpleNamespace
 
 import pytest
@@ -67,7 +68,7 @@ def run(output, cap=300, *, route_options=None, with_errors=False):
     streams = StreamManager(42)
     error_model = None
     if with_errors:
-        stream = streams.get_stream("prediction_errors")
+        stream = partial(streams.keyed_normal, "prediction_errors")
         error_model = PredictionErrorModel(PredictionErrorSettings(), stream)
     transfers, walking_by_platform = make_transfers(streams, **(route_options or {}))
     policy = RollingHorizonStrategy(
