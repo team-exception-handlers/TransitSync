@@ -39,6 +39,7 @@ class PassengerSplit(BaseModel):
 def outcome_difference(passenger: MatchedPassenger) -> float | None:
     """D in seconds, or None when either run has no departure for them."""
     held, baseline = passenger.selected_strategy, passenger.without_holding
+    # Absent from a run, or still waiting at its end: there is no Y to compare
     if held is None or baseline is None:
         return None
     if held.departure_s is None or baseline.departure_s is None:
@@ -59,6 +60,7 @@ def split_passengers(matched: Sequence[MatchedPassenger]) -> PassengerSplit:
     """Count each group and total and average the time saved and lost."""
     differences = [outcome_difference(passenger) for passenger in matched]
     known = [d for d in differences if d is not None]
+    # Saved time is stored positive, so totals and averages read as gains
     saved = [-d for d in known if classify(d) == "better_off"]
     lost = [d for d in known if classify(d) == "worse_off"]
     return PassengerSplit(

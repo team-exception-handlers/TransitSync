@@ -73,9 +73,11 @@ def match_passengers(
     connections means the runs are not a pair, so it raises ``ValueError``.
     """
     held, base = _by_id(selected), _by_id(baseline)
+    # Only IDs in both runs can disagree; one-run passengers are kept below
     for passenger_id in held.keys() & base.keys():
         if held[passenger_id].connection_id != base[passenger_id].connection_id:
             raise ValueError(f"passenger {passenger_id} is on two connections")
+    # The union, so the frontend can say a passenger is absent from one run
     return [
         MatchedPassenger(
             passenger_id=passenger_id,
@@ -94,6 +96,7 @@ def build_passenger_outcomes(
     Use event order for ties so boarding at door closure catches that train.
     The simulator emits only the first missed_connection, and can emit it late.
     """
+    # Positions in ``records``, not times, so same-time events keep their order
     outcomes: dict[str, PassengerOutcome] = {}
     starts: dict[str, int] = {}
     boardings: dict[str, int] = {}
@@ -103,6 +106,8 @@ def build_passenger_outcomes(
         kind = record["event_type"]
         platform = record.get("platform_id")
         passenger = str(record.get("passenger_id", ""))
+        # Alighting from the feeder starts an outcome; connecting platform
+        # events (departures, arrival, boarding) fill it in
         if kind == "alighting" and platform == connection.from_platform_id:
             starts[passenger] = index
             outcomes[passenger] = PassengerOutcome(
@@ -128,6 +133,8 @@ def build_passenger_outcomes(
         # A late walker’s first miss is only observed upon platform arrival.
         if outcome.platform_arrival_s is None:
             continue
+        # Missed trains: departures after alighting and before boarding, or
+        # before the run ends for a passenger who never boards
         first = bisect_left(departures, starts[passenger])
         end = bisect_left(departures, boardings.get(passenger, len(records)))
         missed = departures[first:end]
@@ -136,13 +143,16 @@ def build_passenger_outcomes(
             outcome.status = "missed"
         if outcome.boarded_train_id is None:
             continue
+        # No departure left without them, so they made their first connection
         if not missed:
             outcome.status = "made"
             outcome.delay_s = 0.0
+        # Departure of the boarded train's first visit after this boarding
         visits = departures_by_train[outcome.boarded_train_id]
         visit = bisect_left(visits, boardings[passenger])
         if visit < len(visits):
             outcome.departure_s = float(records[visits[visit]]["time_s"])
+            # Delay counts from the first train they missed to the one taken
             if missed:
                 outcome.delay_s = outcome.departure_s - float(
                     records[missed[0]]["time_s"]
