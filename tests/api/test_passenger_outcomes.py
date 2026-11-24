@@ -105,5 +105,5 @@ def test_comparison_reuses_baseline_across_slider_changes(monkeypatch):
     assert sorted(runs) == [
         ("connection_protection", 0, 300),
         ("connection_protection", 3, 60),
-        ("no_control", 1, 300),
+        ("no_control", 1, None),
     ]

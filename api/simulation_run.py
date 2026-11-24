@@ -1,9 +1,16 @@
 # AI contribution: 50% or more AI-generated
 """Run committed demo scenarios and cache their map-ready API responses.
 
-The API selects scenario files by connection ID, applies validated request
-settings, then delegates event processing to the simulator. Simulation time
-and every hold duration are expressed in seconds.
+The API selects scenario files by connection ID, or a time-of-day preset,
+applies validated request settings, then delegates event processing to the
+simulator. Simulation time and every hold duration are expressed in seconds.
+
+Demand and service values (transfer volume, train frequency, onboard load,
+walking time and maximum hold) come from the scenario's parameters (#258).
+A request value replaces the scenario's; a missing one keeps it (#259).
+
+This file is over 500 lines. Splitting train building into its own module is
+a separate refactor, kept out of the parameter PRs so they stay reviewable.
 """
 
 from __future__ import annotations
@@ -62,9 +69,21 @@ from simulator.passengers import (
     TransferRoute,
 )
 from simulator.passengers.platform_queue import PlatformQueue
-from simulator.scenario import Scenario, load_scenario_file
+from simulator.scenario import (
+    PRESET_SETTINGS,
+    Scenario,
+    load_scenario_file,
+    resolve_preset,
+)
+from simulator.scenario_parameters import (
+    PARAMETER_FIELDS,
+    PARAMETER_RANGES,
+    WALKING_MIN_S,
+    ScenarioParameters,
+)
 from simulator.timetable import ScheduledVisit
 from simulator.trains.disruption import DelayInjection
+from simulator.trains.frequency import retime_line
 from simulator.trains.spacing import perturb_dispatch_times
 from simulator.trains.suspension import LineSuspension
 from simulator.trains.train import ScheduledStop, Train
@@ -82,18 +101,29 @@ SCENARIO_PATHS = {
     )
 }
 TRAIN_CAPACITY = 800
-WALKING_MEAN_S = 120.0
-WALKING_MIN_S = 30.0
 CORRIDOR_CAPACITY_PER_MINUTE = 60.0
-DEMAND_RATES_PER_MINUTE = {"Low": 6.0, "Normal": 12.0, "High": 24.0}
 MAX_CACHED_RUNS = 8
 # The STM GTFS feed gives every metro stop the same arrival and departure time,
 # so trains would open their doors for 0 s. Assumed dwell until it is measured.
 MIN_STOP_DWELL_S = 30.0
-# Passengers already on board each train (L in the break-even cost). With 0,
-# holding looked free and connection protection always held the maximum.
-# Assumed, as no load data exists yet.
-ONBOARD_LOAD = 300
+# Gap used when a platform has fewer than two departures in the window.
+FALLBACK_HEADWAY_S = 300.0
+
+
+def _parameter_field(name: str, number_type: type) -> object:
+    """Optional request field bounded by the shared ``PARAMETER_RANGES`` row.
+
+    ``None`` (the default) keeps the scenario's or preset's value, so the
+    request model and the scenario loader can never accept different ranges.
+    """
+    bounds = PARAMETER_RANGES[name]
+    return Field(
+        default=None,
+        ge=number_type(bounds.minimum),
+        le=number_type(bounds.maximum),
+        multiple_of=number_type(bounds.step),
+        strict=True,
+    )
 
 
 class SimulationRunRequest(BaseModel):
@@ -102,8 +132,11 @@ class SimulationRunRequest(BaseModel):
     ``max_hold_time`` is in seconds, in five-second increments up to 300.
     ``error_magnitude`` is the prediction-error kappa shared by all estimates,
     bounded from 0 to 3.
-    Passenger-flow labels map to fixed passenger-per-minute demand rates.
-    Unknown fields are rejected so misspelled controls cannot be ignored.
+    ``preset`` picks a time-of-day preset instead of the committed weekday
+    morning file. The four parameter fields and ``max_hold_time`` default to
+    None, which keeps the scenario's (or preset's) value; their ranges come
+    from ``PARAMETER_RANGES``. Unknown fields are rejected so misspelled
+    controls cannot be ignored. A 422 response names the invalid field.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -112,18 +145,15 @@ class SimulationRunRequest(BaseModel):
     strategy: str = Field(
         default="no_control", min_length=1, max_length=64, strict=True
     )
-    max_hold_time: float = Field(
-        default=300.0,
-        gt=0,
-        le=300,
-        multiple_of=5,
-        allow_inf_nan=False,
-        strict=True,
-    )
+    max_hold_time: float | None = _parameter_field("max_hold_time", float)
     error_magnitude: float = Field(
         default=1.0, ge=0, le=3, allow_inf_nan=False, strict=True
     )
-    passenger_flow: Literal["Low", "Normal", "High"] = "Normal"
+    preset: str | None = Field(default=None, max_length=64, strict=True)
+    transfer_volume: int | None = _parameter_field("transfer_volume", int)
+    train_headway_s: float | None = _parameter_field("train_headway_s", float)
+    onboard_load: int | None = _parameter_field("onboard_load", int)
+    walking_mean_s: float | None = _parameter_field("walking_mean_s", float)
     disruption_enabled: bool = Field(default=False, strict=True)
     disruption_preset: Literal[
         "none", "platform_delay", "line_suspension", "uneven_headways"
@@ -153,6 +183,15 @@ class SimulationRunRequest(BaseModel):
         elif "irregularity_threshold" in self.model_fields_set:
             raise ValueError("irregularity_threshold is only valid for adaptive")
         return self
+
+    @field_validator("preset")
+    @classmethod
+    def validate_preset(cls, value: str | None) -> str | None:
+        """Accept only a preset defined in ``PRESET_SETTINGS`` (#265)."""
+        if value is not None and value not in PRESET_SETTINGS:
+            choices = ", ".join(PRESET_SETTINGS)
+            raise ValueError(f"preset must be one of: {choices}")
+        return value
 
     @field_validator("strategy")
     @classmethod
@@ -274,10 +313,11 @@ class SimulationRunService:
             return trains, transfers
 
         log.info(
-            "starting API simulation: connection=%s strategy=%s flow=%s",
+            "starting API simulation: connection=%s strategy=%s preset=%s %s",
             request.connection_id,
             request.strategy,
-            request.passenger_flow,
+            request.preset,
+            scenario.parameters,
         )
         with tempfile.TemporaryDirectory(prefix="transitsync-api-run-") as folder:
             result = run_scenario(
@@ -327,16 +367,31 @@ class SimulationRunService:
         interchange_id: str,
         connecting_platform_id: str,
     ) -> Scenario:
-        """Load the committed one-hour scenario and apply validated run settings.
+        """Load the one-hour scenario and apply validated run settings.
 
+        A requested preset is filled and validated by ``resolve_preset``
+        (#265); otherwise the committed weekday-morning file is used. Request
+        parameter values then replace the scenario's (#259).
         Headway regulation uses platform targets, and connection protection uses
         the selected destination's median service gap. Adaptive mode uses both.
+        A chosen train frequency replaces the connecting platform's gap.
         The maximum hold is set in both control search and operating safeguards.
         Prediction-error kappa is shared across arrival, transfer, and load inputs.
         Returned scenario state is replaced rather than mutating the committed data.
         """
-        scenario = load_scenario_file(
-            SCENARIO_PATHS[interchange_id], {DATASET_ID: self._dataset}
+        if request.preset is None:
+            scenario = load_scenario_file(
+                SCENARIO_PATHS[interchange_id], {DATASET_ID: self._dataset}
+            )
+        else:
+            scenario = resolve_preset(
+                request.preset, self._dataset, interchanges=(interchange_id,)
+            )
+        parameters = _requested_parameters(scenario.parameters, request)
+        max_hold_s = (
+            scenario.operating_rules.max_hold_time
+            if request.max_hold_time is None
+            else request.max_hold_time
         )
         uses_targets = request.strategy in TARGET_HEADWAY_STRATEGIES
         uses_connections = request.strategy in CONNECTION_HEADWAY_STRATEGIES
@@ -345,6 +400,9 @@ class SimulationRunService:
             if uses_targets or uses_connections
             else {}
         )
+        if headways and parameters.train_headway_s is not None:
+            # The re-timed line runs exactly this gap, so strategies aim for it
+            headways[connecting_platform_id] = parameters.train_headway_s
         control = replace(
             scenario.control,
             strategy=request.strategy,
@@ -357,7 +415,7 @@ class SimulationRunService:
             irregularity_threshold=request.irregularity_threshold,
             hold_search=replace(
                 scenario.control.hold_search,
-                max_hold_s=request.max_hold_time,
+                max_hold_s=max_hold_s,
             ),
             prediction_error=PredictionErrorSettings(
                 arrival_kappa=request.error_magnitude,
@@ -368,10 +426,24 @@ class SimulationRunService:
         return replace(
             scenario,
             control=control,
-            operating_rules=replace(
-                scenario.operating_rules, max_hold_time=request.max_hold_time
-            ),
+            operating_rules=replace(scenario.operating_rules, max_hold_time=max_hold_s),
+            parameters=parameters,
         )
+
+
+def _requested_parameters(
+    base: ScenarioParameters, request: SimulationRunRequest
+) -> ScenarioParameters:
+    """Replace each scenario parameter the request sets; keep the others.
+
+    Both sides were range-checked against ``PARAMETER_RANGES`` already.
+    """
+    changes = {
+        name: getattr(request, name)
+        for name in sorted(PARAMETER_FIELDS)
+        if getattr(request, name) is not None
+    }
+    return replace(base, **changes)
 
 
 def _headway_targets(network: NetworkConfig, scenario: Scenario) -> dict[str, float]:
@@ -398,7 +470,9 @@ def _headway_targets(network: NetworkConfig, scenario: Scenario) -> dict[str, fl
             later - earlier
             for earlier, later in zip(ordered, ordered[1:], strict=False)
         ]
-        targets[platform.platform_id] = statistics.median(gaps) if gaps else 300.0
+        targets[platform.platform_id] = (
+            statistics.median(gaps) if gaps else FALLBACK_HEADWAY_S
+        )
     return targets
 
 
@@ -418,7 +492,8 @@ def _build_components(
     platform_by_id = {platform.platform_id: platform for platform in layout.platforms}
     feeder = platform_by_id[connection.from_platform_id]
     connecting = platform_by_id[connection.to_platform_id]
-    route = _build_transfer_route(scenario, request, feeder, connecting)
+    feeder_headway_s = _headway_targets(network, scenario)[feeder.platform_id]
+    route = _build_transfer_route(scenario, feeder_headway_s, feeder, connecting)
     transfers = TransferComponent([route], streams)
     trains = _build_train_component(
         scenario, network, connection, request, transfers, route, streams
@@ -428,15 +503,22 @@ def _build_components(
 
 def _build_transfer_route(
     scenario: Scenario,
-    request: SimulationRunRequest,
+    feeder_headway_s: float,
     feeder: LayoutPlatform,
     connecting: LayoutPlatform,
 ) -> TransferRoute:
     """Configure the REM-to-metro route shared by passengers and the strategy.
 
-    The demand profile spans the scenario horizon and uses passengers per minute.
-    One destination is assigned to the selected connecting station.
+    Transfer volume M is a group size per feeder train (Mathematical
+    Foundations section 2). Groups are drawn from a rate in passengers per
+    minute over the gap since the last feeder arrival, so the rate is
+    ``M * 60 / feeder_headway_s``: one scheduled gap then holds M passengers
+    on average, and a late train collects more. For example M = 60 with a
+    150 s REM headway gives 24 passengers per minute. Walking times use the
+    scenario's mean above the fixed ``WALKING_MIN_S`` floor.
     """
+    parameters = scenario.parameters
+    rate_per_minute = parameters.transfer_volume * 60.0 / feeder_headway_s
     return TransferRoute(
         station_id=feeder.stop_id,
         feeder_platform_id=feeder.platform_id,
@@ -446,14 +528,14 @@ def _build_transfer_route(
                 DemandPeriod(
                     0,
                     float(scenario.duration_s),
-                    DEMAND_RATES_PER_MINUTE[request.passenger_flow],
+                    rate_per_minute,
                 ),
             )
         ),
         # Transfers ride on past the interchange, so they can board (#100)
         transfer_fractions={_onward_station_id(connecting.platform_id): 1.0},
         corridor=CorridorQueue(CORRIDOR_CAPACITY_PER_MINUTE),
-        walking_mean_s=WALKING_MEAN_S,
+        walking_mean_s=parameters.walking_mean_s,
         walking_min_s=WALKING_MIN_S,
     )
 
@@ -584,58 +666,63 @@ def _line_suspensions(
     )
 
 
-def _nominal_first_departure(
-    active_visits: Sequence[ScheduledVisit],
-    start_clock_s: float,
-) -> float:
-    """Return the first active visit's relative departure in seconds."""
-    first_visit = active_visits[0]
-    return float(_departure_with_dwell(first_visit) - start_clock_s)
-
-
-def _irregular_green_starts(
-    network: NetworkConfig,
-    scenario: Scenario,
-    start_clock_s: float,
+def _uneven_green_dispatch(
+    trains: list[Train],
     request: SimulationRunRequest | None,
     streams: StreamManager | None,
-) -> dict[tuple[str, str], float]:
-    """Perturb Green-line dispatch starts using the named preset level."""
+) -> list[Train]:
+    """Shift Green-line trains to perturbed dispatch times for uneven headways.
+
+    Works on built trains, after any frequency re-timing, so a chosen train
+    frequency and the uneven-headways disruption combine: the even gaps are
+    what gets perturbed. Each direction (first platform) is its own dispatch
+    sequence, since its gaps are the headways passengers see; a re-timed train
+    can leave at the same second as one going the other way. Directions are
+    drawn in platform order and trains by first departure, so the seeded
+    draws always come in the same order.
+    """
     if request is None or request.disruption_preset != "uneven_headways":
-        return {}
-    preset = get_disruption_preset("uneven_headways")
-    level = preset.spacing_irregularity_level
+        return trains
+    level = get_disruption_preset("uneven_headways").spacing_irregularity_level
     if level is None:
-        return {}
+        return trains
     if streams is None:
         raise ValueError("Uneven headways require a seeded disruptions stream")
-
-    departures = []
-    for trip in network.trips_for_date(scenario.service_date):
-        if trip.route_id != "1":
-            continue
-        active_visits = [
-            visit for visit in trip.visits if visit.departure_s >= start_clock_s
-        ]
-        if active_visits:
-            nominal = _nominal_first_departure(active_visits, start_clock_s)
-            departures.append(((trip.feed_id, trip.trip_id), nominal))
-
-    ordered = sorted(departures, key=lambda item: item[1])
-    nominal_starts = [nominal for _key, nominal in ordered]
-    perturbed_starts = perturb_dispatch_times(
-        nominal_starts,
-        level,
-        streams.get_stream("disruptions"),
-    )
-    return {
-        key: perturbed
-        for (key, _nominal), perturbed in zip(
-            ordered,
-            perturbed_starts,
-            strict=True,
+    directions: dict[str, list[Train]] = defaultdict(list)
+    for train in trains:
+        if train.line_id == "1":
+            directions[train.schedule[0].platform_id].append(train)
+    offsets: dict[str, float] = {}
+    for platform_id in sorted(directions):
+        ordered = sorted(
+            directions[platform_id], key=lambda train: train.schedule[0].departure_s
         )
-    }
+        nominal = [train.schedule[0].departure_s for train in ordered]
+        perturbed = perturb_dispatch_times(
+            nominal, level, streams.get_stream("disruptions")
+        )
+        for train, before, after in zip(ordered, nominal, perturbed, strict=True):
+            offsets[train.id] = after - before
+    return [
+        replace(train, schedule=_shifted(train.schedule, offsets[train.id]))
+        if train.id in offsets
+        else train
+        for train in trains
+    ]
+
+
+def _shifted(
+    stops: tuple[ScheduledStop, ...], offset_s: float
+) -> tuple[ScheduledStop, ...]:
+    """Move every stop ``offset_s`` seconds, never before the run starts."""
+    return tuple(
+        replace(
+            stop,
+            arrival_s=max(0.0, stop.arrival_s + offset_s),
+            departure_s=max(0.0, stop.departure_s + offset_s),
+        )
+        for stop in stops
+    )
 
 
 def _build_trains(
@@ -650,17 +737,13 @@ def _build_trains(
     A stop remains active when its departure is at or after the scenario start.
     Scheduled timestamps are shifted to seconds relative to that start clock.
     A stop the timetable lists with no dwell gets ``MIN_STOP_DWELL_S``.
-    Every train starts with ``ONBOARD_LOAD`` passengers. A trip that ends at
+    Every train starts with the scenario's onboard load. A trip that ends at
     the connecting platform gets an onward stop (see ``_onward_stop``).
+    A chosen train frequency re-times the connecting line (``retime_line``)
+    before the uneven-headways disruption, if any, is applied.
     """
     start_clock_s = scenario_start_clock_s(scenario)
-    irregular_starts = _irregular_green_starts(
-        network,
-        scenario,
-        start_clock_s,
-        request,
-        streams,
-    )
+    parameters = scenario.parameters
     trains = []
     for trip in network.trips_for_date(scenario.service_date):
         active_visits = [
@@ -679,31 +762,23 @@ def _build_trains(
         )
         if stops[-1].platform_id == connecting_platform_id:
             stops = (*stops, _onward_stop(stops[-1], scenario.duration_s))
-        trip_key = (trip.feed_id, trip.trip_id)
-        if trip.route_id == "1" and trip_key in irregular_starts:
-            nominal_start = _nominal_first_departure(
-                active_visits,
-                start_clock_s,
-            )
-            offset = irregular_starts[trip_key] - nominal_start
-            stops = tuple(
-                replace(
-                    stop,
-                    arrival_s=max(0.0, stop.arrival_s + offset),
-                    departure_s=max(0.0, stop.departure_s + offset),
-                )
-                for stop in stops
-            )
         trains.append(
             Train(
                 id=f"{trip.feed_id}:{trip.trip_id}",
                 capacity=TRAIN_CAPACITY,
                 schedule=stops,
                 line_id=trip.route_id,
-                onboard_load=ONBOARD_LOAD,
+                onboard_load=parameters.onboard_load,
             )
         )
-    return trains
+    if parameters.train_headway_s is not None:
+        trains = retime_line(
+            trains,
+            connecting_platform_id,
+            parameters.train_headway_s,
+            float(scenario.duration_s),
+        )
+    return _uneven_green_dispatch(trains, request, streams)
 
 
 def _onward_station_id(platform_id: str) -> str:

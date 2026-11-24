@@ -22,6 +22,7 @@ from api.station_layout import load_station_layouts
 from simulator.control.observation_builder import ObservationBuilder
 from simulator.control.strategies import STRATEGIES
 from simulator.engine.random_streams import StreamManager
+from simulator.scenario_parameters import ScenarioParameters
 
 # Scenario window used by the fake timetables: 07:00 for one hour
 START_S = 25200
@@ -113,7 +114,7 @@ def test_every_strategy_observes_the_incoming_transfer_groups(monkeypatch, strat
         "connection_id": "mcgill-rem-green",
         "strategy": strategy,
         "error_magnitude": 0,
-        "passenger_flow": "Low",
+        "transfer_volume": 21,
     }
     if strategy == "adaptive":
         settings["irregularity_threshold"] = 0.25
@@ -131,13 +132,13 @@ def test_connection_protection_holds_trains_for_transfers_in_a_full_run(monkeypa
     show the transfers reached the strategy. Every hold must still respect the
     requested maximum hold.
     """
-    monkeypatch.setattr(simulation_run, "ONBOARD_LOAD", 0)
     settings = {
+        "onboard_load": 0,
         "connection_id": "mcgill-rem-green",
         "strategy": "connection_protection",
         "max_hold_time": 60,
         "error_magnitude": 0,
-        "passenger_flow": "Normal",
+        "transfer_volume": 42,
     }
 
     response = TestClient(create_app()).post("/simulation/run", json=settings)
@@ -165,7 +166,7 @@ def test_trains_carry_the_onboard_load_and_connecting_trips_ride_on(monkeypatch)
     """Only a trip ending at the connecting platform gets the onward stop.
 
     It reuses that platform and is reached one whole run after leaving, so it
-    lies after the hour ends; every train starts with ``ONBOARD_LOAD``.
+    lies after the hour ends; every train starts with the scenario's onboard load.
     """
     monkeypatch.setattr(simulation_run, "scenario_start_clock_s", lambda _: START_S)
     trips = (
@@ -173,7 +174,11 @@ def test_trains_carry_the_onboard_load_and_connecting_trips_ride_on(monkeypatch)
         _stop_trip("other", "green_mcgill_1", START_S + 60, START_S + 90),
     )
     network = SimpleNamespace(trips_for_date=lambda _: trips)
-    scenario = SimpleNamespace(service_date=None, duration_s=DURATION_S)
+    scenario = SimpleNamespace(
+        service_date=None,
+        duration_s=DURATION_S,
+        parameters=ScenarioParameters(onboard_load=250),
+    )
 
     trains = simulation_run._build_trains(network, scenario, "green_mcgill_0")
 
@@ -185,7 +190,7 @@ def test_trains_carry_the_onboard_load_and_connecting_trips_ride_on(monkeypatch)
     )
     assert onward.arrival_s == stop.departure_s + DURATION_S > DURATION_S
     assert len(by_trip["feed:other"].schedule) == 1
-    assert {train.onboard_load for train in trains} == {simulation_run.ONBOARD_LOAD}
+    assert {train.onboard_load for train in trains} == {250}
 
 
 def test_transfer_passengers_board_the_connecting_train_in_a_full_run():
@@ -194,7 +199,7 @@ def test_transfer_passengers_board_the_connecting_train_in_a_full_run():
         "connection_id": "mcgill-rem-green",
         "strategy": "no_control",
         "error_magnitude": 0,
-        "passenger_flow": "Normal",
+        "transfer_volume": 42,
     }
 
     response = TestClient(create_app()).post("/simulation/run", json=settings)
@@ -212,13 +217,13 @@ def test_perfect_information_shows_no_gap_in_the_decision_estimates(monkeypatch)
     Nobody on board makes holds frequent, so there are estimates to check.
     Each shown decision has exactly one estimates record, cut to its train.
     """
-    monkeypatch.setattr(simulation_run, "ONBOARD_LOAD", 0)
     settings = {
+        "onboard_load": 0,
         "connection_id": "mcgill-rem-green",
         "strategy": "connection_protection",
         "max_hold_time": 60,
         "error_magnitude": 0,
-        "passenger_flow": "High",
+        "transfer_volume": 84,
     }
 
     payload = TestClient(create_app()).post("/simulation/run", json=settings).json()
@@ -310,6 +315,7 @@ def test_uneven_headways_perturbs_green_line_dispatch_times(
     scenario = SimpleNamespace(
         service_date=None,
         duration_s=DURATION_S,
+        parameters=ScenarioParameters(),
     )
     request = simulation_run.SimulationRunRequest(
         connection_id="mcgill-rem-green",

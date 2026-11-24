@@ -21,7 +21,7 @@ from api.simulation_run import SimulationRunRequest, SimulationRunService
 SETTINGS = {
     "connection_id": "edouard_montpetit-rem-blue",
     "strategy": "connection_protection",
-    "passenger_flow": "High",
+    "transfer_volume": 84,
 }
 # Fields a single-run playback needs to match across both sides of the pair.
 SHARED_FIELDS = ("duration_s", "start_clock_s", "platforms", "connections")
@@ -47,7 +47,7 @@ def test_paired_requests_differ_only_in_strategy_and_control_fields():
         strategy="connection_protection",
         max_hold_time=60.0,
         error_magnitude=2.0,
-        passenger_flow="High",
+        transfer_volume=84,
         disruption_preset="platform_delay",
         disruption_time_s=300.0,
     )
@@ -58,7 +58,8 @@ def test_paired_requests_differ_only_in_strategy_and_control_fields():
     for field in unchanged - {"strategy"}:
         assert getattr(no_holding, field) == getattr(request, field), field
     # Control-only sliders fall back to defaults so the baseline is cached once.
-    assert no_holding.max_hold_time == 300.0
+    # None keeps the scenario's maximum hold (#259).
+    assert no_holding.max_hold_time is None
     assert no_holding.error_magnitude == 1.0
 
 
@@ -139,5 +140,5 @@ def test_baseline_runs_once_across_slider_changes(monkeypatch):
     assert sorted(runs) == [
         ("connection_protection", 60),
         ("connection_protection", 300),
-        ("no_control", 300),
+        ("no_control", None),
     ]
