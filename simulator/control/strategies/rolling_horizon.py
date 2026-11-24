@@ -6,11 +6,13 @@ its first decision to a request; future decisions never enter the event queue.
 """
 
 import json
+from collections.abc import Iterator
 from dataclasses import asdict
 
 from simulator.control.decision_audit import (
     DECISION_SCHEMA_VERSION,
     KIND_ROLLING_HORIZON,
+    EncodedDecisionRecord,
     encode_decision_record,
 )
 from simulator.control.interface import (
@@ -79,6 +81,6 @@ class RollingHorizonStrategy(DecisionController):
         """Return detached records for the existing decisions.jsonl writer."""
         return tuple(json.loads(record.line) for record in self._records)
 
-    def encoded_decision_records(self):
+    def encoded_decision_records(self) -> Iterator[EncodedDecisionRecord]:
         """Stream private immutable audit lines without copying the entire run."""
         yield from self._records

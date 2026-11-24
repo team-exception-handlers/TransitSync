@@ -9,11 +9,14 @@ check still uses the true snapshot, since safety rules are the simulator's.
 
 import json
 import math
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from simulator.control.decision_audit import (
     DecisionAuditSource,
+    EncodedAuditSource,
+    EncodedDecisionRecord,
     EstimateEncoder,
 )
 from simulator.control.estimate_store import EstimateStore
@@ -122,7 +125,7 @@ class DecisionPipeline:
         """
         return tuple(self.iter_decision_records())
 
-    def iter_decision_records(self):
+    def iter_decision_records(self) -> Iterator[dict[str, Any]]:
         """Detach one audit at a time for the runner's sequential log writer.
 
         The public tuple API remains available. Streaming avoids retaining a
@@ -134,24 +137,27 @@ class DecisionPipeline:
         for record in self._estimates:
             yield json.loads(record.line)
 
-    def encoded_decision_records(self):
+    def encoded_decision_records(
+        self,
+    ) -> Iterator[EncodedDecisionRecord | dict[str, Any]]:
         """Yield unchanged strategy records followed by already encoded estimates.
 
         Only the writer uses this path. Public readers continue receiving fresh
         dictionaries in the same order through decision_records or its iterator.
         """
-        encoded = getattr(self.strategy, "encoded_decision_records", None)
-        if encoded is not None:
-            yield from encoded()
-        elif isinstance(self.strategy, DecisionAuditSource):
-            yield from self.strategy.decision_records()
+        yield from self._strategy_records()
         yield from self._estimates
 
-    def playback_decision_records(self):
+    def playback_decision_records(
+        self,
+    ) -> Iterator[EncodedDecisionRecord | dict[str, Any]]:
         """Project estimates only after the runner writes their complete audit."""
-        encoded = getattr(self.strategy, "encoded_decision_records", None)
-        if encoded is not None:
-            yield from encoded()
+        yield from self._strategy_records()
+        yield from self._estimates.playback_records()
+
+    def _strategy_records(self) -> Iterator[EncodedDecisionRecord | dict[str, Any]]:
+        """The strategy's own records, already encoded when it can supply them."""
+        if isinstance(self.strategy, EncodedAuditSource):
+            yield from self.strategy.encoded_decision_records()
         elif isinstance(self.strategy, DecisionAuditSource):
             yield from self.strategy.decision_records()
-        yield from self._estimates.playback_records()

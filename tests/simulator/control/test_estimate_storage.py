@@ -13,12 +13,18 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from simulator.control.decision import DecisionPipeline
 from simulator.control.decision_audit import (
+    TRAIN_ESTIMATES,
+    DecisionAuditLog,
+    EncodedAuditSource,
     EstimateEncoder,
+    _side_by_side,
     encode_decision_record,
     estimates_record,
     write_decision_log,
 )
+from simulator.control.strategies.rolling_horizon import RollingHorizonStrategy
 from tests.simulator.control.test_estimates_audit import run_with_kappa
 from tests.simulator.control.test_prediction_error import snapshot
 
@@ -86,3 +92,37 @@ def test_compact_view_never_hides_invalid_unshown_train_values(arrival):
     encoder = EstimateEncoder()
     with pytest.raises(ValueError):
         encoder.encode(truth, truth)
+
+
+def test_hand_written_train_fields_match_the_generic_schema():
+    """Both fast paths still spell the fields named in ``TRAIN_ESTIMATES``.
+
+    The seen values differ from the true ones so a swapped pair would show.
+    """
+    truth = snapshot()
+    seen = replace(
+        truth,
+        trains=tuple(
+            replace(
+                t, predicted_arrival_s=_later(t.predicted_arrival_s), onboard_load=3
+            )
+            for t in truth.trains
+        ),
+    )
+    generic = _side_by_side(truth.trains, seen.trains, "train_id", TRAIN_ESTIMATES)
+    record = estimates_record(truth, seen)
+    assert record["trains"] == generic
+    encoded = json.loads(EstimateEncoder().encode(truth, seen).line)
+    assert encoded["trains"] == generic
+
+
+def test_writer_finds_encoded_sources_through_the_protocol():
+    """Sources with ready-made lines declare it; plain audit logs do not."""
+    assert issubclass(DecisionPipeline, EncodedAuditSource)
+    assert issubclass(RollingHorizonStrategy, EncodedAuditSource)
+    assert not isinstance(DecisionAuditLog(), EncodedAuditSource)
+
+
+def _later(arrival):
+    """Shift a known arrival by 7 s; a train with no next stop keeps ``None``."""
+    return None if arrival is None else arrival + 7

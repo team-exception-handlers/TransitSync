@@ -88,11 +88,12 @@ def test_coordinated_logs_match_unoptimized_baseline(
 ):
     """Retain exact bytes through real transfers, error draws and rule clamping.
 
-    Event logs hold no last-bit costs, so one hash covers every platform.
+    Event logs hold no last-bit costs, so one hash covers every platform and
+    is checked before a platform without a decision baseline skips.
     """
-    expected_decisions = _for_this_platform(decisions)
     result, _, _ = run(tmp_path, **options)
     assert hashlib.sha256(result.events_path.read_bytes()).hexdigest() == events
+    expected_decisions = _for_this_platform(decisions)
     assert (
         hashlib.sha256(result.decisions_path.read_bytes()).hexdigest()
         == expected_decisions

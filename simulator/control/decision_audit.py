@@ -34,7 +34,7 @@ from typing import Any, Protocol, runtime_checkable
 
 from simulator.control.break_even import BreakEvenResult
 from simulator.control.hold_search import HoldSearchResult
-from simulator.control.interface import ObservationSnapshot
+from simulator.control.interface import ObservationSnapshot, TrainState
 from simulator.engine.event_log import partial_path
 
 DECISIONS_FILE = "decisions.jsonl"
@@ -46,7 +46,9 @@ KIND_ESTIMATES = "estimates"
 KIND_ROLLING_HORIZON = "rolling_horizon"
 KIND_MODE_SWITCH = "mode_switch"
 
-# The values the prediction error model changes (#39)
+# The values the prediction error model changes (#39). The train fields are
+# also written out by hand in _train_estimates and EstimateEncoder for speed;
+# tests compare both against the generic _side_by_side over this tuple
 TRAIN_ESTIMATES = ("predicted_arrival_s", "onboard_load")
 TRANSFER_ESTIMATES = ("passenger_count", "group_size")
 
@@ -62,6 +64,21 @@ class DecisionAuditSource(Protocol):
 
     def decision_records(self) -> Sequence[dict[str, Any]]:
         """Return the records in the order the decisions were taken."""
+        ...
+
+
+@runtime_checkable
+class EncodedAuditSource(DecisionAuditSource, Protocol):
+    """An audit source that can also hand the log writer ready-made lines.
+
+    The writer prefers this path because it skips decoding and re-encoding
+    every record; ``decision_records`` stays the public, detached reader.
+    """
+
+    def encoded_decision_records(
+        self,
+    ) -> Iterable["EncodedDecisionRecord | dict[str, Any]"]:
+        """Yield records in decision order, encoded where already possible."""
         ...
 
 
@@ -167,7 +184,7 @@ def estimates_record(
     }
 
 
-def _estimates_header(truth):
+def _estimates_header(truth: ObservationSnapshot) -> dict[str, Any]:
     """The common ordered metadata for complete and decision-specific views."""
     return {
         "schema_version": DECISION_SCHEMA_VERSION,
@@ -179,7 +196,9 @@ def _estimates_header(truth):
     }
 
 
-def _train_estimates(actual, seen):
+def _train_estimates(
+    actual: Sequence[TrainState], seen: Sequence[TrainState]
+) -> list[dict[str, Any]]:
     """Copy the fixed train schema without per-field getattr loops.
 
     Full-day audits visit millions of trains. Literal field access preserves
@@ -248,7 +267,9 @@ class EncodedDecisionRecord:
     decision_line: str | None = None
 
 
-def encode_estimates_record(truth, seen) -> EncodedDecisionRecord:
+def encode_estimates_record(
+    truth: ObservationSnapshot, seen: ObservationSnapshot
+) -> EncodedDecisionRecord:
     """Retain complete audit bytes and a compact per-decision immutable view.
 
     The API displays only the deciding train, but every train remains in the
@@ -271,14 +292,16 @@ class EstimateEncoder:
     trees. Nonstandard JSON-compatible values retain the generic encoder path.
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._prefix = lru_cache(maxsize=8192, typed=True)(self._train_prefix)
 
     @staticmethod
-    def _train_prefix(train_id):
+    def _train_prefix(train_id: str) -> str:
         return '{"train_id":' + json.dumps(train_id) + ',"predicted_arrival_s":{"seen":'
 
-    def encode(self, truth, seen) -> EncodedDecisionRecord:
+    def encode(
+        self, truth: ObservationSnapshot, seen: ObservationSnapshot
+    ) -> EncodedDecisionRecord:
         """Encode complete and compact views with identical JSON spelling/order."""
         values = []
         for actual, estimated in zip(truth.trains, seen.trains, strict=True):
