@@ -17,25 +17,38 @@ import {
   YAxis,
 } from "recharts";
 
-import { delayChartPoints, holdEventMarkers } from "../lib/delaySeries";
+import { delayChartPoints, holdEventMarkers, holdsForDelayBucket } from "../lib/delaySeries";
 import { usePlaybackStore } from "../store/usePlaybackStore";
+import type { HoldEvent } from "../types/stationView";
 import "./delay-chart.css";
 
 interface DelayTooltipProps {
   active?: boolean;
   payload?: readonly { payload?: { time_s: number; average_passenger_delay_s: number; passenger_count: number } }[];
+  bucket_s: number;
+  holdEvents: readonly HoldEvent[];
 }
 
 /** Explain the exact bucket time, passenger average and sample count on hover. */
-function DelayTooltip({ active, payload }: Readonly<DelayTooltipProps>) {
+function DelayTooltip({
+  active, payload, bucket_s, holdEvents,
+}: Readonly<DelayTooltipProps>) {
   if (!active || payload?.length !== 1) return null;
   const point = payload[0].payload;
   if (!point) return null;
+  const holds = holdsForDelayBucket(holdEvents, point.time_s, point.time_s + bucket_s);
   return (
     <div className="delay-tooltip" role="status">
       <strong>{Math.floor(point.time_s / 60)}m {point.time_s % 60}s</strong>
       <span>{point.average_passenger_delay_s.toFixed(1)} s / passenger</span>
       <span>{point.passenger_count} passengers</span>
+      {holds.slice(0, 3).map((event) => (
+        <span key={`${event.time_s}-${event.train_id}`}>
+          Hold at {Math.floor(event.time_s / 60)}m {event.time_s % 60}s · {event.train_id} ·
+          {" "}{event.applied_s.toFixed(1)} s
+        </span>
+      ))}
+      {holds.length > 3 && <span>{holds.length - 3} more holds in this bucket</span>}
     </div>
   );
 }
@@ -78,7 +91,10 @@ export function DelayChart() {
               tick={{ fill: "#5b6168", fontSize: 12 }}
             />
             <Tooltip
-              content={<DelayTooltip />}
+              content={<DelayTooltip
+                bucket_s={timeSeries.bucket_s}
+                holdEvents={timeSeries.hold_events}
+              />}
               cursor={{ stroke: "#16191d", strokeDasharray: "3 3" }}
             />
             {holdMarkers.map((event) => (
