@@ -16,7 +16,7 @@ const rows: SourceRow[] = [
     sourceName: "Operational thresholds", sourceLink: "",
   },
   {
-    name: "passenger_flow", label: "Passenger flow", value: "High",
+    name: "transfer_volume", label: "Transfer volume", value: "80 passengers",
     classification: null, sourceName: null, sourceLink: null,
   },
 ];
@@ -42,7 +42,7 @@ describe("SourcesTable", () => {
   it("marks an input with no recorded source", () => {
     render(<SourcesTable rows={rows} />);
 
-    const flow = rowOf("Passenger flow");
+    const flow = rowOf("Transfer volume");
     expect(within(flow).getByText("No source recorded yet").className).toBe("source-missing");
   });
 
@@ -52,7 +52,7 @@ describe("SourcesTable", () => {
     fireEvent.click(screen.getByRole("button", { name: "Published · 1" }));
     expect(screen.getByRole("rowheader", { name: "connection_id" })).toBeDefined();
     expect(screen.queryByRole("rowheader", { name: "Maximum hold" })).toBeNull();
-    expect(screen.queryByRole("rowheader", { name: "Passenger flow" })).toBeNull();
+    expect(screen.queryByRole("rowheader", { name: "Transfer volume" })).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Measured · 0" }));
     expect(screen.getByText("No inputs have this label.")).toBeDefined();
@@ -82,7 +82,7 @@ describe("SourcesTable", () => {
   it("says there is no link or source yet when none is recorded", () => {
     render(<SourcesTable rows={rows} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Details for Passenger flow" }));
+    fireEvent.click(screen.getByRole("button", { name: "Details for Transfer volume" }));
 
     expect(screen.getByText("None yet")).toBeDefined();
     expect(screen.getByText("No label recorded yet")).toBeDefined();

@@ -1,22 +1,24 @@
 // AI contribution: 50% or more AI-generated
 /**
- * Run settings panel of the station view (#45, #50, #60, #183, #182, #25):
- * choose a strategy, the maximum hold, the adaptive irregularity threshold,
- * the prediction-error magnitude, the passenger flow and whether the demo
- * disruption is on, then run the selected connection with those values.
+ * Run settings panel of the Scenario setup view (#45, #50, #60, #183, #182,
+ * #25): choose a strategy, the adaptive irregularity threshold, the
+ * prediction-error magnitude and the demo disruption, plus the scenario
+ * conditions (#251 to #257), then run the selected connection with those
+ * values.
+ *
+ * Typed values are checked before a run (#256): while any entry is invalid,
+ * "Run scenario" is disabled and the list above it names each bad setting.
  *
  * Controls only edit the draft in the run settings store. The simulator is
  * called when "Run scenario" is clicked, never on a change, because a run is
  * a full simulation and dragging a slider would queue dozens of them.
  */
-import { useEffect, useId, useRef } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   ERROR_MAGNITUDE_RANGE,
   DISRUPTION_MAGNITUDE_RANGE,
   DISRUPTION_PRESETS,
   DISRUPTION_TIME_RANGE,
-  MAX_HOLD_RANGE,
-  PASSENGER_FLOWS,
   STRATEGY_OPTIONS,
   THRESHOLD_RANGE,
   formatErrorMagnitude,
@@ -30,6 +32,7 @@ import { usePlaybackStore } from "../store/usePlaybackStore";
 import { useRunSettingsStore } from "../store/useRunSettingsStore";
 import { SettingChoice } from "./setting-choice";
 import { SettingSlider } from "./setting-slider";
+import { ParameterControls } from "./parameter-controls";
 import { ProvenanceBadge } from "./provenance-badge";
 import "./run-settings.css";
 
@@ -45,9 +48,6 @@ const DISRUPTION_LABELS: Record<DisruptionPreset, string> = {
   line_suspension: "Line suspension",
   uneven_headways: "Uneven headways",
 };
-// Wording from the Scenario setup mockup's help popover.
-const MAX_HOLD_HELP =
-  "The longest any train may wait for transfers, whatever the strategy asks for.";
 
 interface RunSettingsPanelProps {
   /** Sends one run to the API; null when no API is configured (mock runs only). */
@@ -72,6 +72,20 @@ export function RunSettingsPanel({ runner, provenance, onShowSources }: Readonly
   const runStatus = usePlaybackStore((state) => state.runStatus);
   const runError = usePlaybackStore((state) => state.runError);
   const request = useRef<AbortController | null>(null);
+  // Typed-entry errors by control key; empty when every entry is valid.
+  const [entryErrors, setEntryErrors] = useState<Readonly<Record<string, string>>>({});
+  // Stable, and returns the same object when nothing changed, so a row
+  // reporting "still valid" on every render never re-renders the panel.
+  const reportEntryError = useCallback((key: string, error: string | null) => {
+    setEntryErrors((current) => {
+      if ((current[key] ?? null) === error) return current;
+      const next = { ...current };
+      if (error === null) delete next[key];
+      else next[key] = error;
+      return next;
+    });
+  }, []);
+  const errorList = Object.values(entryErrors);
 
   // A run belongs to the connection it was started for: leaving that
   // connection (or the page) cancels it so it cannot replace a newer view.
@@ -80,7 +94,8 @@ export function RunSettingsPanel({ runner, provenance, onShowSources }: Readonly
   // "loading" also covers the automatic load after a connection change, so
   // a scenario cannot start while another response is still on its way.
   const isRunning = runStatus === "loading";
-  const canRun = runner !== null && connectionId !== null && !isRunning;
+  const canRun = runner !== null && connectionId !== null && !isRunning
+    && errorList.length === 0;
 
   /** Send the current draft for the selected connection and label the result. */
   async function runScenario() {
@@ -127,6 +142,13 @@ export function RunSettingsPanel({ runner, provenance, onShowSources }: Readonly
           Set VITE_API_URL to run scenarios.
         </p>
       )}
+      {/* Names every bad entry in one place, next to the disabled button. */}
+      {errorList.length > 0 && (
+        <div className="run-settings-error" role="alert">
+          Fix these values before running:
+          <ul>{errorList.map((error) => <li key={error}>{error}</li>)}</ul>
+        </div>
+      )}
       {/* The previous run stays on screen; this only explains why it did not change. */}
       {runStatus === "error" && runError !== null && (
         <p className="run-settings-error" role="alert">{runError}</p>
@@ -162,22 +184,13 @@ export function RunSettingsPanel({ runner, provenance, onShowSources }: Readonly
         </fieldset>
 
         <div className="run-settings-values">
-          <SettingSlider label="Maximum hold" value={draft.max_hold_time}
-            range={MAX_HOLD_RANGE} format={formatSeconds} help={MAX_HOLD_HELP}
-            onChange={(value) => update({ max_hold_time: value })} />
-          <ProvenanceBadge parameterKey="max_hold_time" label="Maximum hold"
-            provenance={provenance?.max_hold_time} />
+          <ParameterControls provenance={provenance} onEntryError={reportEntryError} />
           <SettingSlider label="Error magnitude" value={draft.error_magnitude}
             range={ERROR_MAGNITUDE_RANGE} format={formatErrorMagnitude}
             help={ERROR_MAGNITUDE_HELP}
             onChange={(value) => update({ error_magnitude: value })} />
           <ProvenanceBadge parameterKey="error_magnitude" label="Error magnitude"
             provenance={provenance?.error_magnitude} />
-          <SettingChoice label="Passenger flow" options={PASSENGER_FLOWS}
-            value={draft.passenger_flow} format={(flow) => flow}
-            onChange={(flow) => update({ passenger_flow: flow })} />
-                    <ProvenanceBadge parameterKey="passenger_flow" label="Passenger flow"
-            provenance={provenance?.passenger_flow} />
           <SettingChoice label="Disruption" options={DISRUPTION_PRESETS}
             value={draft.disruption_preset ?? "none"} format={(preset) => DISRUPTION_LABELS[preset]}
             note={DISRUPTION_HELP}

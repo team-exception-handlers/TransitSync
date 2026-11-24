@@ -10,6 +10,8 @@
  */
 import {
   formatErrorMagnitude,
+  formatHeadway,
+  formatPassengers,
   formatSeconds,
   formatThreshold,
   strategyLabel,
@@ -52,7 +54,10 @@ const LABELS: Readonly<Record<string, string>> = {
   max_hold_time: "Maximum hold",
   irregularity_threshold: "Irregularity threshold",
   error_magnitude: "Prediction error magnitude",
-  passenger_flow: "Passenger flow",
+  transfer_volume: "Transfer volume",
+  train_headway_s: "Train frequency",
+  onboard_load: "Onboard load",
+  walking_mean_s: "Walking time",
   disruption_enabled: "Demo disruption",
 };
 
@@ -93,7 +98,10 @@ export function runValues(settings: RunSettings): Record<string, string> {
     strategy: strategyLabel(settings.strategy),
     max_hold_time: formatSeconds(settings.max_hold_time),
     error_magnitude: formatErrorMagnitude(settings.error_magnitude),
-    passenger_flow: settings.passenger_flow,
+    transfer_volume: formatPassengers(settings.transfer_volume),
+    train_headway_s: formatHeadway(settings.train_headway_s),
+    onboard_load: formatPassengers(settings.onboard_load),
+    walking_mean_s: formatSeconds(settings.walking_mean_s),
     disruption_enabled: formatDisruption(settings),
     // The API uses the error magnitude as kappa for every estimate (simulation_run.py).
     kappa: formatErrorMagnitude(settings.error_magnitude),

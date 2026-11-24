@@ -28,7 +28,7 @@ describe("runSimulation", () => {
   it("posts the settings body to /simulation/run and returns the validated run", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse(200, stationViewData));
     const settings = { ...DEFAULT_RUN_SETTINGS, strategy: "adaptive", max_hold_time: 45,
-      irregularity_threshold: 0.3, passenger_flow: "High" } as const;
+      irregularity_threshold: 0.3, transfer_volume: 80 } as const;
     const run = await runSimulation(CONNECTION, settings, { baseUrl, fetchImpl });
 
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
@@ -39,7 +39,9 @@ describe("runSimulation", () => {
       strategy: "adaptive",
       max_hold_time: 45,
       error_magnitude: 1,
-      passenger_flow: "High",
+      transfer_volume: 80,
+      onboard_load: 300,
+      walking_mean_s: 120,
       disruption_enabled: false,
       disruption_preset: "none",
       disruption_time_s: 120,

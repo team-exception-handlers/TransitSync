@@ -3,13 +3,14 @@
  * Single source of truth for the run settings panel: the strategy list, each
  * control's range, the backend defaults, and the request body builder.
  *
- * The limits copy api/simulation_run.py (SimulationRunRequest). Keeping them
- * here, next to the builder, means the sliders, the store and the request can
- * never disagree about what the API accepts.
+ * The limits copy api/simulation_run.py (SimulationRunRequest). The five
+ * scenario parameters copy PARAMETER_RANGES in simulator/scenario_parameters.py;
+ * tests/simulator/test_scenario_parameters.py fails if the two drift. Keeping
+ * them here, next to the builder, means the sliders, the store and the request
+ * can never disagree about what the API accepts.
  */
 import type {
   DisruptionPreset,
-  PassengerFlow,
   RunRequestBody,
   RunSettings,
   StrategyName,
@@ -67,8 +68,16 @@ export const DISRUPTION_PRESETS: readonly DisruptionPreset[] = [
 export const DISRUPTION_TIME_RANGE: SettingRange = { min: 0, max: 3300, step: 30 };
 export const DISRUPTION_MAGNITUDE_RANGE: SettingRange = { min: 30, max: 600, step: 30 };
 
-/** Passenger flow levels in the order shown, lowest first. */
-export const PASSENGER_FLOWS: readonly PassengerFlow[] = ["Low", "Normal", "High"];
+// Scenario parameters (#258). Each line is read by the Python drift test, so
+// keep the `{ min: n, max: n, step: n }` form.
+export const TRANSFER_VOLUME_RANGE: SettingRange = { min: 0, max: 200, step: 1 };
+export const TRAIN_HEADWAY_RANGE: SettingRange = { min: 120, max: 600, step: 30 };
+export const ONBOARD_LOAD_RANGE: SettingRange = { min: 0, max: 800, step: 10 };
+export const WALKING_TIME_RANGE: SettingRange = { min: 45, max: 600, step: 5 };
+
+// Starting value of the train frequency slider once "Timetable" is turned off:
+// the 07:00 Green line gap at McGill.
+export const DEFAULT_CUSTOM_HEADWAY_S = 180;
 
 /** Backend defaults, plus the panel's starting threshold for Adaptive. */
 export const DEFAULT_RUN_SETTINGS: RunSettings = {
@@ -76,7 +85,11 @@ export const DEFAULT_RUN_SETTINGS: RunSettings = {
   max_hold_time: 300,
   irregularity_threshold: 0.25,
   error_magnitude: 1,
-  passenger_flow: "Normal",
+  preset: null,
+  transfer_volume: 60,
+  train_headway_s: null,
+  onboard_load: 300,
+  walking_mean_s: 120,
   disruption_enabled: false,
   disruption_preset: "none",
   disruption_time_s: 120,
@@ -114,10 +127,20 @@ export function applyRunSettings(current: RunSettings, patch: Partial<RunSetting
       merged.irregularity_threshold, THRESHOLD_RANGE, current.irregularity_threshold),
     error_magnitude: snapToRange(
       merged.error_magnitude, ERROR_MAGNITUDE_RANGE, current.error_magnitude),
-    // An unknown flow label or a non-boolean toggle keeps the current value.
-    passenger_flow: PASSENGER_FLOWS.includes(merged.passenger_flow)
-      ? merged.passenger_flow
-      : current.passenger_flow,
+    // A preset is a name or null (the picker only offers names the API listed).
+    preset: typeof merged.preset === "string" || merged.preset === null
+      ? merged.preset
+      : current.preset,
+    transfer_volume: snapToRange(
+      merged.transfer_volume, TRANSFER_VOLUME_RANGE, current.transfer_volume),
+    // null keeps the timetable, so it is a value, not a missing one.
+    train_headway_s: merged.train_headway_s === null
+      ? null
+      : snapToRange(merged.train_headway_s, TRAIN_HEADWAY_RANGE,
+        current.train_headway_s ?? DEFAULT_CUSTOM_HEADWAY_S),
+    onboard_load: snapToRange(merged.onboard_load, ONBOARD_LOAD_RANGE, current.onboard_load),
+    walking_mean_s: snapToRange(merged.walking_mean_s, WALKING_TIME_RANGE, current.walking_mean_s),
+    // An unknown preset or a non-boolean toggle keeps the current value.
     disruption_preset: DISRUPTION_PRESETS.includes(merged.disruption_preset as DisruptionPreset)
       ? merged.disruption_preset
       : current.disruption_preset,
@@ -156,6 +179,36 @@ export function formatErrorMagnitude(value: number): string {
   return value === 0 ? `${text} · upper bound (perfect information)` : text;
 }
 
+/** A passenger count with its unit, for example "60 passengers". */
+export function formatPassengers(value: number): string {
+  return `${value} passengers`;
+}
+
+/** Train frequency as shown: the headway, or "Timetable" when it is null. */
+export function formatHeadway(value: number | null): string {
+  return value === null ? "Timetable" : `every ${value} s`;
+}
+
+/**
+ * Check one typed value against its range before it may reach the store
+ * (#256). Returns null when the value is usable, otherwise a sentence that
+ * names the setting, so the error can be shown next to it and in the list
+ * above the Run button.
+ */
+export function validateSetting(label: string, value: number, range: SettingRange): string | null {
+  if (!Number.isFinite(value)) return `${label}: enter a number`;
+  if (value < range.min || value > range.max) {
+    return `${label}: must be between ${range.min} and ${range.max}`;
+  }
+  // Same tolerance as the backend's ParameterRange.contains, so 0.1 steps
+  // are not rejected for binary rounding.
+  const steps = (value - range.min) / range.step;
+  if (Math.abs(steps - Math.round(steps)) > 1e-9) {
+    return `${label}: must be in steps of ${range.step}`;
+  }
+  return null;
+}
+
 /** "On" or "Off" for the disruption toggle and the run summary. */
 export function formatToggle(enabled: boolean): string {
   return enabled ? "On" : "Off";
@@ -174,7 +227,9 @@ export function buildRunRequest(connectionId: string, settings: RunSettings): Ru
     strategy: settings.strategy,
     max_hold_time: settings.max_hold_time,
     error_magnitude: settings.error_magnitude,
-    passenger_flow: settings.passenger_flow,
+    transfer_volume: settings.transfer_volume,
+    onboard_load: settings.onboard_load,
+    walking_mean_s: settings.walking_mean_s,
     disruption_enabled: settings.disruption_enabled,
     disruption_preset: settings.disruption_preset ?? "none",
     disruption_time_s: settings.disruption_time_s ?? 120,
@@ -183,5 +238,8 @@ export function buildRunRequest(connectionId: string, settings: RunSettings): Ru
   if (settings.strategy === "adaptive") {
     body.irregularity_threshold = settings.irregularity_threshold;
   }
+  // Left out when unset: the API then keeps the timetable or the default file.
+  if (settings.train_headway_s !== null) body.train_headway_s = settings.train_headway_s;
+  if (settings.preset !== null) body.preset = settings.preset;
   return body;
 }

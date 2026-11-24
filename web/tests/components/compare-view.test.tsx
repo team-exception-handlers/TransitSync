@@ -84,7 +84,7 @@ describe("CompareView", () => {
 
   it("runs the API defaults, not unrun slider values, before anything is run", async () => {
     // The user moved a slider but never clicked "Run scenario".
-    useRunSettingsStore.getState().update({ passenger_flow: "High" });
+    useRunSettingsStore.getState().update({ transfer_volume: 80 });
 
     const runner = await openCompare();
 

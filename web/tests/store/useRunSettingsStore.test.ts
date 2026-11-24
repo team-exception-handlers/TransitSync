@@ -17,7 +17,11 @@ describe("useRunSettingsStore", () => {
       max_hold_time: 300,
       irregularity_threshold: 0.25,
       error_magnitude: 1,
-      passenger_flow: "Normal",
+      preset: null,
+      transfer_volume: 60,
+      train_headway_s: null,
+      onboard_load: 300,
+      walking_mean_s: 120,
       disruption_enabled: false,
       disruption_preset: "none",
       disruption_time_s: 120,
@@ -61,7 +65,7 @@ describe("useRunSettingsStore", () => {
 
   it("resets every control to the backend defaults", () => {
     store().update({ strategy: "rolling_horizon", max_hold_time: 60, irregularity_threshold: 0.9,
-      error_magnitude: 0, passenger_flow: "High", disruption_enabled: true });
+      error_magnitude: 0, transfer_volume: 90, onboard_load: 500, disruption_enabled: true });
     store().reset();
 
     expect(store().draft).toStrictEqual(DEFAULT_RUN_SETTINGS);

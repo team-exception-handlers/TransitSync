@@ -108,21 +108,24 @@ describe("applyRunSettings", () => {
 });
 
 describe("applyRunSettings for run conditions", () => {
-  it("accepts each passenger flow level and the disruption switch", () => {
-    const next = applyRunSettings(DEFAULT_RUN_SETTINGS,
-      { passenger_flow: "High", disruption_enabled: true, error_magnitude: 0 });
+  it("accepts scenario parameters inside their ranges and the disruption switch", () => {
+    const next = applyRunSettings(DEFAULT_RUN_SETTINGS, {
+      transfer_volume: 80, train_headway_s: 240, onboard_load: 450, walking_mean_s: 150,
+      disruption_enabled: true, error_magnitude: 0,
+    });
 
-    expect(next.passenger_flow).toBe("High");
+    expect([next.transfer_volume, next.train_headway_s, next.onboard_load, next.walking_mean_s])
+      .toStrictEqual([80, 240, 450, 150]);
     expect(next.disruption_enabled).toBe(true);
     expect(next.error_magnitude).toBe(0);
   });
 
-  it("keeps the current flow and switch when a value is not one the API accepts", () => {
-    const patch = { passenger_flow: "Extreme", disruption_enabled: "yes" } as unknown as
+  it("keeps the current preset and switch when a value is not one the API accepts", () => {
+    const patch = { preset: 7, disruption_enabled: "yes" } as unknown as
       Partial<typeof DEFAULT_RUN_SETTINGS>;
     const next = applyRunSettings(DEFAULT_RUN_SETTINGS, patch);
 
-    expect(next.passenger_flow).toBe("Normal");
+    expect(next.preset).toBeNull();
     expect(next.disruption_enabled).toBe(false);
   });
 });
@@ -140,10 +143,13 @@ describe("formatErrorMagnitude", () => {
 
 describe("buildRunRequest", () => {
   it("uses exactly the API's field names when every field is sent", () => {
-    const body = buildRunRequest("c", { ...DEFAULT_RUN_SETTINGS, strategy: "adaptive" });
+    const body = buildRunRequest("c", {
+      ...DEFAULT_RUN_SETTINGS, strategy: "adaptive", train_headway_s: 240,
+      preset: "weekday_morning",
+    });
     const sent = Object.keys(body).toSorted((a, b) => a.localeCompare(b));
 
-    expect(backendRequestFields()).toHaveLength(10);
+    expect(backendRequestFields()).toHaveLength(14);
     expect(sent).toStrictEqual(backendRequestFields());
   });
 
@@ -155,7 +161,9 @@ describe("buildRunRequest", () => {
       strategy: "no_control",
       max_hold_time: 300,
       error_magnitude: 1,
-      passenger_flow: "Normal",
+      transfer_volume: 60,
+      onboard_load: 300,
+      walking_mean_s: 120,
       disruption_enabled: false,
       disruption_preset: "none",
       disruption_time_s: 120,
@@ -171,14 +179,17 @@ describe("buildRunRequest", () => {
       const body = buildRunRequest("c", { ...DEFAULT_RUN_SETTINGS, strategy: name });
 
       expect(Object.keys(body)).toStrictEqual(["connection_id", "strategy", "max_hold_time",
-        "error_magnitude", "passenger_flow", "disruption_enabled", "disruption_preset",
+        "error_magnitude", "transfer_volume", "onboard_load", "walking_mean_s",
+        "disruption_enabled", "disruption_preset",
         "disruption_time_s", "disruption_magnitude"]);
     });
 
   it("includes the threshold as a number for adaptive", () => {
     const body = buildRunRequest("c", {
-      strategy: "adaptive", max_hold_time: 60, irregularity_threshold: 0.4,
-      error_magnitude: 0, passenger_flow: "High", disruption_enabled: true,
+      ...DEFAULT_RUN_SETTINGS, strategy: "adaptive", max_hold_time: 60,
+      irregularity_threshold: 0.4, error_magnitude: 0, transfer_volume: 80,
+      disruption_enabled: true, disruption_preset: undefined,
+      disruption_time_s: undefined, disruption_magnitude: undefined,
     });
 
     expect(JSON.parse(JSON.stringify(body))).toStrictEqual({
@@ -186,7 +197,9 @@ describe("buildRunRequest", () => {
       strategy: "adaptive",
       max_hold_time: 60,
       error_magnitude: 0,
-      passenger_flow: "High",
+      transfer_volume: 80,
+      onboard_load: 300,
+      walking_mean_s: 120,
       disruption_enabled: true,
       disruption_preset: "none",
       disruption_time_s: 120,
@@ -203,7 +216,8 @@ describe("buildRunRequest", () => {
     expect(typeof body.max_hold_time).toBe("number");
     expect(typeof body.irregularity_threshold).toBe("number");
     expect(typeof body.error_magnitude).toBe("number");
-    expect(typeof body.passenger_flow).toBe("string");
+    expect(typeof body.transfer_volume).toBe("number");
+    expect(typeof body.onboard_load).toBe("number");
     expect(typeof body.disruption_enabled).toBe("boolean");
   });
 });
