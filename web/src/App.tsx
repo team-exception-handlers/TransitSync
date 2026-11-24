@@ -35,6 +35,7 @@ import { VIEWS, useViewStore, type AppView } from "./store/useViewStore";
 import { CompareView } from "./views/compare-view";
 import { ResultsView } from "./views/results-view";
 import { SetupView } from "./views/setup-view";
+import { createPresetLoader, type PresetLoader } from "./lib/scenario-presets";
 import { StationView } from "./views/station-view";
 import type { ParameterProvenanceMap } from "./types/provenance";
 
@@ -58,6 +59,11 @@ const defaultConnectionCatalogLoader: ConnectionCatalogLoader | null = apiUrl ==
   ? null
   : createConnectionCatalogLoader(apiUrl);
 
+// Lists the time-of-day presets on the Scenario setup screen (#261).
+const defaultPresetLoader: PresetLoader | null = apiUrl === null
+  ? null
+  : createPresetLoader(apiUrl);
+
 // Reads where each setting came from for the provenance badges (US-7.1).
 const defaultParameterProvenanceLoader: ParameterProvenanceLoader | null = apiUrl === null
   ? null
@@ -74,6 +80,8 @@ interface AppProps {
   comparisonRunner?: ComparisonRunner | null;
   // Injectable for tests; null leaves every provenance badge "Unspecified".
   parameterProvenanceLoader?: ParameterProvenanceLoader | null;
+  // Injectable for tests; null hides the time-of-day preset picker.
+  presetLoader?: PresetLoader | null;
 }
 
 export default function App({
@@ -82,6 +90,7 @@ export default function App({
   comparisonRunner = defaultComparisonRunner,
   connectionCatalogLoader = defaultConnectionCatalogLoader,
   parameterProvenanceLoader = defaultParameterProvenanceLoader,
+  presetLoader = defaultPresetLoader,
 }: Readonly<AppProps>) {
   // Loaded once here and passed down, so every screen shows the same sources.
   const [provenance, setProvenance] = useState<ParameterProvenanceMap>({});
@@ -151,7 +160,7 @@ export default function App({
     compare: <CompareView runner={comparisonRunner} />,
     results: <ResultsView />,
     setup: <SetupView runner={scenarioRunner} provenance={provenance}
-      onShowSources={() => setView("sources")} />,
+      onShowSources={() => setView("sources")} presetLoader={presetLoader} />,
     sources: <SourcesView provenance={provenance} />,
   };
 
