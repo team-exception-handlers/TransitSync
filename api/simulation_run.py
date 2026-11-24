@@ -6,6 +6,8 @@ settings, then delegates event processing to the simulator. Simulation time
 and every hold duration are expressed in seconds.
 """
 
+# Keep request validation beside run and cache orchestration; extracting a
+# single preset helper would expose private run state without reducing coupling.
 from __future__ import annotations
 
 import json
@@ -132,7 +134,14 @@ class SimulationRunRequest(BaseModel):
         default=120.0, ge=0, allow_inf_nan=False, strict=True
     )
     disruption_magnitude: float = Field(
-        default=60.0, gt=0, allow_inf_nan=False, strict=True
+        default=60.0,
+        gt=0,
+        allow_inf_nan=False,
+        strict=True,
+        description=(
+            "Seconds for delay and suspension; coefficient of variation for "
+            "uneven headways."
+        ),
     )
 
     irregularity_threshold: float | None = Field(
@@ -145,13 +154,21 @@ class SimulationRunRequest(BaseModel):
         return sha256(self.model_dump_json().encode("utf-8")).hexdigest()
 
     @model_validator(mode="after")
-    def validate_adaptive_threshold(self) -> SimulationRunRequest:
-        """Require a threshold only when adaptive mode is requested."""
+    def validate_run_settings(self) -> SimulationRunRequest:
+        """Validate adaptive thresholds and preset-specific magnitude units."""
         if self.strategy == AdaptiveStrategy.name:
             if self.irregularity_threshold is None:
                 raise ValueError("irregularity_threshold is required for adaptive")
         elif "irregularity_threshold" in self.model_fields_set:
             raise ValueError("irregularity_threshold is only valid for adaptive")
+        if (
+            self.disruption_preset == "uneven_headways"
+            and "disruption_magnitude" in self.model_fields_set
+            and self.disruption_magnitude > 1
+        ):
+            raise ValueError(
+                "disruption_magnitude must be at most 1 as a coefficient of variation"
+            )
         return self
 
     @field_validator("strategy")
@@ -600,11 +617,17 @@ def _irregular_green_starts(
     request: SimulationRunRequest | None,
     streams: StreamManager | None,
 ) -> dict[tuple[str, str], float]:
-    """Perturb Green-line dispatch starts using the named preset level."""
+    """Perturb Green dispatches after the configured start time.
+
+    The magnitude is the headway coefficient of variation. If an older API
+    caller omits it, retain the named preset's documented value of 0.3.
+    """
     if request is None or request.disruption_preset != "uneven_headways":
         return {}
     preset = get_disruption_preset("uneven_headways")
-    level = preset.spacing_irregularity_level
+    level = request.disruption_magnitude
+    if "disruption_magnitude" not in request.model_fields_set:
+        level = preset.spacing_irregularity_level
     if level is None:
         return {}
     if streams is None:
@@ -622,7 +645,12 @@ def _irregular_green_starts(
             departures.append(((trip.feed_id, trip.trip_id), nominal))
 
     ordered = sorted(departures, key=lambda item: item[1])
-    nominal_starts = [nominal for _key, nominal in ordered]
+    # Keep departures before the configured start untouched. The first
+    # departure after it anchors the disrupted sequence; later intervals vary.
+    affected = [item for item in ordered if item[1] >= request.disruption_time_s]
+    if len(affected) < 2:
+        return {}
+    nominal_starts = [nominal for _key, nominal in affected]
     perturbed_starts = perturb_dispatch_times(
         nominal_starts,
         level,
@@ -630,11 +658,7 @@ def _irregular_green_starts(
     )
     return {
         key: perturbed
-        for (key, _nominal), perturbed in zip(
-            ordered,
-            perturbed_starts,
-            strict=True,
-        )
+        for (key, _nominal), perturbed in zip(affected, perturbed_starts, strict=True)
     }
 
 
