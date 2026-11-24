@@ -26,6 +26,15 @@ export function delayChartPoints(timeSeries: TimeSeriesData): DelayChartPoint[] 
   }));
 }
 
+/** Return holds within one bucket so the hover readout can show local events. */
+export function holdsForDelayBucket(
+  holdEvents: readonly HoldEvent[],
+  start_s: number,
+  end_s: number,
+): HoldEvent[] {
+  return holdEvents.filter((event) => event.time_s >= start_s && event.time_s < end_s);
+}
+
 /**
  * Merge hold markers closer than 30 seconds and cap visual clutter.
  * Exact nearby holds remain visible through the hover readout and hold tooltip.
