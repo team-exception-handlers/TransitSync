@@ -2,9 +2,10 @@
 // @vitest-environment jsdom
 /** App loads GET /parameters once and every panel shows each parameter's own source (US-7.1, #311, #313, #314). */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import App from "../../src/App";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
+import { useViewStore } from "../../src/store/useViewStore";
 import type { ParameterProvenanceMap } from "../../src/types/provenance";
 
 /** Settings with different classifications, plus the two schedule feeds with their own links. */
@@ -14,6 +15,10 @@ const PROVENANCE: ParameterProvenanceMap = {
   rem_schedule: { classification: "published", source_name: "REM data, CC BY 4.0", source_link: "https://rem.info" },
   stm_schedule: { classification: "published", source_name: "STM data, CC BY 4.0", source_link: "https://www.stm.info" },
 };
+
+/** Show another sidebar screen (#408); run settings live on "Scenario setup". */
+const openView = (label: string) => fireEvent.click(
+  within(screen.getByRole("navigation", { name: "Workspace" })).getByRole("button", { name: label }));
 
 /** The app with no API except the parameters loader under test. */
 function renderApp(parameterProvenanceLoader: () => Promise<ParameterProvenanceMap>) {
@@ -27,6 +32,7 @@ describe("App parameter provenance", () => {
   beforeEach(() => {
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(null);
     usePlaybackStore.setState({ data: null, selectedConnectionId: null, availableConnections: null });
+    useViewStore.setState({ activeView: "station" });
   });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -34,13 +40,13 @@ describe("App parameter provenance", () => {
     const loader = vi.fn().mockResolvedValue(PROVENANCE);
     renderApp(loader);
 
-    // Max hold appears in Run settings and Operating rules, with the same source in both.
-    await waitFor(() => expect(screen.getAllByTestId("provenance-max_hold_time")[0].textContent)
-      .toContain("Estimated"));
-    for (const badge of screen.getAllByTestId("provenance-max_hold_time")) {
-      expect(badge.textContent).toBe("EstimatedOperational thresholds");
-    }
-    expect(screen.getAllByTestId("provenance-max_hold_time")).toHaveLength(2);
+    // Max hold appears in Operating rules (Station view) and Run settings (Scenario
+    // setup), with the same source on both screens.
+    await waitFor(() => expect(screen.getByTestId("provenance-max_hold_time").textContent)
+      .toBe("EstimatedOperational thresholds"));
+    openView("Scenario setup");
+    expect(screen.getByTestId("provenance-max_hold_time").textContent)
+      .toBe("EstimatedOperational thresholds");
     expect(screen.getByTestId("provenance-strategy").textContent).toBe("AssumedStrategy registry");
     // The badge sits outside the legend, so the radio group's name stays "Strategy"
     expect(screen.getByRole("group", { name: "Strategy" })).toBeDefined();
@@ -63,8 +69,9 @@ describe("App parameter provenance", () => {
     renderApp(loader);
 
     await waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("region", { name: "Station view" })).toBeDefined();
+    openView("Scenario setup");
     expect(screen.getByTestId("provenance-strategy").textContent).toBe("UnspecifiedSource not specified");
     expect(screen.queryByRole("link", { name: /Source link/ })).toBeNull();
-    expect(screen.getByText("Station view")).toBeDefined();
   });
 });

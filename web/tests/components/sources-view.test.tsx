@@ -9,6 +9,7 @@ import { runValues } from "../../src/lib/parameter-sources";
 import { DEFAULT_RUN_SETTINGS } from "../../src/lib/run-settings";
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
 import { useRunSettingsStore } from "../../src/store/useRunSettingsStore";
+import { useViewStore } from "../../src/store/useViewStore";
 import type { ParameterProvenanceMap } from "../../src/types/provenance";
 
 const PROVENANCE: ParameterProvenanceMap = {
@@ -27,6 +28,8 @@ beforeEach(() => {
     data: null, selectedConnectionId: null, availableConnections: null, simulatedConnectionIds: [],
   });
   useRunSettingsStore.setState({ applied: {} });
+  // The sidebar screen is global state, so each test starts on the station view.
+  useViewStore.setState({ activeView: "station" });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
@@ -51,6 +54,9 @@ describe("Opening the Sources screen", () => {
 
   it("opens Sources from the link in Run settings", async () => {
     renderApp();
+    // Run settings live on Scenario setup since #408, not on the station view.
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Workspace" }))
+      .getByRole("button", { name: "Scenario setup" }));
 
     fireEvent.click(screen.getByRole("button", { name: "Where these values come from" }));
 

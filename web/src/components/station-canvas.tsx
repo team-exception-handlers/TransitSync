@@ -18,6 +18,7 @@ import type {
   PassengerPosition,
   Platform,
   Point,
+  StationViewData,
   TrainAtPlatform,
   TransferCorridor,
 } from "../types/stationView";
@@ -209,14 +210,38 @@ function drawPassengerCount(
   context.fillText(label, 12, 20);
 }
 
-/** Draw recorded map coordinates; seeking rebuilds rather than mutating sprites. */
-export function StationCanvas() {
+interface StationCanvasProps {
+  /** Run to draw instead of the playback store's run, e.g. one side of a comparison. */
+  data?: StationViewData;
+  /**
+   * False turns off passenger picking and the follow ring. The Compare screen
+   * draws two runs whose passenger IDs differ, so a pick made in one panel
+   * could point at nobody in the other.
+   */
+  interactive?: boolean;
+  /** Prefix for the accessible name, so two canvases on one screen can be told apart. */
+  label?: string;
+}
+
+/**
+ * Draw recorded map coordinates; seeking rebuilds rather than mutating sprites.
+ * Without props it draws the playback store's run, as on the station view.
+ * Time and the selected connection always come from the store, so every
+ * canvas on screen shows the same moment.
+ */
+export function StationCanvas({
+  data: runOverride,
+  interactive = true,
+  label,
+}: Readonly<StationCanvasProps>) {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const data = usePlaybackStore((state) => state.data);
+  const storeData = usePlaybackStore((state) => state.data);
+  const data = runOverride ?? storeData;
   const time = usePlaybackStore((state) => state.currentTime_s);
   const selected = usePlaybackStore((state) => state.selectedConnectionId);
-  const followed = usePlaybackStore((state) => state.selectedPassengerId);
+  const storeFollowed = usePlaybackStore((state) => state.selectedPassengerId);
+  const followed = interactive ? storeFollowed : null;
   const selectPassenger = usePlaybackStore((state) => state.selectPassenger);
 
   // Tracks the container's content box; falls back to the fixture's own
@@ -293,14 +318,18 @@ export function StationCanvas() {
     if (event.key === "Escape") selectPassenger(null);
   };
   const followingLabel = followed ? `, following passenger ${followed}, press Escape to stop` : "";
+  const prefix = label ? `${label}: ` : "";
+  // A view-only canvas takes no clicks, keys or focus.
+  const handlers = interactive
+    ? { onClick: handleClick, onKeyDown: handleKeyDown, tabIndex: 0 }
+    : {};
   // No role="img": the canvas takes clicks and keys, and its aria-label already
   // names it for screen readers (Sonar S6819 prefers the native element).
   return (
     <div ref={containerRef} className="station-canvas-wrap">
-      <canvas ref={canvasRef} className="station-canvas" onClick={handleClick}
-        onKeyDown={handleKeyDown} tabIndex={0}
+      <canvas ref={canvasRef} className="station-canvas" {...handlers}
         width={data.map.width} height={data.map.height}
-        aria-label={`${data.interchange.name} at ${time.toFixed(1)} simulation seconds${followingLabel}`}>
+        aria-label={`${prefix}${data.interchange.name} at ${time.toFixed(1)} simulation seconds${followingLabel}`}>
         Station schematic with platforms, transfer corridor, trains and passengers.
       </canvas>
     </div>
