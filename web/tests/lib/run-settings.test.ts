@@ -4,12 +4,14 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_RUN_SETTINGS,
   ERROR_MAGNITUDE_RANGE,
+  HEADWAY_IRREGULARITY_RANGE,
   MAX_HOLD_RANGE,
   STRATEGY_OPTIONS,
   THRESHOLD_RANGE,
   applyRunSettings,
   buildRunRequest,
   formatErrorMagnitude,
+  formatHeadwayIrregularity,
   snapToRange,
 } from "../../src/lib/run-settings";
 
@@ -124,6 +126,22 @@ describe("applyRunSettings for run conditions", () => {
 
     expect(next.passenger_flow).toBe("Normal");
     expect(next.disruption_enabled).toBe(false);
+  });
+
+  it("uses a unitless CV magnitude for uneven headways and seconds otherwise", () => {
+    const uneven = applyRunSettings(DEFAULT_RUN_SETTINGS, {
+      disruption_preset: "uneven_headways",
+    });
+    const adjusted = applyRunSettings(uneven, { disruption_magnitude: 0.47 });
+    const platformDelay = applyRunSettings(adjusted, {
+      disruption_preset: "platform_delay",
+    });
+
+    expect(uneven.disruption_magnitude).toBe(0.3);
+    expect(adjusted.disruption_magnitude).toBe(0.45);
+    expect(platformDelay.disruption_magnitude).toBe(60);
+    expect(HEADWAY_IRREGULARITY_RANGE).toStrictEqual({ min: 0.05, max: 1, step: 0.05 });
+    expect(formatHeadwayIrregularity(0.3)).toBe("0.30 CV");
   });
 });
 
