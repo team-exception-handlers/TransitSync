@@ -1,9 +1,11 @@
 // AI contribution: 50% or more AI-generated
 /**
  * Running totals for one Compare panel (US-4.1). Pure, so a backwards seek
- * gives exact totals again.
+ * gives exact totals again. Also each side's whole-run time saved and lost
+ * against the other side (US-4.3).
  */
 import type { PassengerOutcome, StationViewData } from "../types/stationView";
+import type { PassengerSplit } from "./simulation-api";
 
 /** What a panel shows about holding at one moment of its run. */
 export interface ComparisonStats {
@@ -75,4 +77,36 @@ export function comparisonStatsAt(run: StationViewData, time_s: number): Compari
     }
   }
   return { holdingNow, holds: started.length, made, missed };
+}
+
+/** Time one side saved and lost passengers against the other run (US-4.3). */
+export interface TimeChange {
+  saved_s: number;
+  savedPassengers: number;
+  lost_s: number;
+  lostPassengers: number;
+}
+
+/**
+ * Both sides' changes from the API's split (#285). What holding saved a
+ * passenger, no holding cost them, so the no-holding side is the mirror image.
+ */
+export function timeChanges(split: PassengerSplit): { holding: TimeChange; noHolding: TimeChange } {
+  const holding = {
+    saved_s: split.total_time_saved_s, savedPassengers: split.better_off,
+    lost_s: split.total_time_lost_s, lostPassengers: split.worse_off,
+  };
+  const noHolding = {
+    saved_s: holding.lost_s, savedPassengers: holding.lostPassengers,
+    lost_s: holding.saved_s, lostPassengers: holding.savedPassengers,
+  };
+  return { holding, noHolding };
+}
+
+/** Round to whole seconds and show as "45 s", "4 min 15 s" or "3 h 11 min". */
+export function formatDuration(seconds: number): string {
+  const total = Math.round(seconds);
+  if (total < 60) return `${total} s`;
+  if (total < 3600) return `${Math.floor(total / 60)} min ${total % 60} s`;
+  return `${Math.floor(total / 3600)} h ${Math.floor((total % 3600) / 60)} min`;
 }

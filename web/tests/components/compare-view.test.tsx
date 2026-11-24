@@ -87,6 +87,19 @@ describe("CompareView", () => {
     expect(screen.getByText("Both runs loaded · one shared playback clock")).toBeDefined();
   });
 
+  it("shows each side's time saved and lost, mirrored, under its panel", async () => {
+    await openCompare();
+    const value = (name: string, label: string) =>
+      within(panel(name)).getByText(label).nextSibling?.textContent;
+
+    // Holding saved 45 passengers 11 490 s (3 h 11 min) and cost 2 of them 100 s
+    expect(value(HOLDING_TITLE, "Time saved (whole run)")).toBe("3 h 11 min · 45 passengers");
+    expect(value(HOLDING_TITLE, "Time lost (whole run)")).toBe("1 min 40 s · 2 passengers");
+    expect(value("No holding", "Time saved (whole run)")).toBe("1 min 40 s · 2 passengers");
+    expect(value("No holding", "Time lost (whole run)")).toBe("3 h 11 min · 45 passengers");
+    expect(screen.getByText(/Changes of\s+30 s or less count as unaffected/)).toBeDefined();
+  });
+
   it("runs the API defaults, not unrun slider values, before anything is run", async () => {
     // The user moved a slider but never clicked "Run scenario".
     useRunSettingsStore.getState().update({ passenger_flow: "High" });

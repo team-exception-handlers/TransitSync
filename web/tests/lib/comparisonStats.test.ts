@@ -2,7 +2,7 @@
 /** Running hold and connection totals for one Compare panel (US-4.1, #230). */
 import { describe, expect, it } from "vitest";
 import { stationViewData } from "../../src/data/stationViewData";
-import { comparisonStatsAt } from "../../src/lib/comparisonStats";
+import { comparisonStatsAt, formatDuration, timeChanges } from "../../src/lib/comparisonStats";
 import type {
   PassengerOutcome, StationViewData, TrainMovementEvent,
 } from "../../src/types/stationView";
@@ -91,5 +91,31 @@ describe("comparisonStatsAt", () => {
   it("counts zero for a run without a time series or outcomes", () => {
     expect(comparisonStatsAt(stationViewData, 200))
       .toEqual({ holdingNow: false, holds: 0, made: 0, missed: 0 });
+  });
+});
+
+describe("timeChanges (US-4.3)", () => {
+  it("mirrors the holding side's saved and lost time on the no-holding side", () => {
+    const { holding, noHolding } = timeChanges({
+      better_off: 45, worse_off: 2, unaffected: 1238, not_compared: 82,
+      total_time_saved_s: 11490, total_time_lost_s: 100,
+      average_time_saved_s: 255.33, average_time_lost_s: 50,
+    });
+
+    expect(holding).toEqual({ saved_s: 11490, savedPassengers: 45, lost_s: 100, lostPassengers: 2 });
+    expect(noHolding).toEqual({ saved_s: 100, savedPassengers: 2, lost_s: 11490, lostPassengers: 45 });
+  });
+});
+
+describe("formatDuration", () => {
+  it.each([
+    [0, "0 s"],
+    [59.4, "59 s"],
+    // Edge: 59.6 s rounds up into the minutes format
+    [59.6, "1 min 0 s"],
+    [255, "4 min 15 s"],
+    [11490, "3 h 11 min"],
+  ])("shows %s s as %s", (seconds, text) => {
+    expect(formatDuration(seconds)).toBe(text);
   });
 });
