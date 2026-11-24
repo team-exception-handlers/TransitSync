@@ -37,6 +37,11 @@ const PAIR: SimulationComparison = {
   noHolding: NO_HOLDING_RUN,
   holdingStrategy: "connection_protection",
   startingConditions: { serviceDate: "2026-10-05", masterSeed: 42, duration_s: 360 },
+  passengerSplit: {
+    better_off: 45, worse_off: 2, unaffected: 1238, not_compared: 82,
+    total_time_saved_s: 11490, total_time_lost_s: 100,
+    average_time_saved_s: 255.33, average_time_lost_s: 50,
+  },
 };
 
 const panel = (name: string) => screen.getByRole("region", { name });

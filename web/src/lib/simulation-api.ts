@@ -13,7 +13,8 @@
  *
  * `runComparison` (US-4.1, #230) sends the same settings to
  * `/simulation/comparison` and gets a holding and a no-holding run back,
- * each checked exactly like a single run.
+ * each checked exactly like a single run, plus the passengers holding
+ * helped or harmed (#285).
  */
 import type { LineId, StationViewData } from "../types/stationView";
 import type { RunSettings } from "../types/runSettings";
@@ -305,6 +306,22 @@ export interface StartingConditions {
   duration_s: number;
 }
 
+/**
+ * Passengers the holding run left better off, worse off or unaffected
+ * (within 30 s) versus no holding, with the time each group gained or lost
+ * in seconds (US-6.3, #285). Averages are null for an empty group.
+ */
+export interface PassengerSplit {
+  better_off: number;
+  worse_off: number;
+  unaffected: number;
+  not_compared: number;
+  total_time_saved_s: number;
+  total_time_lost_s: number;
+  average_time_saved_s: number | null;
+  average_time_lost_s: number | null;
+}
+
 /** A holding run and a no-holding run of one connection (US-4.1, #230). */
 export interface SimulationComparison {
   holding: StationViewData;
@@ -312,6 +329,7 @@ export interface SimulationComparison {
   /** Strategy the holding side used, for example "connection_protection". */
   holdingStrategy: string;
   startingConditions: StartingConditions;
+  passengerSplit: PassengerSplit;
 }
 
 /** Runs both sides of a comparison; the Compare screen accepts any function of this shape. */
@@ -338,6 +356,23 @@ function checkStartingConditions(body: Record<string, unknown>): StartingConditi
   return { serviceDate: service_date, masterSeed: master_seed, duration_s };
 }
 
+const SPLIT_COUNTS = ["better_off", "worse_off", "unaffected", "not_compared"] as const;
+const SPLIT_TOTALS = ["total_time_saved_s", "total_time_lost_s"] as const;
+const SPLIT_AVERAGES = ["average_time_saved_s", "average_time_lost_s"] as const;
+
+const isNonNegative = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0;
+
+/** Check the passenger split; counts are whole numbers and no time is negative. */
+function checkPassengerSplit(value: unknown): PassengerSplit {
+  const split = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
+  const valid = SPLIT_COUNTS.every((key) => isNonNegative(split[key]) && Number.isInteger(split[key]))
+    && SPLIT_TOTALS.every((key) => isNonNegative(split[key]))
+    && SPLIT_AVERAGES.every((key) => split[key] === null || isNonNegative(split[key]));
+  if (!valid) throw new TypeError("Invalid comparison passenger split");
+  return split as unknown as PassengerSplit;
+}
+
 /**
  * Validate a `/simulation/comparison` body for `connectionId`. Each side goes
  * through the same checks as a single run, and both must last as long as the
@@ -361,7 +396,8 @@ export function parseSimulationComparison(
     || noHolding.duration_s !== startingConditions.duration_s) {
     throw new TypeError("Comparison runs do not share one duration");
   }
-  return { holding, noHolding, holdingStrategy: body.holding_strategy, startingConditions };
+  const passengerSplit = checkPassengerSplit(body.passenger_split);
+  return { holding, noHolding, holdingStrategy: body.holding_strategy, startingConditions, passengerSplit };
 }
 
 /**

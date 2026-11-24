@@ -10,6 +10,13 @@ import {
 } from "../../src/lib/simulation-api";
 
 const CONNECTION = "mcgill-rem-green";
+
+// The Édouard-Montpetit High-flow split, plus two passengers worse off.
+const SPLIT = {
+  better_off: 45, worse_off: 2, unaffected: 1238, not_compared: 82,
+  total_time_saved_s: 11490, total_time_lost_s: 100,
+  average_time_saved_s: 255.33, average_time_lost_s: 50,
+};
 const baseUrl = "http://api.test";
 
 // The API's comparison body: both sides plus the shared starting conditions.
@@ -20,6 +27,7 @@ const BODY = {
   service_date: "2026-10-05",
   master_seed: 42,
   duration_s: stationViewData.duration_s,
+  passenger_split: SPLIT,
 };
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -53,6 +61,7 @@ describe("runComparison", () => {
     expect(pair.startingConditions).toEqual({ serviceDate: "2026-10-05", masterSeed: 42, duration_s: 360 });
     expect(pair.holding.connections.map((item) => item.id)).toContain(CONNECTION);
     expect(pair.noHolding.duration_s).toBe(360);
+    expect(pair.passengerSplit).toEqual(SPLIT);
   });
 
   it("explains an unknown connection (404)", async () => {
@@ -86,6 +95,11 @@ describe("parseSimulationComparison", () => {
     [{ ...BODY, duration_s: 0 }, "Invalid comparison duration"],
     [{ ...BODY, duration_s: 3600 }, "Comparison runs do not share one duration"],
     ["not an object", "Comparison response must be an object"],
+    [{ ...BODY, passenger_split: undefined }, "Invalid comparison passenger split"],
+    [{ ...BODY, passenger_split: { ...SPLIT, better_off: 1.5 } }, "Invalid comparison passenger split"],
+    [{ ...BODY, passenger_split: { ...SPLIT, total_time_lost_s: -1 } }, "Invalid comparison passenger split"],
+    [{ ...BODY, passenger_split: { ...SPLIT, average_time_saved_s: Number.NaN } },
+      "Invalid comparison passenger split"],
   ])("rejects %#", (body, message) => {
     expect(() => parseSimulationComparison(body, CONNECTION)).toThrow(message);
   });
