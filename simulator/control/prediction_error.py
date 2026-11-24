@@ -204,7 +204,13 @@ class PredictionErrorModel:
         shift = arrival - visit.arrival_s
         return _copy_visit(visit, arrival, visit.departure_s + shift)
 
-    def _trains(self, trains, now_s, draw, arrival_z):
+    def _trains(
+        self,
+        trains: tuple[TrainState, ...],
+        now_s: float,
+        draw: Callable[..., float],
+        arrival_z: dict[str, float],
+    ) -> tuple[TrainState, ...]:
         """Estimate each train with this decision's bound keyed draw."""
         return tuple(self._train(t, now_s, draw, arrival_z) for t in trains)
 
@@ -244,7 +250,7 @@ def _scaled(value: int, kappa: float, z: float) -> int:
     return max(0, round(value * (1.0 + kappa * COUNT_RELATIVE_SIGMA * z)))
 
 
-def _decision_draw(draw, decision):
+def _decision_draw(draw: Callable[..., float], decision: tuple) -> Callable[..., float]:
     """Return ``draw`` with this decision's key fixed in front of every call.
 
     The run passes ``partial(streams.keyed_normal, name)``. For exactly that
@@ -264,7 +270,8 @@ def _decision_draw(draw, decision):
 def _copy_train(train: TrainState, arrival_s: float | None, load: int) -> TrainState:
     """Copy the fixed train schema without rediscovering dataclass fields.
 
-    Full-day observations create millions of these values. Keep subclass
+    Fields are passed by position, so test_prediction_copy pins the field
+    order. Full-day observations create millions of these values. Keep subclass
     handling on dataclasses.replace so extensions retain their concrete type
     and extra fields. Random draws and arithmetic remain in the caller.
     """
@@ -288,7 +295,7 @@ def _copy_train(train: TrainState, arrival_s: float | None, load: int) -> TrainS
     )
 
 
-def _same_number(first, second):
+def _same_number(first: float | None, second: float | None) -> bool:
     """Reuse frozen values only when type and signed-zero representation match."""
     return first is second or (
         type(first) is type(second)
@@ -297,8 +304,13 @@ def _same_number(first, second):
     )
 
 
-def _copy_visit(visit, arrival_s, departure_s):
-    """Copy a fixed forecast schema, preserving subclass extension fields."""
+def _copy_visit(
+    visit: FutureVisit, arrival_s: float, departure_s: float
+) -> FutureVisit:
+    """Copy a fixed forecast schema, preserving subclass extension fields.
+
+    Positional like ``_copy_train``; its field order is pinned by a test too.
+    """
     if type(visit) is not FutureVisit:
         return _updated(visit, arrival_s=arrival_s, departure_s=departure_s)
     return FutureVisit(

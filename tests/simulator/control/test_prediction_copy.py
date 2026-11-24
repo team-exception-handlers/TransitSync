@@ -8,15 +8,17 @@ it predicts (#192), so the fast path (draws bound to each decision's key
 prefix) must give exactly the values of drawing every full key separately.
 """
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, fields, replace
 from functools import partial
 
 import pytest
 
 from simulator.control.interface import TrainState
+from simulator.control.planning import FutureVisit
 from simulator.control.prediction_error import (
     PredictionErrorModel,
     PredictionErrorSettings,
+    _decision_draw,
 )
 from simulator.engine.random_streams import StreamManager
 from tests.simulator.control.test_prediction_error import snapshot
@@ -134,3 +136,50 @@ def test_custom_draw_is_called_once_per_value_in_train_order(value_type):
         (*decision, "transfer", group.group_id) for group in truth.incoming_transfers
     ]
     assert calls == expected
+
+
+def test_fast_copies_follow_the_dataclass_field_order():
+    """The positional copies break loudly if a field is added or reordered.
+
+    A new field with a default would otherwise be reset silently on copy.
+    """
+    assert [f.name for f in fields(TrainState)] == [
+        "train_id",
+        "line_id",
+        "next_platform_id",
+        "predicted_arrival_s",
+        "scheduled_departure_s",
+        "delay_s",
+        "onboard_load",
+        "capacity",
+    ]
+    assert [f.name for f in fields(FutureVisit)] == [
+        "train_id",
+        "trip_index",
+        "stop_index",
+        "station_id",
+        "platform_id",
+        "arrival_s",
+        "departure_s",
+        "scheduled_arrival_s",
+        "scheduled_departure_s",
+        "can_hold",
+        "skips_departure",
+        "recovery_s",
+        "arrived",
+        "earliest_arrival_s",
+    ]
+
+
+def test_the_run_draw_takes_the_prefix_fast_path():
+    """The form the API builds is bound once; any other callable is wrapped.
+
+    If the API wrapped its draw differently the numbers would stay right but
+    the speed-up would vanish, so this checks the path, not the values.
+    """
+    decision = ("A", "P1", 130.0)
+    bound = _decision_draw(keyed(7), decision)
+    assert not isinstance(bound, partial)
+    assert callable(bound.bind)
+    custom = _decision_draw(ExactFloat, decision)
+    assert isinstance(custom, partial)
