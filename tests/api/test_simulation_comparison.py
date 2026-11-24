@@ -7,7 +7,10 @@ Runs use the committed Édouard-Montpetit scenario, so no external service is ne
 import pytest
 from fastapi.testclient import TestClient
 
+import api.simulation_comparison as simulation_comparison
 from api.main import create_app
+from api.passenger_outcomes import PassengerOutcome, match_passengers
+from api.passenger_split import split_passengers
 from api.simulation_comparison import (
     CONTROL_ONLY_FIELDS,
     DEFAULT_HOLDING_STRATEGY,
@@ -102,6 +105,36 @@ def test_same_request_twice_gives_the_same_payload(comparison: dict):
     # A fresh app has an empty cache, so this reruns both simulations.
     again = TestClient(create_app()).post("/simulation/comparison", json=SETTINGS)
     assert again.json() == comparison
+
+
+def test_split_covers_every_passenger_of_the_pair(comparison: dict):
+    # Rebuilt from the two sides in the payload, so the split is of this pair
+    held, baseline = (
+        [PassengerOutcome(**o) for o in comparison[side]["passenger_outcomes"]]
+        for side in ("holding", "no_holding")
+    )
+    matched = match_passengers(held, baseline)
+    split = comparison["passenger_split"]
+    assert split == split_passengers(matched).model_dump()
+    groups = ("better_off", "worse_off", "unaffected", "not_compared")
+    assert sum(split[group] for group in groups) == len(matched)
+    # The holding side holds trains here, so someone catches a held train
+    assert split["better_off"] > 0
+    assert split["average_time_saved_s"] == pytest.approx(
+        split["total_time_saved_s"] / split["better_off"]
+    )
+
+
+def test_runs_that_are_not_a_pair_return_a_server_error(monkeypatch):
+    # Edge: one ID on two connections must not become a wrong split
+    def not_a_pair(*_runs):
+        raise ValueError("passenger p is on two connections")
+
+    monkeypatch.setattr(simulation_comparison, "match_passengers", not_a_pair)
+    client = TestClient(create_app(), raise_server_exceptions=False)
+    response = client.post("/simulation/comparison", json=SETTINGS)
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Simulation comparison failed"
 
 
 def test_unknown_connection_returns_not_found(client: TestClient):
