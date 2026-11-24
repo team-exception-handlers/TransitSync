@@ -11,12 +11,14 @@ import pytest
 
 from simulator.engine.runner import run_scenario
 from simulator.scenario import (
+    PRESET_SETTINGS,
     DatasetMetadata,
     ScenarioValidationError,
     load_scenario_file,
     load_scenario_json,
     resolve_preset,
 )
+from simulator.scenario_parameters import ScenarioParameters
 
 
 @pytest.fixture
@@ -80,8 +82,15 @@ def test_committed_demo_scenario_matches_weekday_preset(dataset, interchange):
     scenario = load_scenario_file(path, {demo_dataset.dataset_id: demo_dataset})
     assert scenario.interchanges == (interchange,)
     assert scenario.master_seed == 42
-    assert scenario == resolve_preset(
+    preset = resolve_preset(
         "weekday_morning", demo_dataset, interchanges=(interchange,)
+    )
+    # The preset also sets peak conditions (#264); the file keeps the
+    # defaults, so only the window and seed must match
+    assert scenario == replace(
+        preset,
+        parameters=scenario.parameters,
+        operating_rules=scenario.operating_rules,
     )
     assert "control" not in raw
     assert "operating_rules" not in raw
@@ -165,6 +174,12 @@ def test_defaults_and_saved_settings_round_trip(dataset):
                 "headway_violation": "REFUSE",
                 "one_hop_violation": "REFUSE",
             },
+        },
+        "parameters": {
+            "transfer_volume": 60,
+            "train_headway_s": None,
+            "onboard_load": 300,
+            "walking_mean_s": 120.0,
         },
     }
     assert (
@@ -548,3 +563,27 @@ def test_manifest_labels_perfect_information_as_upper_bound(
     assert manifest["upper_bound"] is upper_bound
     expected = 0.0 if upper_bound else 1.0
     assert manifest["control"]["prediction_error"]["arrival_kappa"] == expected
+
+
+@pytest.mark.parametrize("name", sorted(PRESET_SETTINGS))
+def test_each_preset_carries_its_conditions_into_the_scenario(dataset, name):
+    """#264: every preset sets the five run values and they pass validation."""
+    dataset = replace(
+        dataset,
+        service_dates=(date(2026, 10, 5), date(2026, 10, 10), date(2026, 10, 11)),
+    )
+    preset = PRESET_SETTINGS[name]
+    scenario = resolve_preset(name, dataset)
+    assert scenario.parameters == ScenarioParameters(**preset["parameters"])
+    assert scenario.operating_rules.max_hold_time == preset["max_hold_time"]
+    assert preset["label"]
+
+
+def test_bad_preset_value_fails_with_the_field_name(dataset, monkeypatch):
+    broken = {
+        **PRESET_SETTINGS["weekday_morning"],
+        "parameters": {"walking_mean_s": 10},
+    }
+    monkeypatch.setitem(PRESET_SETTINGS, "weekday_morning", broken)
+    with pytest.raises(ScenarioValidationError, match=r"parameters\.walking_mean_s"):
+        resolve_preset("weekday_morning", dataset)

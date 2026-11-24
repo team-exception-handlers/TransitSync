@@ -62,6 +62,7 @@ from simulator.engine.event_log import (
 )
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import Event, EventType
+from simulator.scenario_parameters import ScenarioParameters
 
 log = logging.getLogger(__name__)
 
@@ -239,7 +240,10 @@ def _manifest_record(
         "disruptions": disruptions,
     }
     parameters = getattr(scenario, "parameters", None)
-    if parameters is not None:
+    if isinstance(parameters, ScenarioParameters):
+        # Demand and service values of the run (#258), saved as plain JSON
+        manifest["parameters"] = parameters.to_dict()
+    elif parameters is not None:
         manifest["parameters"] = parameters
     # Records which strategy produced the results (#45); test stand-in
     # scenarios without control settings leave the key out

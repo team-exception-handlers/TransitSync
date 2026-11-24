@@ -1,5 +1,11 @@
 # AI contribution: 50% or more AI-generated
-"""Load and validate reproducible simulation scenarios."""
+"""Load and validate reproducible simulation scenarios.
+
+This file is over 500 lines: it holds one validator per scenario field, and
+splitting them across modules would scatter the error wording users see.
+The demand and service parameters (#258) are parsed in
+``simulator/scenario_parameters.py`` for the same reason.
+"""
 
 from __future__ import annotations
 
@@ -22,14 +28,68 @@ from simulator.control.settings import (
     parse_control_settings,
     parse_operating_rules,
 )
+from simulator.scenario_parameters import (
+    ScenarioParameters,
+    ScenarioParametersError,
+    parse_scenario_parameters,
+)
 
 WORKLOAD_LIMIT_HOURS = 100
 DEFAULT_TIMEZONE = "America/Toronto"
+# Time-of-day presets (#264). Each one sets the window and the conditions
+# typical for it; "label" is the name the Scenario setup view shows.
+# "parameters" uses the scenario's "parameters" object and max_hold_time goes
+# to "operating_rules", so the normal loader validates preset values exactly
+# like a scenario file. A parameter a preset leaves out keeps its default.
+# Values are assumptions until field counts exist: peaks have more transfers
+# and fuller trains (so a shorter maximum hold, since each held second costs
+# every rider on board), weekends fewer of both and quicker, emptier walks.
+# No preset sets train_headway_s, so each keeps that hour's real timetable.
 PRESET_SETTINGS: dict[str, dict[str, Any]] = {
-    "weekday_morning": {"start_time": "07:00:00", "duration_s": 3600},
-    "weekday_afternoon": {"start_time": "16:00:00", "duration_s": 3600},
-    "saturday_morning": {"start_time": "10:00:00", "duration_s": 3600},
-    "sunday_morning": {"start_time": "10:00:00", "duration_s": 3600},
+    "weekday_morning": {
+        "label": "Weekday morning peak",
+        "start_time": "07:00:00",
+        "duration_s": 3600,
+        "parameters": {
+            "transfer_volume": 80,
+            "onboard_load": 450,
+            "walking_mean_s": 130,
+        },
+        "max_hold_time": 60,
+    },
+    "weekday_afternoon": {
+        "label": "Weekday afternoon peak",
+        "start_time": "16:00:00",
+        "duration_s": 3600,
+        "parameters": {
+            "transfer_volume": 70,
+            "onboard_load": 400,
+            "walking_mean_s": 130,
+        },
+        "max_hold_time": 60,
+    },
+    "saturday_morning": {
+        "label": "Saturday morning",
+        "start_time": "10:00:00",
+        "duration_s": 3600,
+        "parameters": {
+            "transfer_volume": 40,
+            "onboard_load": 200,
+            "walking_mean_s": 110,
+        },
+        "max_hold_time": 120,
+    },
+    "sunday_morning": {
+        "label": "Sunday morning",
+        "start_time": "10:00:00",
+        "duration_s": 3600,
+        "parameters": {
+            "transfer_volume": 30,
+            "onboard_load": 150,
+            "walking_mean_s": 110,
+        },
+        "max_hold_time": 120,
+    },
 }
 INTERCHANGE_IDS = frozenset(
     {"gare_centrale_bonaventure", "mcgill", "edouard_montpetit"}
@@ -49,6 +109,7 @@ SCENARIO_FIELDS = frozenset(
         "resolved_start_utc_offset",
         "control",
         "operating_rules",
+        "parameters",
     }
 )
 
@@ -86,6 +147,8 @@ class Scenario:
     # Strategy selection (#45); defaults to no control so older files load
     control: ControlSettings = ControlSettings()
     operating_rules: OperatingRulesConfig = OperatingRulesConfig()
+    # Demand and service conditions (#258); defaults keep older files loading
+    parameters: ScenarioParameters = ScenarioParameters()
 
     @property
     def start_utc(self) -> datetime:
@@ -108,6 +171,7 @@ class Scenario:
             "resolved_start_utc_offset": _offset_text(self.resolved_start),
             "control": self.control.to_dict(),
             "operating_rules": self.operating_rules.to_dict(),
+            "parameters": self.parameters.to_dict(),
         }
 
 
@@ -150,7 +214,12 @@ def resolve_preset(
     interchanges: tuple[str, ...] | None = None,
     overrides: dict[str, Any] | None = None,
 ) -> Scenario:
-    """Fill a named preset, then validate it like any other scenario."""
+    """Fill a named preset, then validate it like any other scenario.
+
+    The preset's parameter values and maximum hold go through the same
+    loader as a scenario file, so a bad preset fails with the field's name.
+    ``overrides`` replaces whole top-level scenario fields.
+    """
     if name not in PRESET_SETTINGS:
         choices = ", ".join(sorted(PRESET_SETTINGS))
         raise ScenarioValidationError(
@@ -172,6 +241,8 @@ def resolve_preset(
         "master_seed": 42,
         "interchanges": list(("mcgill",) if interchanges is None else interchanges),
         "timezone": DEFAULT_TIMEZONE,
+        "parameters": dict(preset["parameters"]),
+        "operating_rules": {"max_hold_time": preset["max_hold_time"]},
     }
     if overrides:
         values.update(overrides)
@@ -200,6 +271,10 @@ def _scenario_from_mapping(
     except OperatingRulesError as error:
         raise ScenarioValidationError(str(error)) from error
     try:
+        parameters = parse_scenario_parameters(values.get("parameters"))
+    except ScenarioParametersError as error:
+        raise ScenarioValidationError(str(error)) from error
+    try:
         resolved_start = _resolve_local_start(
             service_date, start_time, timezone, dst_fold
         )
@@ -223,6 +298,7 @@ def _scenario_from_mapping(
         resolved_start=resolved_start,
         control=control,
         operating_rules=operating_rules,
+        parameters=parameters,
     )
 
 
