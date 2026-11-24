@@ -27,7 +27,8 @@ the run ends, so no strategy touches the output files.
 import copy
 import json
 from collections.abc import Iterable, Sequence
-from dataclasses import asdict, is_dataclass
+from dataclasses import asdict, dataclass, is_dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
 
@@ -155,14 +156,8 @@ def estimates_record(
     truth: ObservationSnapshot, seen: ObservationSnapshot
 ) -> dict[str, Any]:
     """Return what the strategy saw next to the true value for one decision."""
-    return {
-        "schema_version": DECISION_SCHEMA_VERSION,
-        "kind": KIND_ESTIMATES,
-        "time_s": truth.time_s,
-        "train_id": truth.train_id,
-        "station_id": truth.station_id,
-        "platform_id": truth.platform_id,
-        "trains": _side_by_side(truth.trains, seen.trains, "train_id", TRAIN_ESTIMATES),
+    return _estimates_header(truth) | {
+        "trains": _train_estimates(truth.trains, seen.trains),
         "transfers": _side_by_side(
             truth.incoming_transfers,
             seen.incoming_transfers,
@@ -170,6 +165,48 @@ def estimates_record(
             TRANSFER_ESTIMATES,
         ),
     }
+
+
+def _estimates_header(truth):
+    """The common ordered metadata for complete and decision-specific views."""
+    return {
+        "schema_version": DECISION_SCHEMA_VERSION,
+        "kind": KIND_ESTIMATES,
+        "time_s": truth.time_s,
+        "train_id": truth.train_id,
+        "station_id": truth.station_id,
+        "platform_id": truth.platform_id,
+    }
+
+
+def _train_estimates(actual, seen):
+    """Copy the fixed train schema without per-field getattr loops.
+
+    Full-day audits visit millions of trains. Literal field access preserves
+    the exact schema order while avoiding repeated reflective lookups. Keep
+    strict pairing so an incorrectly reordered observation still fails.
+    """
+    entries = []
+    for true_train, seen_train in zip(actual, seen, strict=True):
+        if true_train.train_id != seen_train.train_id:
+            raise ValueError(
+                f"estimates out of order: {true_train.train_id!r} "
+                f"vs {seen_train.train_id!r}"
+            )
+        entries.append(
+            {
+                "train_id": true_train.train_id,
+                "predicted_arrival_s": {
+                    "seen": seen_train.predicted_arrival_s,
+                    "true": true_train.predicted_arrival_s,
+                },
+                "onboard_load": {
+                    "seen": seen_train.onboard_load,
+                    "true": true_train.onboard_load,
+                },
+            }
+        )
+    return entries
 
 
 def _side_by_side(
@@ -196,6 +233,107 @@ def _side_by_side(
             }
         entries.append(entry)
     return entries
+
+
+@dataclass(frozen=True, slots=True)
+class EncodedDecisionRecord:
+    """Immutable JSON produced by the audit encoder, without its line ending.
+
+    Keeping estimates in their final representation avoids a full-run tree of
+    millions of dictionaries. Public readers decode fresh detached containers;
+    the log writer can reuse these exact bytes without encoding them again.
+    """
+
+    line: str
+    decision_line: str | None = None
+
+
+def encode_estimates_record(truth, seen) -> EncodedDecisionRecord:
+    """Retain complete audit bytes and a compact per-decision immutable view.
+
+    The API displays only the deciding train, but every train remains in the
+    scientific audit. Derive both views from the same validated record rather
+    than reparsing a full-day log. No state is shared between simulation runs.
+    """
+    record = estimates_record(truth, seen)
+    complete = encode_decision_record(record)
+    record["trains"] = [
+        train for train in record["trains"] if train["train_id"] == truth.train_id
+    ]
+    return EncodedDecisionRecord(complete.line, encode_decision_record(record).line)
+
+
+class EstimateEncoder:
+    """Reuse fixed-schema JSON fragments while retaining the stdlib numeric encoder.
+
+    Only immutable train-ID prefixes are cached, within one simulation. Numeric
+    fields are encoded together in C and assembled without temporary dictionary
+    trees. Nonstandard JSON-compatible values retain the generic encoder path.
+    """
+
+    def __init__(self):
+        self._prefix = lru_cache(maxsize=8192, typed=True)(self._train_prefix)
+
+    @staticmethod
+    def _train_prefix(train_id):
+        return '{"train_id":' + json.dumps(train_id) + ',"predicted_arrival_s":{"seen":'
+
+    def encode(self, truth, seen) -> EncodedDecisionRecord:
+        """Encode complete and compact views with identical JSON spelling/order."""
+        values = []
+        for actual, estimated in zip(truth.trains, seen.trains, strict=True):
+            if actual.train_id != estimated.train_id:
+                raise ValueError(
+                    f"estimates out of order: {actual.train_id!r} "
+                    f"vs {estimated.train_id!r}"
+                )
+            if type(actual.train_id) is not str:
+                return encode_estimates_record(truth, seen)
+            values.append(
+                (
+                    estimated.predicted_arrival_s,
+                    actual.predicted_arrival_s,
+                    estimated.onboard_load,
+                    actual.onboard_load,
+                )
+            )
+        numbers = json.dumps(values, separators=(",", ":"), allow_nan=False)
+        if '"' in numbers or "{" in numbers or numbers.count("[") != len(values) + 1:
+            return encode_estimates_record(truth, seen)
+        # F-strings allocate each train fragment once. Repeated concatenation
+        # copied every prefix several times and was slower in the first probe.
+        lines, selected = [], []
+        tokens = numbers[2:-2].split("],[") if values else ()
+        for actual, fields in zip(truth.trains, tokens, strict=True):
+            a, b, c, d = fields.split(",")
+            prefix = self._prefix(actual.train_id)
+            line = (
+                f'{prefix}{a},"true":{b}}},"onboard_load":{{"seen":{c},"true":{d}}}}}'
+            )
+            lines.append(line)
+            if actual.train_id == truth.train_id:
+                selected.append(line)
+        header = json.dumps(
+            _estimates_header(truth), separators=(",", ":"), allow_nan=False
+        )[:-1]
+        transfers = _side_by_side(
+            truth.incoming_transfers,
+            seen.incoming_transfers,
+            "group_id",
+            TRANSFER_ESTIMATES,
+        )
+        ending = json.dumps(transfers, separators=(",", ":"), allow_nan=False)
+        return EncodedDecisionRecord(
+            f'{header},"trains":[{",".join(lines)}],"transfers":{ending}}}',
+            f'{header},"trains":[{",".join(selected)}],"transfers":{ending}}}',
+        )
+
+
+def encode_decision_record(record: dict[str, Any]) -> EncodedDecisionRecord:
+    """Encode with the existing key order, compact separators and finite values."""
+    return EncodedDecisionRecord(
+        json.dumps(record, separators=(",", ":"), allow_nan=False)
+    )
 
 
 def candidate_outcome(candidate: BreakEvenResult, decision: BreakEvenResult) -> str:
@@ -235,7 +373,9 @@ def _walking_record(walking: object) -> dict[str, Any]:
     return family
 
 
-def write_decision_log(records: Iterable[dict[str, Any]], path: Path) -> None:
+def write_decision_log(
+    records: Iterable[dict[str, Any] | EncodedDecisionRecord], path: Path
+) -> None:
     """Write ``records`` as JSON Lines, renaming into place only when complete.
 
     Raises:
@@ -247,6 +387,11 @@ def write_decision_log(records: Iterable[dict[str, Any]], path: Path) -> None:
     # newline="\n" keeps the bytes identical on Windows and Linux
     with partial.open("w", encoding="utf-8", newline="\n") as file:
         for record in records:
-            file.write(json.dumps(record, separators=(",", ":"), allow_nan=False))
+            encoded = (
+                record
+                if isinstance(record, EncodedDecisionRecord)
+                else encode_decision_record(record)
+            )
+            file.write(encoded.line)
             file.write("\n")
     partial.replace(path)

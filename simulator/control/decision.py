@@ -7,12 +7,16 @@ The strategy sees estimates with prediction error (section 7), while the rule
 check still uses the true snapshot, since safety rules are the simulator's.
 """
 
-import copy
+import json
 import math
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from simulator.control.decision_audit import DecisionAuditSource, estimates_record
+from simulator.control.decision_audit import (
+    DecisionAuditSource,
+    EstimateEncoder,
+)
+from simulator.control.estimate_store import EstimateStore
 from simulator.control.interface import (
     DecisionController,
     HoldAction,
@@ -70,7 +74,8 @@ class DecisionPipeline:
         self._builder = builder or ObservationBuilder()
         self._enforcer = enforcer or PassThroughEnforcer()
         self._error_model = error_model
-        self._estimates: list[dict[str, Any]] = []
+        self._estimates = EstimateStore()
+        self._estimate_encoder = EstimateEncoder()
 
     def decide(
         self, decision: DepartureDue, trains: TrainSource
@@ -99,7 +104,7 @@ class DecisionPipeline:
         if self._error_model:
             seen = self._error_model.apply(truth)
             # Recorded before the strategy runs, so declines are audited too
-            self._estimates.append(estimates_record(truth, seen))
+            self._estimates.append(self._estimate_encoder.encode(truth, seen))
         actions = self.strategy.evaluate(seen)
         if not actions:
             return None
@@ -115,8 +120,38 @@ class DecisionPipeline:
         The ``Hold`` event already records what the rules applied, so the
         audit only needs the strategy's reasoning and what it saw.
         """
-        own: tuple[dict[str, Any], ...] = ()
+        return tuple(self.iter_decision_records())
+
+    def iter_decision_records(self):
+        """Detach one audit at a time for the runner's sequential log writer.
+
+        The public tuple API remains available. Streaming avoids retaining a
+        second full-day audit tree while writing the exact same JSON records.
+        """
         if isinstance(self.strategy, DecisionAuditSource):
-            own = tuple(self.strategy.decision_records())
+            yield from self.strategy.decision_records()
         # Copies, so a caller cannot change what is written to the audit log
-        return own + tuple(copy.deepcopy(self._estimates))
+        for record in self._estimates:
+            yield json.loads(record.line)
+
+    def encoded_decision_records(self):
+        """Yield unchanged strategy records followed by already encoded estimates.
+
+        Only the writer uses this path. Public readers continue receiving fresh
+        dictionaries in the same order through decision_records or its iterator.
+        """
+        encoded = getattr(self.strategy, "encoded_decision_records", None)
+        if encoded is not None:
+            yield from encoded()
+        elif isinstance(self.strategy, DecisionAuditSource):
+            yield from self.strategy.decision_records()
+        yield from self._estimates
+
+    def playback_decision_records(self):
+        """Project estimates only after the runner writes their complete audit."""
+        encoded = getattr(self.strategy, "encoded_decision_records", None)
+        if encoded is not None:
+            yield from encoded()
+        elif isinstance(self.strategy, DecisionAuditSource):
+            yield from self.strategy.decision_records()
+        yield from self._estimates.playback_records()
