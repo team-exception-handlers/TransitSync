@@ -308,14 +308,19 @@ export interface StartingConditions {
 
 /**
  * Passengers the holding run left better off, worse off or unaffected
- * (within 30 s) versus no holding, with the time each group gained or lost
- * in seconds (US-6.3, #285). Averages are null for an empty group.
+ * (within the threshold) versus no holding over the whole run, with the time
+ * each group gained or lost in seconds (US-6.3, #285). Averages are null for
+ * an empty group.
  */
 export interface PassengerSplit {
   better_off: number;
   worse_off: number;
   unaffected: number;
   not_compared: number;
+  /** Left in one run only; grouped with the run end as the other departure. */
+  left_in_one_run: number;
+  /** Largest change, either way, that still counts as unaffected. */
+  unaffected_threshold_s: number;
   total_time_saved_s: number;
   total_time_lost_s: number;
   average_time_saved_s: number | null;
@@ -356,19 +361,24 @@ function checkStartingConditions(body: Record<string, unknown>): StartingConditi
   return { serviceDate: service_date, masterSeed: master_seed, duration_s };
 }
 
-const SPLIT_COUNTS = ["better_off", "worse_off", "unaffected", "not_compared"] as const;
-const SPLIT_TOTALS = ["total_time_saved_s", "total_time_lost_s"] as const;
-const SPLIT_AVERAGES = ["average_time_saved_s", "average_time_lost_s"] as const;
+const SPLIT_COUNTS = ["better_off", "worse_off", "unaffected", "not_compared", "left_in_one_run"] as const;
+const SPLIT_TOTALS = ["total_time_saved_s", "total_time_lost_s", "unaffected_threshold_s"] as const;
 
 const isNonNegative = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0;
 
-/** Check the passenger split; counts are whole numbers and no time is negative. */
+/**
+ * Check the passenger split: counts are whole numbers, no time is negative,
+ * and an average is null exactly when its group is empty.
+ */
 function checkPassengerSplit(value: unknown): PassengerSplit {
   const split = (typeof value === "object" && value !== null ? value : {}) as Record<string, unknown>;
+  const averageMatches = (average: string, count: string) =>
+    split[count] === 0 ? split[average] === null : isNonNegative(split[average]);
   const valid = SPLIT_COUNTS.every((key) => isNonNegative(split[key]) && Number.isInteger(split[key]))
     && SPLIT_TOTALS.every((key) => isNonNegative(split[key]))
-    && SPLIT_AVERAGES.every((key) => split[key] === null || isNonNegative(split[key]));
+    && averageMatches("average_time_saved_s", "better_off")
+    && averageMatches("average_time_lost_s", "worse_off");
   if (!valid) throw new TypeError("Invalid comparison passenger split");
   return split as unknown as PassengerSplit;
 }

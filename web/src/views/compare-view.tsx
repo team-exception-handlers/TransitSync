@@ -10,12 +10,12 @@
  */
 import { useEffect } from "react";
 
-import { ComparisonPanelStats } from "../components/comparison-panel-stats";
+import { ComparisonPanelStats, ComparisonSplitSummary } from "../components/comparison-panel-stats";
 import { PlaybackControls } from "../components/playback-controls";
 import { PlaybackTimeline } from "../components/PlaybackTimeline";
 import { SpeedSelector } from "../components/speed-selector";
 import { StationCanvas } from "../components/station-canvas";
-import { timeChanges, type TimeChange } from "../lib/comparisonStats";
+import type { ComparedPair } from "../lib/comparisonStats";
 import { DEFAULT_RUN_SETTINGS, strategyLabel } from "../lib/run-settings";
 import type { ComparisonRunner } from "../lib/simulation-api";
 import { useComparisonStore, type ComparisonStatus } from "../store/useComparisonStore";
@@ -64,16 +64,17 @@ function useComparisonLoader(runner: ComparisonRunner | null) {
 interface ComparisonPanelProps {
   title: string;
   run: StationViewData;
-  timeChange?: TimeChange;
+  pair?: ComparedPair;
+  side: "holding" | "noHolding";
 }
 
 /** One labelled side: its view-only canvas and its holding stats. */
-function ComparisonPanel({ title, run, timeChange }: Readonly<ComparisonPanelProps>) {
+function ComparisonPanel({ title, run, pair, side }: Readonly<ComparisonPanelProps>) {
   return (
     <section className="panel comparison-panel" aria-label={title}>
       <h2 className="comparison-panel-title">{title}</h2>
       <StationCanvas data={run} interactive={false} label={title} />
-      <ComparisonPanelStats run={run} timeChange={timeChange} />
+      <ComparisonPanelStats run={run} pair={pair} side={side} />
     </section>
   );
 }
@@ -108,7 +109,10 @@ export function CompareView({ runner }: Readonly<CompareViewProps>) {
   // old pair would sit under the new heading, so it is hidden until the new
   // pair loads. No holding comes first, matching "before → after".
   const pairIsForSelection = comparison.connectionId === selectedConnectionId;
-  const changes = comparison.passengerSplit && timeChanges(comparison.passengerSplit);
+  // The threshold comes from the API's split, so both sides use one value
+  const threshold_s = comparison.passengerSplit?.unaffected_threshold_s;
+  const pair: ComparedPair | undefined = holding && noHolding && threshold_s !== undefined
+    ? { holding, noHolding, threshold_s } : undefined;
   return (
     <>
       <div className="comparison-heading">
@@ -128,19 +132,13 @@ export function CompareView({ runner }: Readonly<CompareViewProps>) {
 
       {pairIsForSelection && holding && noHolding && holdingStrategy && (
         <div className="comparison-panels">
-          <ComparisonPanel title="No holding" run={noHolding} timeChange={changes?.noHolding} />
+          <ComparisonPanel title="No holding" run={noHolding} pair={pair} side="noHolding" />
           <ComparisonPanel
             title={`With holding · ${strategyLabel(holdingStrategy)}`} run={holding}
-            timeChange={changes?.holding} />
+            pair={pair} side="holding" />
         </div>
       )}
-      {pairIsForSelection && changes && (
-        <p className="comparison-note">
-          Time saved and lost compare when each transferring passenger left on
-          their connecting train in this run and in the other one. Changes of
-          30 s or less count as unaffected.
-        </p>
-      )}
+      {pairIsForSelection && pair && <ComparisonSplitSummary pair={pair} />}
 
       {/* The same controls as the station view: they drive the one shared
           clock, so a single bar moves both panels. */}

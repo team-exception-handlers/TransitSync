@@ -2,7 +2,7 @@
 /** Running hold and connection totals for one Compare panel (US-4.1, #230). */
 import { describe, expect, it } from "vitest";
 import { stationViewData } from "../../src/data/stationViewData";
-import { comparisonStatsAt, formatDuration, timeChanges } from "../../src/lib/comparisonStats";
+import { comparisonStatsAt, formatDuration, splitAt } from "../../src/lib/comparisonStats";
 import type {
   PassengerOutcome, StationViewData, TrainMovementEvent,
 } from "../../src/types/stationView";
@@ -94,16 +94,41 @@ describe("comparisonStatsAt", () => {
   });
 });
 
-describe("timeChanges (US-4.3)", () => {
-  it("mirrors the holding side's saved and lost time on the no-holding side", () => {
-    const { holding, noHolding } = timeChanges({
-      better_off: 45, worse_off: 2, unaffected: 1238, not_compared: 82,
-      total_time_saved_s: 11490, total_time_lost_s: 100,
-      average_time_saved_s: 255.33, average_time_lost_s: 50,
-    });
+describe("splitAt (US-4.3)", () => {
+  // D = departure with holding - departure without, threshold 30 s.
+  // a: 100 s vs 300 s (D -200, better off). b: 400 s vs 350 s (D +50, worse
+  // off). c: 500 s vs 510 s (D -10, unaffected). d leaves in neither run.
+  // e is in the holding run only.
+  const run = (departures: [string, number | null][]): StationViewData => ({
+    ...stationViewData,
+    passenger_outcomes: departures.map(([id, time]) => outcome(id, time === null ? "pending" : "made", time)),
+  });
+  const PAIR = {
+    holding: run([["a", 100], ["b", 400], ["c", 500], ["d", null], ["e", 50]]),
+    noHolding: run([["a", 300], ["b", 350], ["c", 510], ["d", null]]),
+    threshold_s: 30,
+  };
 
-    expect(holding).toEqual({ saved_s: 11490, savedPassengers: 45, lost_s: 100, lostPassengers: 2 });
-    expect(noHolding).toEqual({ saved_s: 100, savedPassengers: 2, lost_s: 11490, lostPassengers: 45 });
+  it("compares everyone at the run end and mirrors the no-holding side", () => {
+    const split = splitAt(PAIR, 600);
+
+    expect(split.holding).toEqual({ saved_s: 200, savedPassengers: 1, lost_s: 50, lostPassengers: 1 });
+    expect(split.noHolding).toEqual({ saved_s: 50, savedPassengers: 1, lost_s: 200, lostPassengers: 1 });
+    expect(split.unaffected).toBe(1);
+    // d left in neither run and e is in one run only
+    expect(split.notCompared).toBe(2);
+    // Net over every compared passenger, unaffected ones too: -200 + 50 - 10
+    expect(split.net_s).toBe(-160);
+  });
+
+  it("builds up during playback, using the current time for a run not left yet", () => {
+    // Nobody has left at 0 s
+    expect(splitAt(PAIR, 0).holding).toEqual({ saved_s: 0, savedPassengers: 0, lost_s: 0, lostPassengers: 0 });
+    expect(splitAt(PAIR, 0).notCompared).toBe(5);
+    // At 120 s a has left with holding only: D = 100 - 120 = -20, unaffected so far
+    expect(splitAt(PAIR, 120).unaffected).toBe(1);
+    // At 200 s: D = 100 - 200 = -100, better off by at least 100 s
+    expect(splitAt(PAIR, 200).holding.saved_s).toBe(100);
   });
 });
 
@@ -114,7 +139,10 @@ describe("formatDuration", () => {
     // Edge: 59.6 s rounds up into the minutes format
     [59.6, "1 min 0 s"],
     [255, "4 min 15 s"],
-    [11490, "3 h 11 min"],
+    // Hours round to the nearest minute, like seconds round: 3 h 11 min 30 s
+    [11490, "3 h 12 min"],
+    [5399.6, "1 h 30 min"],
+    [3599.6, "1 h 0 min"],
   ])("shows %s s as %s", (seconds, text) => {
     expect(formatDuration(seconds)).toBe(text);
   });
