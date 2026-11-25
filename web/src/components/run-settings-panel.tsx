@@ -193,7 +193,6 @@ export function RunSettingsPanel({ runner, provenance, onShowSources }: Readonly
             note={DISRUPTION_HELP}
             onChange={(preset) => update({
               disruption_preset: preset,
-              disruption_magnitude: preset === "uneven_headways" ? 0.3 : 60,
               disruption_enabled: preset === "platform_delay",
             })} />
           <ProvenanceBadge parameterKey="disruption_enabled" label="Disruption"
