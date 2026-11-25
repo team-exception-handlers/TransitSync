@@ -17,7 +17,12 @@ import {
   YAxis,
 } from "recharts";
 
-import { delayChartPoints, holdEventMarkers, holdsForDelayBucket } from "../lib/delaySeries";
+import {
+  delayChartPoints,
+  formatElapsedTime,
+  holdEventMarkers,
+  holdsForDelayBucket,
+} from "../lib/delaySeries";
 import { usePlaybackStore } from "../store/usePlaybackStore";
 import type { HoldEvent } from "../types/stationView";
 import "./delay-chart.css";
@@ -39,12 +44,12 @@ function DelayTooltip({
   const holds = holdsForDelayBucket(holdEvents, point.time_s, point.time_s + bucket_s);
   return (
     <div className="delay-tooltip" role="status">
-      <strong>{Math.floor(point.time_s / 60)}m {point.time_s % 60}s</strong>
+      <strong>{formatElapsedTime(point.time_s)}</strong>
       <span>{point.average_passenger_delay_s.toFixed(1)} s / passenger</span>
       <span>{point.passenger_count} passengers</span>
       {holds.slice(0, 3).map((event) => (
         <span key={`${event.time_s}-${event.train_id}`}>
-          Hold at {Math.floor(event.time_s / 60)}m {event.time_s % 60}s · {event.train_id} ·
+          Hold at {formatElapsedTime(event.time_s)} · {event.train_id} ·
           {" "}{event.applied_s.toFixed(1)} s
         </span>
       ))}

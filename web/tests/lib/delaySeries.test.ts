@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   delayChartPoints,
+  formatElapsedTime,
   holdEventMarkers,
   holdsForDelayBucket,
 } from "../../src/lib/delaySeries";
@@ -22,6 +23,13 @@ describe("delayChartPoints", () => {
 
     expect(points.map((point) => [point.time_s, point.average_passenger_delay_s]))
       .toStrictEqual([[0, 12.5], [300, 20]]);
+  });
+});
+
+describe("formatElapsedTime", () => {
+  it("rounds fractional event times to whole elapsed seconds", () => {
+    expect(formatElapsedTime(132.5)).toBe("2m 13s");
+    expect(formatElapsedTime(59.8)).toBe("1m 0s");
   });
 });
 
