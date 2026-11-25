@@ -9,8 +9,6 @@ from fastapi.testclient import TestClient
 
 import api.simulation_comparison as simulation_comparison
 from api.main import create_app
-from api.passenger_outcomes import PassengerOutcome, match_passengers
-from api.passenger_split import split_passengers
 from api.simulation_comparison import (
     CONTROL_ONLY_FIELDS,
     DEFAULT_HOLDING_STRATEGY,
@@ -107,22 +105,28 @@ def test_same_request_twice_gives_the_same_payload(comparison: dict):
     assert again.json() == comparison
 
 
-def test_split_covers_every_passenger_of_the_pair(comparison: dict):
-    # Rebuilt from the two sides in the payload, so the split is of this pair
-    held, baseline = (
-        [PassengerOutcome(**o) for o in comparison[side]["passenger_outcomes"]]
+def test_split_of_the_fixed_seed_pair_is_pinned(comparison: dict):
+    # Pinned for this scenario's seed, so a change to the IDs, the matching or
+    # the threshold shows up here as a deliberate update (review on #419)
+    assert comparison["passenger_split"] == {
+        "better_off": 45,
+        "worse_off": 0,
+        "unaffected": 1238,
+        "not_compared": 82,
+        "left_in_one_run": 0,
+        "unaffected_threshold_s": 30.0,
+        "total_time_saved_s": 11490.0,
+        "total_time_lost_s": 0.0,
+        "average_time_saved_s": pytest.approx(11490 / 45),
+        "average_time_lost_s": None,
+    }
+    # Every passenger of either run is in exactly one group
+    ids = {
+        outcome["passenger_id"]
         for side in ("holding", "no_holding")
-    )
-    matched = match_passengers(held, baseline)
-    split = comparison["passenger_split"]
-    assert split == split_passengers(matched, comparison["duration_s"]).model_dump()
-    groups = ("better_off", "worse_off", "unaffected", "not_compared")
-    assert sum(split[group] for group in groups) == len(matched)
-    # The holding side holds trains here, so someone catches a held train
-    assert split["better_off"] > 0
-    assert split["average_time_saved_s"] == pytest.approx(
-        split["total_time_saved_s"] / split["better_off"]
-    )
+        for outcome in comparison[side]["passenger_outcomes"]
+    }
+    assert 45 + 0 + 1238 + 82 == len(ids)
 
 
 def test_runs_that_are_not_a_pair_return_a_server_error(monkeypatch):

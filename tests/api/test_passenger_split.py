@@ -59,6 +59,8 @@ def test_split_counts_groups_and_averages_saved_and_lost_time():
     assert (split.better_off, split.worse_off, split.unaffected) == (2, 2, 3)
     assert split.not_compared == 2
     assert split.left_in_one_run == 0
+    # Sent with the split, so the Compare screen uses the same threshold
+    assert split.unaffected_threshold_s == 30
     assert split.total_time_saved_s == 160
     assert split.average_time_saved_s == 80
     assert split.total_time_lost_s == 121

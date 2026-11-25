@@ -4,7 +4,9 @@
 A Facade over ``SimulationRunService``: both runs share its cache and the
 scenario's master seed (common random numbers), so they differ only in holding.
 The response also splits the pair's passengers into better off, worse off and
-unaffected (US-6.3, #285).
+unaffected (US-6.3, #285). That split is from one seed. #285 names the US-6.2
+replicated comparison (#274), which does not exist yet; it should call
+``split_passengers`` once per replication rather than reuse this response.
 """
 
 from __future__ import annotations
