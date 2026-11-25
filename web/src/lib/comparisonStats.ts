@@ -20,8 +20,14 @@ export interface ComparisonStats {
 /** Key for one train at one platform; a train can visit several platforms. */
 const visitKey = (trainId: string, platformId: string) => `${trainId}|${platformId}`;
 
+// Loaded runs are never changed, so each run's departures are sorted once.
+// Weak keys let a replaced run be garbage-collected.
+const departuresByRun = new WeakMap<StationViewData, Map<string, number[]>>();
+
 /** Departure times of each train at each platform, in time order. */
 function departuresByVisit(run: StationViewData): Map<string, number[]> {
+  const cached = departuresByRun.get(run);
+  if (cached) return cached;
   const visits = new Map<string, number[]>();
   for (const event of run.train_events) {
     if (event.event_type !== "train_departure") continue;
@@ -31,8 +37,13 @@ function departuresByVisit(run: StationViewData): Map<string, number[]> {
     visits.set(key, times);
   }
   for (const times of visits.values()) times.sort((a, b) => a - b);
+  departuresByRun.set(run, visits);
   return visits;
 }
+
+/** Platform each connection transfers to, where its misses are observed. */
+const transferPlatforms = (run: StationViewData) =>
+  new Map(run.connections.map((item) => [item.id, item.to_platform_id]));
 
 /**
  * When the passenger's first missed train left the transfer platform. The
@@ -62,8 +73,7 @@ export function comparisonStatsAt(run: StationViewData, time_s: number): Compari
   const holdEvents = run.time_series?.hold_events ?? [];
   const started = holdEvents.filter((hold) => hold.time_s <= time_s);
   const holdingNow = started.some((hold) => time_s < hold.time_s + hold.applied_s);
-  // The platform each connection transfers to, where its misses are observed.
-  const toPlatform = new Map(run.connections.map((item) => [item.id, item.to_platform_id]));
+  const toPlatform = transferPlatforms(run);
   const departures = departuresByVisit(run);
   let made = 0;
   let missed = 0;
@@ -76,6 +86,15 @@ export function comparisonStatsAt(run: StationViewData, time_s: number): Compari
     }
   }
   return { holdingNow, holds: started.length, made, missed };
+}
+
+/**
+ * When one passenger's first missed train left in `run`, or null if they have
+ * not missed one. The followed passenger's journey uses this so its miss
+ * shows at the same moment the panel's missed count goes up (#239).
+ */
+export function missedAt(run: StationViewData, outcome: PassengerOutcome): number | null {
+  return firstMissAt(outcome, transferPlatforms(run), departuresByVisit(run));
 }
 
 /** Time one side saved and lost passengers against the other run (US-4.3). */
