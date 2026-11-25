@@ -73,6 +73,7 @@ class ObservationBuilder:
             for group in source.incoming_transfers()
         )
         irregularity = getattr(trains, "service_irregularity", None)
+        current_visit = getattr(trains, "current_visit_state", None)
         visits = trains.future_visits(decision.time_s, until_s) if planning else ()
         references = getattr(trains, "headway_visits", None)
         # Keep later-service metadata separate from the bounded decision view.
@@ -89,6 +90,9 @@ class ObservationBuilder:
             station_id=decision.station_id,
             platform_id=decision.platform_id,
             scheduled_departure_s=decision.scheduled_s,
+            current_visit=current_visit(decision)
+            if current_visit is not None
+            else None,
             trains=trains.train_states(),
             platforms=trains.platform_states(),
             incoming_transfers=transfers,

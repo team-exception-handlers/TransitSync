@@ -78,6 +78,19 @@ class TrainState:
 
 
 @dataclass(frozen=True, slots=True)
+class CurrentVisitState:
+    """Value Object for the current stop's line and origin flag (#206, US-2.4).
+
+    ``TrainState`` describes the next stop; this describes the occupied stop.
+    Gap, suspensions and past departures use the snapshot's existing fields.
+    All times are in seconds (Mathematical Foundations section 6).
+    """
+
+    line_id: str
+    is_trip_origin: bool
+
+
+@dataclass(frozen=True, slots=True)
 class PlatformState:
     """Waiting passengers; ``last_departure_s`` is ``None`` before the first."""
 
@@ -112,6 +125,8 @@ class ObservationSnapshot:
     including at a final stop. ``TrainState`` describes each train's next stop.
     ``service_irregularity`` is the deciding service's rolling normalized
     headway deviation, or ``None`` until a valid gap has been measured.
+    ``current_visit`` gives the current stop's line and origin flag, or ``None``
+    for older sources and planning observations of other visits.
     Raises ``ValueError`` if a collection is not a tuple.
     """
 
@@ -128,6 +143,7 @@ class ObservationSnapshot:
     minimum_gap_s: float = 90.0
     suspensions: tuple[LineSuspension, ...] = ()
     headway_visits: tuple[FutureVisit, ...] = ()
+    current_visit: CurrentVisitState | None = None
 
     def __post_init__(self) -> None:
         # Frozen only stops reassignment; a list or deque could still be changed

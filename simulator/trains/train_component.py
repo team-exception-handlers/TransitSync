@@ -24,7 +24,7 @@ from typing import Any
 
 from simulator.control.decision import DecisionPipeline
 from simulator.control.decision_audit import EncodedDecisionRecord
-from simulator.control.interface import PlatformState, TrainState
+from simulator.control.interface import CurrentVisitState, PlatformState, TrainState
 from simulator.control.irregularity import ServiceIrregularity
 from simulator.control.planning import FutureVisit
 from simulator.control.settings import ControlSettings
@@ -398,6 +398,26 @@ class TrainComponent:
             )
             for platform in sorted(self._visits)
         )
+
+    def current_visit_state(self, decision: DepartureDue) -> CurrentVisitState | None:
+        """Copy the occupied stop's line and origin flag (#206).
+
+        Return None unless the decision matches the occupied visit.
+        Match both platform and scheduled departure, in seconds, to distinguish
+        separate visits to the same platform.
+        """
+        train = self.trains.get(decision.train_id)
+        if train is None or train.id in self._finished:
+            return None
+        visit = (train.id, train.current_trip_index, train.current_stop_index)
+        stop = self._stop(visit)
+        if (
+            stop.platform_id != decision.platform_id
+            or stop.departure_s != decision.scheduled_s
+            or self._occupied_platforms.get(stop.platform_id) != visit
+        ):
+            return None
+        return CurrentVisitState(train.line_id, visit[2] == 0)
 
     def future_visits(
         self, now_s: float, until_s: float = math.inf
