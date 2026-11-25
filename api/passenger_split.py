@@ -4,6 +4,8 @@
 For each passenger D = Y_hold - Y_no_hold (Mathematical Foundations section 9),
 where Y is when they left the interchange on their connecting train. Negative
 D means holding got them out sooner. Changes within the threshold are noise.
+Someone still waiting when one run ends leaves after it there, so the run end
+stands in for that Y and their D is a lower bound on the real change.
 """
 
 import math
@@ -15,7 +17,8 @@ from pydantic import BaseModel, Field
 
 from api.passenger_outcomes import MatchedPassenger
 
-# US-6.3 threshold: a change of 30 s or less counts as unaffected
+# A change of 30 s or less counts as unaffected. Assumed until the team
+# confirms it (US-6.3); its label and source are in parameter_provenance.json
 UNAFFECTED_THRESHOLD_S = 30.0
 
 Group = Literal["better_off", "worse_off", "unaffected"]
@@ -28,7 +31,12 @@ class PassengerSplit(BaseModel):
     worse_off: int
     unaffected: int
     not_compared: int = Field(
-        description="Passengers without a departure in one of the runs, so D is unknown"
+        description="Passengers missing from a run or who left in neither, so D "
+        "is unknown"
+    )
+    left_in_one_run: int = Field(
+        description="Passengers who left in one run only; they are in a group "
+        "above, with the run end as their other departure"
     )
     total_time_saved_s: float
     total_time_lost_s: float
@@ -36,15 +44,18 @@ class PassengerSplit(BaseModel):
     average_time_lost_s: float | None
 
 
-def outcome_difference(passenger: MatchedPassenger) -> float | None:
-    """D in seconds, or None when either run has no departure for them."""
+def outcome_difference(passenger: MatchedPassenger, run_end_s: float) -> float | None:
+    """D in seconds, or None when they are missing from a run or left in neither."""
     held, baseline = passenger.selected_strategy, passenger.without_holding
-    # Absent from a run, or still waiting at its end: there is no Y to compare
     if held is None or baseline is None:
         return None
-    if held.departure_s is None or baseline.departure_s is None:
+    if held.departure_s is None and baseline.departure_s is None:
         return None
-    return held.departure_s - baseline.departure_s
+    # Still waiting at one run's end: they leave after run_end_s in that run,
+    # so using it understates how much they gained or lost, never overstates
+    held_s = run_end_s if held.departure_s is None else held.departure_s
+    baseline_s = run_end_s if baseline.departure_s is None else baseline.departure_s
+    return held_s - baseline_s
 
 
 def classify(difference_s: float) -> Group:
@@ -56,9 +67,22 @@ def classify(difference_s: float) -> Group:
     return "unaffected"
 
 
-def split_passengers(matched: Sequence[MatchedPassenger]) -> PassengerSplit:
-    """Count each group and total and average the time saved and lost."""
-    differences = [outcome_difference(passenger) for passenger in matched]
+def _left_in_one_run(passenger: MatchedPassenger) -> bool:
+    """True when exactly one run has a departure for this passenger."""
+    held, baseline = passenger.selected_strategy, passenger.without_holding
+    if held is None or baseline is None:
+        return False
+    return (held.departure_s is None) != (baseline.departure_s is None)
+
+
+def split_passengers(
+    matched: Sequence[MatchedPassenger], run_end_s: float
+) -> PassengerSplit:
+    """Count each group and total and average the time saved and lost.
+
+    ``run_end_s`` is when both runs stop, in seconds from their start.
+    """
+    differences = [outcome_difference(passenger, run_end_s) for passenger in matched]
     known = [d for d in differences if d is not None]
     # Saved time is stored positive, so totals and averages read as gains
     saved = [-d for d in known if classify(d) == "better_off"]
@@ -68,6 +92,7 @@ def split_passengers(matched: Sequence[MatchedPassenger]) -> PassengerSplit:
         worse_off=len(lost),
         unaffected=len(known) - len(saved) - len(lost),
         not_compared=len(differences) - len(known),
+        left_in_one_run=sum(_left_in_one_run(passenger) for passenger in matched),
         total_time_saved_s=math.fsum(saved),
         total_time_lost_s=math.fsum(lost),
         average_time_saved_s=fmean(saved) if saved else None,
