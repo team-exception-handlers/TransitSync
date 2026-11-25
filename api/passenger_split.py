@@ -38,6 +38,10 @@ class PassengerSplit(BaseModel):
         description="Passengers who left in one run only; they are in a group "
         "above, with the run end as their other departure"
     )
+    # Sent so the Compare screen replays the split with the same value (#242)
+    unaffected_threshold_s: float = Field(
+        description="Largest change, either way, that still counts as unaffected"
+    )
     total_time_saved_s: float
     total_time_lost_s: float
     average_time_saved_s: float | None
@@ -93,6 +97,7 @@ def split_passengers(
         unaffected=len(known) - len(saved) - len(lost),
         not_compared=len(differences) - len(known),
         left_in_one_run=sum(_left_in_one_run(passenger) for passenger in matched),
+        unaffected_threshold_s=UNAFFECTED_THRESHOLD_S,
         total_time_saved_s=math.fsum(saved),
         total_time_lost_s=math.fsum(lost),
         average_time_saved_s=fmean(saved) if saved else None,

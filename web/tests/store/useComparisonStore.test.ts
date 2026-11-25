@@ -15,6 +15,12 @@ function pairFor(strategy: string, holdingDuration = 360): SimulationComparison 
     noHolding: stationViewData,
     holdingStrategy: strategy,
     startingConditions: { serviceDate: "2026-10-05", masterSeed: 42, duration_s: 360 },
+    passengerSplit: {
+      better_off: 3, worse_off: 1, unaffected: 10, not_compared: 0,
+      left_in_one_run: 0, unaffected_threshold_s: 30,
+      total_time_saved_s: 300, total_time_lost_s: 40,
+      average_time_saved_s: 100, average_time_lost_s: 40,
+    },
   };
 }
 
@@ -46,6 +52,7 @@ describe("useComparisonStore", () => {
     expect(state.holding).not.toBe(state.noHolding);
     expect(state.holdingStrategy).toBe("connection_protection");
     expect(state.startingConditions?.masterSeed).toBe(42);
+    expect(state.passengerSplit?.better_off).toBe(3);
     expect(state.connectionId).toBe(CONNECTION);
   });
 
