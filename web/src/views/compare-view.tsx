@@ -6,15 +6,17 @@
  * Both runs come from one `/simulation/comparison` request, so they share the
  * scenario's service date and master seed (common random numbers). Both
  * canvases read the time from `usePlaybackStore`, so the one playback bar
- * below them plays, pauses, rewinds and seeks both panels together.
+ * below them plays, pauses, rewinds and seeks both panels together. A
+ * passenger clicked in either panel is followed in both (US-4.2).
  */
 import { useEffect } from "react";
 
 import { ComparisonPanelStats, ComparisonSplitSummary } from "../components/comparison-panel-stats";
+import { FollowedPassengerBar, PassengerJourney } from "../components/passenger-journey";
 import { PlaybackControls } from "../components/playback-controls";
 import { PlaybackTimeline } from "../components/PlaybackTimeline";
 import { SpeedSelector } from "../components/speed-selector";
-import { StationCanvas } from "../components/station-canvas";
+import { StationCanvas, type PassengerSelection } from "../components/station-canvas";
 import type { ComparedPair } from "../lib/comparisonStats";
 import { DEFAULT_RUN_SETTINGS, strategyLabel } from "../lib/run-settings";
 import type { ComparisonRunner } from "../lib/simulation-api";
@@ -66,15 +68,18 @@ interface ComparisonPanelProps {
   run: StationViewData;
   pair?: ComparedPair;
   side: "holding" | "noHolding";
+  /** The pick both panels share, so one click rings the passenger in both. */
+  selection: PassengerSelection;
 }
 
-/** One labelled side: its view-only canvas and its holding stats. */
-function ComparisonPanel({ title, run, pair, side }: Readonly<ComparisonPanelProps>) {
+/** One labelled side: its canvas, its holding stats and the followed passenger. */
+function ComparisonPanel({ title, run, pair, side, selection }: Readonly<ComparisonPanelProps>) {
   return (
     <section className="panel comparison-panel" aria-label={title}>
       <h2 className="comparison-panel-title">{title}</h2>
-      <StationCanvas data={run} interactive={false} label={title} />
+      <StationCanvas data={run} selection={selection} label={title} />
       <ComparisonPanelStats run={run} pair={pair} side={side} />
+      <PassengerJourney run={run} />
     </section>
   );
 }
@@ -85,6 +90,9 @@ export function CompareView({ runner }: Readonly<CompareViewProps>) {
   // Whole-store subscription: every field here is shown, and it only changes
   // on a load, not on each clock tick.
   const comparison = useComparisonStore();
+  const selection: PassengerSelection = {
+    passengerId: comparison.selectedPassengerId, select: comparison.selectPassenger,
+  };
   // Heading names the connection the shared selector picked.
   const selectedConnectionId = usePlaybackStore((state) => state.selectedConnectionId);
   const connectionLabel = usePlaybackStore((state) =>
@@ -132,12 +140,14 @@ export function CompareView({ runner }: Readonly<CompareViewProps>) {
 
       {pairIsForSelection && holding && noHolding && holdingStrategy && (
         <div className="comparison-panels">
-          <ComparisonPanel title="No holding" run={noHolding} pair={pair} side="noHolding" />
+          <ComparisonPanel
+            title="No holding" run={noHolding} pair={pair} side="noHolding" selection={selection} />
           <ComparisonPanel
             title={`With holding · ${strategyLabel(holdingStrategy)}`} run={holding}
-            pair={pair} side="holding" />
+            pair={pair} side="holding" selection={selection} />
         </div>
       )}
+      {pairIsForSelection && holding && noHolding && <FollowedPassengerBar />}
       {pairIsForSelection && pair && <ComparisonSplitSummary pair={pair} />}
 
       {/* The same controls as the station view: they drive the one shared

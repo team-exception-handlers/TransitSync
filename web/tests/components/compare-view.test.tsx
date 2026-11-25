@@ -71,6 +71,12 @@ function panelTimes(): string[] {
   });
 }
 
+/** The canvas inside one panel. */
+const canvasIn = (name: string) => within(panel(name)).getByLabelText(/simulation seconds/);
+/** The followed passenger's value for one readout row in one panel. */
+const journeyIn = (name: string, row: string) =>
+  within(panel(name)).getByText(row).nextSibling?.textContent;
+
 /** Render the app on the Compare screen and wait for the pair to appear. */
 async function openCompare(runner: ComparisonRunner | null = vi.fn<ComparisonRunner>(async () => PAIR)) {
   render(<App runLoader={null} comparisonRunner={runner} />);
@@ -205,6 +211,54 @@ describe("CompareView", () => {
     expect(screen.queryByRole("region", { name: "No holding" })).toBeNull();
     expect(screen.queryByRole("region", { name: HOLDING_TITLE })).toBeNull();
     expect(screen.queryByText(/Same starting conditions/)).toBeNull();
+  });
+
+  it("follows a passenger clicked in one panel in both panels as playback runs (#238, #239)", async () => {
+    await openCompare();
+    expect(screen.getByText("Click a passenger in either panel to follow them in both runs.")).toBeDefined();
+    // p-001 is walking at (389, 135) at t = 85 in the shared fixture; jsdom draws unscaled
+    act(() => usePlaybackStore.getState().seek(85));
+
+    fireEvent.click(canvasIn("No holding"), { clientX: 391, clientY: 137 });
+
+    for (const name of ["No holding", HOLDING_TITLE]) {
+      expect(canvasIn(name).getAttribute("aria-label")).toContain("following passenger p-001");
+      expect(journeyIn(name, "Where now")).toBe("Walking the transfer corridor");
+      expect(journeyIn(name, "Train or connection")).toBe("Transfer at McGill");
+      expect(journeyIn(name, "Connection outcome")).toBe("Not decided yet");
+    }
+    expect(screen.getByText(/Following passenger/).textContent).toContain("p-001 in both runs");
+
+    // They board at 170 s, and the highlight stays through playback
+    act(() => usePlaybackStore.getState().seek(170));
+    expect(journeyIn(HOLDING_TITLE, "Where now")).toBe("On board, waiting to leave");
+    expect(canvasIn(HOLDING_TITLE).getAttribute("aria-label")).toContain("following passenger p-001");
+  });
+
+  it("stops following in both panels with the Stop following button", async () => {
+    await openCompare();
+    act(() => useComparisonStore.getState().selectPassenger("p-001"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Stop following" }));
+
+    expect(useComparisonStore.getState().selectedPassengerId).toBeNull();
+    for (const name of ["No holding", HOLDING_TITLE]) {
+      expect(canvasIn(name).getAttribute("aria-label")).not.toContain("following");
+      expect(within(panel(name)).queryByText("Where now")).toBeNull();
+    }
+  });
+
+  // Edge: the followed passenger is in the no-holding run only
+  it("says the passenger is not in a run that does not have them", async () => {
+    const holding = { ...HOLDING_RUN, passenger_tracks: HOLDING_RUN.passenger_tracks.slice(1) };
+    await openCompare(vi.fn<ComparisonRunner>(async () => ({ ...PAIR, holding })));
+    act(() => usePlaybackStore.getState().seek(85));
+
+    fireEvent.click(canvasIn("No holding"), { clientX: 391, clientY: 137 });
+
+    expect(journeyIn("No holding", "Where now")).toBe("Walking the transfer corridor");
+    expect(journeyIn(HOLDING_TITLE, "Where now")).toBe("Not in this run");
+    expect(journeyIn(HOLDING_TITLE, "Connection outcome")).toBe("Not in this run");
   });
 
   it("reports a failed load as an alert", async () => {

@@ -42,6 +42,13 @@
 .comparison-stats-values dt { font-size: 11px; color: #5b6168; }
 .comparison-stats-values dd { margin: 2px 0 0; font-family: "IBM Plex Mono", monospace; font-size: 16px; font-weight: 600; }
 
+/* Followed passenger (US-4.2): a lighter row under the stats, and the long
+   keyed ID wraps instead of widening the page. */
+.passenger-journey { padding: 0 16px 12px; }
+.passenger-journey dd { font-family: inherit; font-size: 14px; }
+.followed-passenger code { overflow-wrap: anywhere; }
+.text-button { padding: 0; border: 0; background: none; color: #1a5fb4; font: inherit; text-decoration: underline; cursor: pointer; }
+
 @media (max-width: 1400px) {
   .content--compare .playback-region { flex-wrap: wrap; }
 }
