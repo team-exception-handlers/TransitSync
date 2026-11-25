@@ -72,6 +72,62 @@ def test_no_control_selection_falls_back_to_connection_protection():
     assert no_holding.strategy == "no_control"
 
 
+def test_paired_uneven_headways_requests_share_default_cv():
+    """Both comparison runs retain the same 0.3 CV when the caller omits it."""
+    request = SimulationRunRequest(
+        connection_id="mcgill-rem-green",
+        strategy="connection_protection",
+        disruption_preset="uneven_headways",
+        disruption_time_s=300,
+    )
+
+    holding, no_holding = paired_requests(request)
+
+    assert holding.disruption_magnitude == 0.3
+    assert no_holding.disruption_magnitude == 0.3
+    assert holding.disruption_preset == no_holding.disruption_preset
+    assert holding.disruption_time_s == no_holding.disruption_time_s
+    assert no_holding.strategy == "no_control"
+
+
+def test_uneven_headways_comparison_without_magnitude_returns_both_runs(
+    client: TestClient,
+):
+    """The endpoint accepts an omitted CV and shares its perturbed schedule."""
+    response = client.post(
+        "/simulation/comparison",
+        json={
+            "connection_id": "mcgill-rem-green",
+            "strategy": "connection_protection",
+            "passenger_flow": "Low",
+            "disruption_preset": "uneven_headways",
+            "disruption_time_s": 300,
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    holding_schedules = sorted(
+        (
+            event["train_id"],
+            event["event_type"],
+            event["station_id"],
+            event["scheduled_s"],
+        )
+        for event in result["holding"]["train_events"]
+    )
+    baseline_schedules = sorted(
+        (
+            event["train_id"],
+            event["event_type"],
+            event["station_id"],
+            event["scheduled_s"],
+        )
+        for event in result["no_holding"]["train_events"]
+    )
+    assert holding_schedules == baseline_schedules
+
+
 def test_comparison_shares_starting_conditions(comparison: dict):
     assert comparison["holding_strategy"] == "connection_protection"
     assert comparison["service_date"] == "2026-10-05"

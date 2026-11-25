@@ -162,7 +162,11 @@ def _stop_trip(trip_id: str, platform_id: str, arrival_s: float, departure_s: fl
 
 
 def _route_trip(
-    trip_id: str, route_id: str, platform_id: str, relative_departure_s: float
+    trip_id: str,
+    route_id: str,
+    platform_id: str,
+    relative_departure_s: float,
+    direction_id: int = 0,
 ):
     """Build one single-stop trip with a 30-second dwell at the chosen platform."""
     arrival_s = START_S + relative_departure_s - 30
@@ -176,6 +180,7 @@ def _route_trip(
         feed_id="stm",
         trip_id=trip_id,
         route_id=route_id,
+        direction_id=direction_id,
         visits=(visit,),
     )
 
@@ -302,9 +307,30 @@ def test_uneven_headways_perturbs_green_line_dispatch_times(
     green_one = _route_trip("green-one", "1", "green_mcgill_0", 90)
     green_two = _route_trip("green-two", "1", "green_mcgill_0", 390)
     green_three = _route_trip("green-three", "1", "green_mcgill_0", 690)
+    green_reverse_one = _route_trip(
+        "green-reverse-one", "1", "green_mcgill_1", 90, direction_id=1
+    )
+    green_reverse_two = _route_trip(
+        "green-reverse-two", "1", "green_mcgill_1", 390, direction_id=1
+    )
+    green_reverse_three = _route_trip(
+        "green-reverse-three", "1", "green_mcgill_1", 690, direction_id=1
+    )
+    green_after_horizon = _route_trip(
+        "green-after-horizon", "1", "green_mcgill_0", 3990
+    )
     rem = _route_trip("rem-one", "S1", "rem_mcgill_0", 150)
     network = SimpleNamespace(
-        trips_for_date=lambda _: (green_one, green_two, green_three, rem)
+        trips_for_date=lambda _: (
+            green_one,
+            green_two,
+            green_three,
+            green_reverse_one,
+            green_reverse_two,
+            green_reverse_three,
+            green_after_horizon,
+            rem,
+        )
     )
     scenario = SimpleNamespace(
         service_date=None,
@@ -357,7 +383,11 @@ def test_uneven_headways_perturbs_green_line_dispatch_times(
     assert green_departures["stm:green-one"] == 90.0
     assert green_departures["stm:green-two"] == 390.0
     assert green_departures["stm:green-three"] != 690.0
+    assert green_departures["stm:green-reverse-one"] == 90.0
+    assert green_departures["stm:green-reverse-two"] == 390.0
+    assert green_departures["stm:green-reverse-three"] != 690.0
     assert green_departures["stm:green-three"] != lower_departures["stm:green-three"]
+    assert green_departures["stm:green-after-horizon"] == 3990.0
     assert preset_departures == green_departures
     assert green_departures["stm:rem-one"] == 150.0
 
