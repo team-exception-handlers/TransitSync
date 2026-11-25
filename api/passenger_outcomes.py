@@ -7,7 +7,7 @@ from collections import defaultdict
 from collections.abc import Sequence
 from typing import Literal
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field
 
 from api.station_layout import Connection
 
@@ -43,16 +43,14 @@ class MatchedPassenger(BaseModel):
 
 
 class PassengerComparison(BaseModel):
-    """Passenger outcomes for the no-holding baseline and the selected strategy."""
+    """Each passenger's outcome with the selected strategy and without holding.
 
-    without_holding: list[PassengerOutcome]
-    selected_strategy: list[PassengerOutcome]
+    The endpoint builds the list with ``match_passengers`` while it handles the
+    request, so runs that are not a pair fail there and are logged. Each record
+    holds both outcomes, so the response sends every outcome once.
+    """
 
-    @computed_field
-    @property
-    def matched_passengers(self) -> list[MatchedPassenger]:
-        """Each passenger's outcome in both runs, in passenger ID order."""
-        return match_passengers(self.selected_strategy, self.without_holding)
+    matched_passengers: list[MatchedPassenger]
 
 
 def _by_id(outcomes: Sequence[PassengerOutcome]) -> dict[str, PassengerOutcome]:
