@@ -68,7 +68,7 @@ def test_repeat_visits_of_one_train_are_separate_groups():
 
 
 def mcgill_ids(arrivals):
-    """Run the feeder arrivals; return the IDs in McGill's group, in ID order."""
+    """Run the feeder arrivals; return the IDs in McGill's group, in batch order."""
     component = TransferComponent(
         [
             route(),
@@ -86,7 +86,9 @@ def mcgill_ids(arrivals):
     advance(component, scheduler, 2000)
     group = "passenger-group-mcgill-rem-100-1"
     walks = component.walk_records().items()
-    return sorted(pid for pid, walk in walks if walk.group_id == group)
+    ids = [pid for pid, walk in walks if walk.group_id == group]
+    # By the place in the batch, the last part of the ID ("...|10" after "...|2")
+    return sorted(ids, key=lambda pid: int(pid.rsplit("|", 1)[1]))
 
 
 def test_passenger_ids_ignore_groups_drawn_before_them():
@@ -99,6 +101,6 @@ def test_passenger_ids_ignore_groups_drawn_before_them():
     )
     assert after_other == alone
     assert alone[:2] == [
-        "passenger-mcgill-rem-100-1-0001",
-        "passenger-mcgill-rem-100-1-0002",
+        "passenger-mcgill|rem-100|1|1",
+        "passenger-mcgill|rem-100|1|2",
     ]

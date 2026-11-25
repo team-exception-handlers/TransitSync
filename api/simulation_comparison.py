@@ -81,7 +81,7 @@ def run_comparison(
     return SimulationComparisonResponse(
         holding=holding,
         no_holding=no_holding,
-        passenger_split=split_passengers(matched),
+        passenger_split=split_passengers(matched, float(scenario.duration_s)),
         holding_strategy=holding_request.strategy,
         service_date=scenario.service_date.isoformat(),
         master_seed=scenario.master_seed,

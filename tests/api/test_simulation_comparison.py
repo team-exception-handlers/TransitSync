@@ -115,7 +115,7 @@ def test_split_covers_every_passenger_of_the_pair(comparison: dict):
     )
     matched = match_passengers(held, baseline)
     split = comparison["passenger_split"]
-    assert split == split_passengers(matched).model_dump()
+    assert split == split_passengers(matched, comparison["duration_s"]).model_dump()
     groups = ("better_off", "worse_off", "unaffected", "not_compared")
     assert sum(split[group] for group in groups) == len(matched)
     # The holding side holds trains here, so someone catches a held train

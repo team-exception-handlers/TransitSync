@@ -14,6 +14,9 @@ from simulator.engine.random_streams import StreamManager
 from simulator.passengers.demand import DemandProfile
 from simulator.passengers.passenger import Passenger
 
+# Joins a keyed passenger's batch key and index; key parts may not contain it
+ID_SEPARATOR = "|"
+
 
 def _canonical_destination(destination: object, origin: str) -> str:
     """Trim one destination and require it to differ from the origin."""
@@ -72,7 +75,9 @@ class PassengerGenerator:
 
     Use one generator per run to keep IDs unique across origins and batches.
     Multiple generators need distinct ``id_prefix`` values. Unkeyed batches use
-    a counter of at least 12 digits; keyed batches use their key, one per batch.
+    a counter of at least 12 digits, so their IDs sort in creation order. Keyed
+    batches use their key, so their IDs are unique and the same in paired runs,
+    but text order is not creation order (``rem-100`` sorts before ``rem-20``).
     Time windows are supplied by the caller, which is responsible for avoiding
     double-counting demand across repeated or overlapping windows for the same
     passenger source.
@@ -141,8 +146,12 @@ class PassengerGenerator:
 
         A run-wide counter shifts every later ID when a hold changes one
         group's size, so paired runs would give one person two IDs (#240).
+        Parts are joined with ``|``, which no train or station ID in the feeds
+        uses (GTFS trip IDs have ``-`` and ``:``), so keys never share an ID.
         """
         if not key:
             return f"{self._id_prefix}-{self._next_id + index:012d}"
-        batch = "-".join(str(part) for part in key)
-        return f"{self._id_prefix}-{batch}-{index + 1:04d}"
+        parts = [str(part) for part in key]
+        if any(ID_SEPARATOR in part for part in parts):
+            raise ValueError(f"batch key parts must not contain {ID_SEPARATOR!r}")
+        return f"{self._id_prefix}-" + ID_SEPARATOR.join([*parts, str(index + 1)])

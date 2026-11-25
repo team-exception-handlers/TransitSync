@@ -42,13 +42,15 @@ def test_runs_that_are_not_a_pair_are_rejected(held, baseline, message):
         match_passengers(held, baseline)
 
 
-def test_comparison_serializes_the_matched_passengers():
-    comparison = PassengerComparison(
-        without_holding=[outcome("a", status="missed")],
-        selected_strategy=[outcome("a", status="made")],
-    ).model_dump()
+def test_comparison_sends_each_outcome_once_inside_its_match():
+    matched = match_passengers(
+        [outcome("a", status="made")], [outcome("a", status="missed")]
+    )
+    comparison = PassengerComparison(matched_passengers=matched).model_dump()
 
     [matched] = comparison["matched_passengers"]
     assert matched["passenger_id"] == "a"
     assert matched["selected_strategy"]["status"] == "made"
     assert matched["without_holding"]["status"] == "missed"
+    # The two outcome lists are gone, so nothing is sent twice (review on #418)
+    assert set(comparison) == {"matched_passengers"}
