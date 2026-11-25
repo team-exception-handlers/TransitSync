@@ -57,7 +57,11 @@ web/tests/components/run-settings-panel.test.tsx, AI_USAGE.md.
   checks passed, and the changed Python files passed the extended Ruff rules.
 - **Corrections:** Review found that the uneven-headways control ignored its start and magnitude,
   and the hover tooltip omitted the hold details requested by #289. Both gaps now have regression
-  tests; the CV is bounded at 1 and defaults to the named preset's 0.3 when omitted.
+  tests; the CV is bounded at 1 and defaults to the named preset's 0.3 when omitted. PR #426
+  review also caught mixed-direction departures failing the spacing validator and comparison
+  baselines losing the omitted-CV default; schedules are now perturbed per direction within the
+  run horizon, and paired comparisons retain the same seeded CV. Tooltip event times round to
+  whole seconds, and the settings store is the sole source of preset-specific magnitude defaults.
 
 Hash-locked Python dependencies and non-root nginx (no issue): Claude (Claude Code, Anthropic), 50% or more AI-generated.
 Fixes the two remaining SonarQube security findings. `docker:S8544`: the root
