@@ -4,8 +4,9 @@
  * control's range, the backend defaults, and the request body builder.
  *
  * The limits copy api/simulation_run.py (SimulationRunRequest). The five
- * scenario parameters copy PARAMETER_RANGES in simulator/scenario_parameters.py;
- * tests/simulator/test_scenario_parameters.py fails if the two drift. Keeping
+ * scenario parameters copy PARAMETER_RANGES in simulator/scenario_parameters.py,
+ * and their defaults copy ScenarioParameters and the default maximum hold;
+ * tests/simulator/test_web_parameter_ranges.py fails if either drifts. Keeping
  * them here, next to the builder, means the sliders, the store and the request
  * can never disagree about what the API accepts.
  */

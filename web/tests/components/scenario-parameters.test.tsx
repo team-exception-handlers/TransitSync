@@ -94,4 +94,32 @@ describe("parameter controls", () => {
     expect(draft().train_headway_s).toBeNull();
     expect(screen.queryByRole("slider", { name: /Time between trains/ })).toBeNull();
   });
+
+  it("drops a bad headway entry when switching back to Timetable", () => {
+    render(<RunSettingsPanel runner={runner} />);
+    fireEvent.click(screen.getByRole("button", { name: "Custom" }));
+
+    fireEvent.change(entry("Time between trains value"), { target: { value: "125" } });
+    expect(runButton().disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Timetable" }));
+
+    // The slider is gone, so its error must not keep blocking the run
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(runButton().disabled).toBe(false);
+  });
+
+  it("clears a bad typed value on Reset even when the stored value is the default", () => {
+    render(<RunSettingsPanel runner={runner} />);
+
+    fireEvent.change(entry("Transfer volume value"), { target: { value: "250" } });
+    expect(draft().transfer_volume).toBe(60);
+    expect(runButton().disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
+
+    expect(entry("Transfer volume value").value).toBe("60");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(runButton().disabled).toBe(false);
+  });
 });

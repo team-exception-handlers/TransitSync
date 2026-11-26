@@ -68,9 +68,12 @@ export function ParameterControls({ provenance, onEntryError }: Readonly<Paramet
         value={headway === null ? "timetable" : "custom"}
         format={(mode) => (mode === "timetable" ? "Timetable" : "Custom")}
         note={HELP.train_frequency}
-        onChange={(mode) => update({
-          train_headway_s: mode === "timetable" ? null : DEFAULT_CUSTOM_HEADWAY_S,
-        })} />
+        onChange={(mode) => {
+          // Back to Timetable removes the headway slider, so its typed-entry
+          // error must go too, or it would keep "Run scenario" disabled.
+          if (mode === "timetable") onEntryError("train_headway_s", null);
+          update({ train_headway_s: mode === "timetable" ? null : DEFAULT_CUSTOM_HEADWAY_S });
+        }} />
       {/* The slider only exists for a custom headway, so it can never send one by accident. */}
       {headway !== null && (
         <SettingSlider label="Time between trains" value={headway}
