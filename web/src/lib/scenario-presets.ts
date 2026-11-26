@@ -33,6 +33,7 @@ function isPreset(value: unknown): value is ScenarioPreset {
   return typeof item.name === "string" && item.name.length > 0
     && typeof item.label === "string" && item.label.length > 0
     && typeof item.start_time === "string"
+    && Number.isFinite(item.duration_s) && (item.duration_s as number) > 0
     && isConditions(item.conditions);
 }
 
@@ -78,4 +79,16 @@ export function presetPatch(preset: ScenarioPreset): Partial<RunSettings> {
 /** "07:00" from "07:00:00". */
 export function presetStartLabel(preset: ScenarioPreset): string {
   return preset.start_time.slice(0, 5);
+}
+
+/**
+ * The preset's window length in words, from the API's `duration_s`, so a
+ * longer preset is never described as "one hour": "one hour", "2 hours",
+ * "90 min" (rounded to the minute when it is not a whole number of hours).
+ */
+export function presetDurationLabel(preset: ScenarioPreset): string {
+  const hours = preset.duration_s / 3600;
+  if (hours === 1) return "one hour";
+  if (Number.isInteger(hours)) return `${hours} hours`;
+  return `${Math.round(preset.duration_s / 60)} min`;
 }

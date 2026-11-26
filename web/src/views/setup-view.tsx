@@ -4,15 +4,15 @@
  * bottom of the station view. A run started here replaces the run in
  * `usePlaybackStore`, so the station view and results show it straight away.
  *
- * The screen also loads the time-of-day presets (#261) when it opens and shows
- * their picker above the panel, since picking one fills the panel's
- * conditions. If they cannot be loaded the picker stays hidden and a note
- * says why; every other setting still works.
+ * The screen also shows the time-of-day presets' picker (#261) above the
+ * panel, since picking one fills the panel's conditions. The presets are
+ * loaded once by the app shell, like provenance, so leaving and reopening
+ * this screen neither refetches them nor hides the picker meanwhile. If they
+ * could not be loaded the picker stays hidden and a note says why; every
+ * other setting still works.
  */
-import { useEffect, useState } from "react";
 import { PresetPicker } from "../components/preset-picker";
 import { RunSettingsPanel } from "../components/run-settings-panel";
-import type { PresetLoader } from "../lib/scenario-presets";
 import type { ScenarioRunner } from "../lib/simulation-api";
 import type { ParameterProvenanceMap } from "../types/provenance";
 import type { ScenarioPreset } from "../types/runSettings";
@@ -24,30 +24,16 @@ interface SetupViewProps {
   provenance?: ParameterProvenanceMap;
   /** Opens the Sources screen from "Where these values come from" (#320). */
   onShowSources?: () => void;
-  /** Reads the time-of-day presets; null (no API) hides the preset picker. */
-  presetLoader?: PresetLoader | null;
+  /** Time-of-day presets loaded by the app shell; empty hides the picker. */
+  presets?: readonly ScenarioPreset[];
+  /** Why the presets could not be loaded, shown in place of the picker. */
+  presetError?: string | null;
 }
 
 /** Wrap the run settings panel with this screen's title and its presets. */
 export function SetupView({
-  runner, provenance, onShowSources, presetLoader = null,
+  runner, provenance, onShowSources, presets = [], presetError = null,
 }: Readonly<SetupViewProps>) {
-  const [presets, setPresets] = useState<ScenarioPreset[]>([]);
-  const [presetError, setPresetError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (presetLoader === null) return;
-    const controller = new AbortController();
-    presetLoader(controller.signal)
-      .then(setPresets)
-      .catch((error: unknown) => {
-        // Leaving the screen aborts the request; that is not a failure.
-        if (controller.signal.aborted) return;
-        setPresetError(error instanceof Error ? error.message : "Could not load presets.");
-      });
-    return () => controller.abort();
-  }, [presetLoader]);
-
   return (
     <>
       <h1 className="view-title">Scenario setup</h1>

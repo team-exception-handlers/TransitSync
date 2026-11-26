@@ -38,6 +38,7 @@ import { SetupView } from "./views/setup-view";
 import { createPresetLoader, type PresetLoader } from "./lib/scenario-presets";
 import { StationView } from "./views/station-view";
 import type { ParameterProvenanceMap } from "./types/provenance";
+import type { ScenarioPreset } from "./types/runSettings";
 
 // Built once per page load. Without VITE_API_URL the app stays on its bundled
 // mock runs, which is also what the component tests render.
@@ -94,6 +95,10 @@ export default function App({
 }: Readonly<AppProps>) {
   // Loaded once here and passed down, so every screen shows the same sources.
   const [provenance, setProvenance] = useState<ParameterProvenanceMap>({});
+  // Time-of-day presets (#261), also loaded once: only the active screen is
+  // mounted, so loading them in Scenario setup refetched on every visit.
+  const [presets, setPresets] = useState<ScenarioPreset[]>([]);
+  const [presetError, setPresetError] = useState<string | null>(null);
   // Leased by the shell so playback keeps its position across screen changes.
   useEffect(startPlaybackClock, []);
   const selectedConnectionId = usePlaybackStore((state) => state.selectedConnectionId);
@@ -154,13 +159,29 @@ export default function App({
     return () => controller.abort();
   }, [parameterProvenanceLoader]);
 
+  useEffect(() => {
+    if (presetLoader === null) return;
+    const controller = new AbortController();
+    presetLoader(controller.signal)
+      .then((loaded) => {
+        if (!controller.signal.aborted) setPresets(loaded);
+      })
+      .catch((error: unknown) => {
+        // Unmounting aborts the request; that is not a failure to report.
+        if (controller.signal.aborted) return;
+        setPresetError(error instanceof Error ? error.message : "Could not load presets.");
+      });
+    return () => controller.abort();
+  }, [presetLoader]);
+
   // One entry per sidebar item; only the active one is mounted.
   const screens: Record<AppView, ReactNode> = {
     station: <StationView provenance={provenance} />,
     compare: <CompareView runner={comparisonRunner} />,
     results: <ResultsView />,
     setup: <SetupView runner={scenarioRunner} provenance={provenance}
-      onShowSources={() => setView("sources")} presetLoader={presetLoader} />,
+      onShowSources={() => setView("sources")}
+      presets={presets} presetError={presetError} />,
     sources: <SourcesView provenance={provenance} />,
   };
 

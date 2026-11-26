@@ -14,7 +14,7 @@
  */
 import { useId } from "react";
 import { formatHeadway, formatPassengers, formatSeconds } from "../lib/run-settings";
-import { presetPatch, presetStartLabel } from "../lib/scenario-presets";
+import { presetPatch, presetDurationLabel, presetStartLabel } from "../lib/scenario-presets";
 import { useRunSettingsStore } from "../store/useRunSettingsStore";
 import type { RunSettings, ScenarioPreset } from "../types/runSettings";
 
@@ -55,7 +55,7 @@ export function PresetPicker({ presets }: Readonly<PresetPickerProps>) {
             onChange={() => update(presetPatch(preset))} />
           <span className="strategy-text">
             {preset.label}
-            <small>Starts {presetStartLabel(preset)}, one hour.</small>
+            <small>Starts {presetStartLabel(preset)}, {presetDurationLabel(preset)}.</small>
           </span>
         </label>
       ))}

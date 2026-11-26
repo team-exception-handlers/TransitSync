@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createPresetLoader,
   parseScenarioPresets,
+  presetDurationLabel,
   presetPatch,
   presetStartLabel,
 } from "../../src/lib/scenario-presets";
@@ -66,5 +67,23 @@ describe("presetPatch", () => {
 
   it("labels the start without seconds", () => {
     expect(presetStartLabel(MORNING)).toBe("07:00");
+  });
+});
+
+describe("presetDurationLabel", () => {
+  // Hand-picked: the usual hour, whole hours, and a window that is not one.
+  it.each([
+    [3600, "one hour"],
+    [7200, "2 hours"],
+    [5400, "90 min"],
+  ])("describes %i s as %s", (duration_s, label) => {
+    expect(presetDurationLabel({ ...MORNING, duration_s })).toBe(label);
+  });
+
+  it("rejects a preset list entry without a positive duration", () => {
+    expect(() => parseScenarioPresets([{ ...MORNING, duration_s: 0 }])).toThrow();
+    const withoutDuration = Object.fromEntries(
+      Object.entries(MORNING).filter(([key]) => key !== "duration_s"));
+    expect(() => parseScenarioPresets([withoutDuration])).toThrow();
   });
 });

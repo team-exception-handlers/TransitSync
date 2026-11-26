@@ -6,7 +6,7 @@
  * conditions, and the run request carries the preset and its values.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "../../src/App";
 import { PresetPicker } from "../../src/components/preset-picker";
 import { RunSettingsPanel } from "../../src/components/run-settings-panel";
@@ -82,6 +82,13 @@ describe("preset picker", () => {
     expect(draft().preset).toBe("weekday_morning");
   });
 
+  it("describes each window from its duration_s, not a fixed hour", () => {
+    render(<Setup presets={[MORNING, { ...SUNDAY, duration_s: 7200 }]} />);
+
+    expect(screen.getByRole("radio", { name: /^Weekday morning.*one hour/ })).toBeDefined();
+    expect(screen.getByRole("radio", { name: /^Sunday morning.*2 hours/ })).toBeDefined();
+  });
+
   it("goes back to the default window with Custom", () => {
     render(<Setup presets={[MORNING]} />);
     fireEvent.click(screen.getByRole("radio", { name: /^Weekday morning peak/ }));
@@ -110,6 +117,19 @@ describe("Scenario setup through the API client", () => {
       preset: "sunday_morning", transfer_volume: 30, train_headway_s: 480,
       onboard_load: 120, walking_mean_s: 110, max_hold_time: 120,
     });
+  });
+
+  it("loads the presets once, so reopening Scenario setup shows them at once", async () => {
+    const presetLoader = vi.fn(async () => [MORNING, SUNDAY]);
+    render(<App runLoader={null} scenarioRunner={runner} presetLoader={presetLoader} />);
+    await screen.findByRole("radio", { name: /^Sunday morning/ });
+
+    act(() => useViewStore.setState({ activeView: "station" }));
+    act(() => useViewStore.setState({ activeView: "setup" }));
+
+    // Shown straight away, without waiting for a second request
+    expect(screen.getByRole("radio", { name: /^Sunday morning/ })).toBeDefined();
+    expect(presetLoader).toHaveBeenCalledTimes(1);
   });
 
   it("explains a failed preset load and keeps the other settings usable", async () => {
