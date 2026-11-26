@@ -35,7 +35,7 @@ import datetime
 import logging
 import math
 import subprocess
-from collections.abc import Callable, Sequence, Set
+from collections.abc import Callable, Iterator, Sequence, Set
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol, runtime_checkable
@@ -43,6 +43,8 @@ from typing import Any, Protocol, runtime_checkable
 from simulator.control.decision_audit import (
     DECISIONS_FILE,
     DecisionAuditSource,
+    EncodedAuditSource,
+    EncodedDecisionRecord,
     write_decision_log,
 )
 from simulator.control.settings import ControlSettings
@@ -260,14 +262,19 @@ def _manifest_record(
     return manifest
 
 
-def _decision_records(components: Sequence[Component]) -> list[dict[str, Any]]:
-    """Collect audit records in component order, so the file is reproducible."""
-    return [
-        record
-        for component in components
-        if isinstance(component, DecisionAuditSource)
-        for record in component.decision_records()
-    ]
+def _decision_records(
+    components: Sequence[Component],
+) -> Iterator[dict[str, Any] | EncodedDecisionRecord]:
+    """Collect audit records in component order, so the file is reproducible.
+
+    Components that already hold encoded lines hand them over unchanged, so
+    the writer does not decode and re-encode a full day of estimates.
+    """
+    for component in components:
+        if isinstance(component, EncodedAuditSource):
+            yield from component.encoded_decision_records()
+        elif isinstance(component, DecisionAuditSource):
+            yield from component.decision_records()
 
 
 def _get_code_version() -> str:
