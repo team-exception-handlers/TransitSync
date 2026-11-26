@@ -68,7 +68,7 @@ export const DISRUPTION_TIME_RANGE: SettingRange = { min: 0, max: 3300, step: 30
 export const DISRUPTION_MAGNITUDE_RANGE: SettingRange = { min: 30, max: 600, step: 30 };
 /** The uneven-headways preset uses coefficient of variation, not seconds. */
 export const HEADWAY_IRREGULARITY_RANGE: SettingRange = { min: 0.05, max: 1, step: 0.05 };
-const DEFAULT_DISRUPTION_MAGNITUDES: Record<DisruptionPreset, number> = {
+export const DEFAULT_DISRUPTION_MAGNITUDES: Readonly<Record<DisruptionPreset, number>> = {
   none: 60,
   platform_delay: 60,
   line_suspension: 60,

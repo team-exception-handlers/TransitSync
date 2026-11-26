@@ -5,6 +5,7 @@
  * has no settings.
  */
 import {
+  DEFAULT_DISRUPTION_MAGNITUDES,
   DEFAULT_RUN_SETTINGS,
   formatErrorMagnitude,
   formatHeadwayIrregularity,
@@ -29,7 +30,12 @@ function disruptionMagnitudeRow(
   magnitude: number | undefined,
 ): [string, string] {
   if (preset === "uneven_headways") {
-    return ["Headway irregularity", formatHeadwayIrregularity(magnitude ?? 0.3)];
+    return [
+      "Headway irregularity",
+      formatHeadwayIrregularity(
+        magnitude ?? DEFAULT_DISRUPTION_MAGNITUDES.uneven_headways,
+      ),
+    ];
   }
   if (preset === "line_suspension") {
     return ["Suspension duration", formatSeconds(magnitude ?? 60)];
