@@ -243,3 +243,28 @@ def test_protected_departure_requires_clearance(changes, message):
     with pytest.raises(ValueError, match=message):
         strategy.evaluate(observation)
     assert strategy.decision_records() == ()
+
+
+@pytest.mark.parametrize(
+    ("platform", "caught", "benefit"),
+    [
+        ("green", 5.625, 1687.5),
+        ("rem", 2.109375, 540),
+    ],
+)
+def test_both_directions_exclude_their_mandatory_wait(platform, caught, benefit):
+    """Each destination keeps its own walking model, headway and clearance."""
+    strategy = ConnectionProtectionStrategy(*configuration())
+    context = replace(snapshot(platform), platforms=(PlatformState(platform, 0, 145),))
+    [action] = strategy.evaluate(context)
+    [record] = strategy.decision_records()
+    # Ready 220, gap floor 145+90=235; request 30 departs 250, adding 15 s.
+    # M=60: green 60*(.875-.78125)=5.625; REM 60*(.81640625-.78125)=2.109375.
+    assert action.duration_s == 30
+    assert record["no_hold_departure_s"] == 235
+    chosen = record["candidates"][-1]
+    assert chosen["n_caught"] == caught
+    assert chosen["benefit_ps"] == benefit
+    assert chosen["cost_ps"] == 150
+    assert chosen["departure_s"] == 250
+    assert chosen["incremental_delay_s"] == 15

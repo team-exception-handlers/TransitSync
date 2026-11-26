@@ -15,7 +15,7 @@ import math
 from dataclasses import replace
 
 import pytest
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from simulator.control.break_even import BreakEvenWeights
@@ -151,19 +151,29 @@ def test_settings_reject_bad_values(step_s, max_hold_s, message):
         HoldSearchSettings(step_s, max_hold_s)
 
 
+@settings(max_examples=30, derandomize=True)
 @given(
+    clearance=st.one_of(st.none(), st.integers(min_value=0, max_value=400)),
     load=st.integers(min_value=0, max_value=1500),
     size=st.integers(min_value=0, max_value=400),
     window=st.floats(min_value=-120.0, max_value=600.0),
     headway=st.floats(min_value=60.0, max_value=900.0),
 )
-def test_chosen_hold_is_never_beaten_and_stays_in_range(load, size, window, headway):
+def test_chosen_hold_is_never_beaten_and_stays_in_range(
+    load, size, window, headway, clearance
+):
     walking = ShiftedExponentialCdf(mean_s=300.0, min_s=30.0)
     transfers = (TransferEstimate("g1", size, window),)
+    built = inputs(load, transfers, headway)
+    context = None
+    if clearance is not None:
+        built, context = clearance_inputs(previous_s=clearance / 4)
+        built = replace(built, load=load, transfers=transfers, headway_s=headway)
     result = search(HoldSearchSettings(), BreakEvenWeights(), walking).run(
-        inputs(load, transfers, headway)
+        built, departure_context=context
     )
     decision = next(c for c in result.candidates if c.hold_s == result.hold_s)
+    assert [c.hold_s for c in result.candidates] == list(range(0, 61, 5))
     assert all(decision.net_ps >= c.net_ps for c in result.candidates)
     assert result.hold_s in HoldSearchSettings().candidates()
     # Holding only when it nets a strict gain
@@ -282,6 +292,9 @@ def clearance_inputs(ready_s=100, previous_s=50, suspensions=()):
         (100, 50, (), 30, 200, 140, 140, 0, 0, 0, 0),
         (100, 50, (), 40, 200, 140, 140, 0, 0, 0, 0),
         (100, 50, (), 60, 200, 140, 160, 10, 3000, 2000, 1000),
+        # 52.5 + 90 = 142.5: retain the original five-second request grid.
+        (100, 52.5, (), 40, 200, 142.5, 142.5, 0, 0, 0, 0),
+        (100, 52.5, (), 45, 200, 142.5, 145, 1.25, 375, 250, 125),
         (100, None, (), 60, 200, 100, 160, 30, 9000, 6000, 3000),
         (
             280,
@@ -302,9 +315,10 @@ def test_clearance_economics_use_projected_departure_endpoints(
     ready, previous, closures, hold, end, d0, departure, caught, benefit, cost, net
 ):
     built, context = clearance_inputs(ready, previous, closures)
-    result = HoldSearch(UniformCdf(end), EQUAL, HoldSearchSettings(hold, hold)).run(
+    result = HoldSearch(UniformCdf(end), EQUAL, HoldSearchSettings(5, hold)).run(
         built, departure_context=context
     )
+    assert [c.hold_s for c in result.candidates] == list(range(0, hold + 1, 5))
     candidate = result.candidates[-1]
     assert result.no_hold_departure_s == d0
     assert candidate.hold_s == hold
@@ -318,20 +332,37 @@ def test_clearance_economics_use_projected_departure_endpoints(
     assert candidate.net_ps == pytest.approx(net, abs=1e-6, rel=0)
 
 
-def test_nonlinear_burst_excludes_connections_during_mandatory_wait():
+@pytest.mark.parametrize(
+    ("previous_s", "no_hold_s", "cost", "net", "longer_cost", "longer_net"),
+    [(50, 140, 1000, 14000, 2000, 13000), (52.5, 142.5, 750, 14250, 1750, 13250)],
+)
+def test_nonlinear_burst_excludes_connections_during_mandatory_wait(
+    previous_s, no_hold_s, cost, net, longer_cost, longer_net
+):
     class PulseCdf:
         def cdf(self, t_s):
             return 0.5 * (t_s >= 130) + 0.5 * (t_s >= 150)
 
-    built, context = clearance_inputs()
+    built, context = clearance_inputs(previous_s=previous_s)
     result = HoldSearch(PulseCdf(), EQUAL).run(built, departure_context=context)
-    # Half the group can already connect at 140 s without a hold.
-    # Requesting 50 s moves departure to 150 s, adding 10 s and catching 50 more.
+    # Half the group arrives at 130 s and already connects without a hold.
+    # Request 50 catches the other 50 at 150 s: benefit = 50*300 = 15000 pax-s.
+    # At D0=142.5, cost = 100*7.5 = 750; request 60 costs 100*17.5 = 1750.
+    # At D0=140, the same requests cost 1000 and 2000 respectively.
+    assert result.no_hold_departure_s == no_hold_s
+    assert [c.hold_s for c in result.candidates] == list(range(0, 61, 5))
     assert result.hold_s == 50
+    assert result.chosen.departure_s == 150
+    assert result.chosen.incremental_delay_s == 150 - no_hold_s
     assert result.chosen.n_caught == 50
     assert result.chosen.benefit_ps == 15000
-    assert result.chosen.cost_ps == 1000
-    assert result.candidates[-1].cost_ps == 2000
+    assert result.chosen.cost_ps == cost
+    assert result.chosen.net_ps == net
+    longer = result.candidates[-1]
+    assert longer.hold_s == 60
+    assert longer.n_caught == 50
+    assert longer.cost_ps == longer_cost
+    assert longer.net_ps == longer_net
 
 
 def test_fully_absorbed_holds_decline_even_with_zero_load():
@@ -349,3 +380,17 @@ def test_departure_context_must_match_the_deciding_visit():
     hold_search = HoldSearch(UniformCdf())
     with pytest.raises(ValueError, match="match the deciding visit"):
         hold_search.run(built, departure_context=other)
+
+
+def test_clearance_search_declines_at_exact_break_even():
+    """Equal passenger benefit and onboard cost must leave h=0 selected."""
+    built, context = clearance_inputs()
+    result = HoldSearch(UniformCdf(160), EQUAL, HoldSearchSettings(5, 60)).run(
+        replace(built, load=187.5), departure_context=context
+    )
+    # F(140)=0.875 and F(160)=1 are exact in binary: no rounding hides a tie.
+    # 12.5 passengers * 300 = 187.5 onboard * 20 = 3750 pax-s.
+    assert result.candidates[-1].benefit_ps == 3750
+    assert result.candidates[-1].cost_ps == 3750
+    assert result.candidates[0].hold_s == 0
+    assert result.hold_s == 0

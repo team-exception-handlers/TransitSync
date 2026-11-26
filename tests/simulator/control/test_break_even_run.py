@@ -47,6 +47,7 @@ from simulator.control.prediction_error import PredictionErrorModel
 from simulator.control.rules import OperatingRulesEnforcer
 from simulator.control.settings import OperatingRulesConfig
 from simulator.control.strategies import STRATEGIES
+from simulator.control.validation import find_rule_violations
 from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import run_scenario
 from simulator.passengers import (
@@ -165,6 +166,9 @@ def run(
         tmp_path,
     )
     events = [json.loads(line) for line in result.events_path.read_text().splitlines()]
+    # Reuse the independent log validator with this run's actual operating limits.
+    limits = scenario.operating_rules
+    assert find_rule_violations(events, limits.max_hold_time, limits.min_safe_gap) == []
     records = map(json.loads, result.decisions_path.read_text().splitlines())
     # The error model also writes an estimates record per decision (#39)
     decisions = [r for r in records if r["kind"] == KIND_HOLD_SEARCH]
@@ -263,34 +267,45 @@ def test_logged_decision_recalculates_by_hand(tmp_path):
         assert math.isclose(candidate["net_ps"], net, abs_tol=1e-6)
 
 
-def test_run_logs_are_byte_reproducible(tmp_path):
+@pytest.mark.parametrize("clearance_s", [None, 150])
+def test_run_logs_are_byte_reproducible(tmp_path, clearance_s):
     """The same seed must produce identical event and decision files."""
-    run(tmp_path / "first", rate_per_min=120)
-    run(tmp_path / "second", rate_per_min=120)
+    run(tmp_path / "first", rate_per_min=120, clearance_s=clearance_s)
+    run(tmp_path / "second", rate_per_min=120, clearance_s=clearance_s)
     for filename in ("decisions.jsonl", "events.jsonl"):
         first = (tmp_path / "first" / filename).read_bytes()
         second = (tmp_path / "second" / filename).read_bytes()
         assert first == second
 
 
+@pytest.mark.parametrize("clearance_s", [None, 160])
 @pytest.mark.parametrize(("rule_action", "applied_s"), [("CLAMP", 20), ("REFUSE", 0)])
 def test_enforcer_changes_applied_hold_without_changing_proposal(
-    tmp_path, rule_action, applied_s
+    tmp_path, rule_action, applied_s, clearance_s
 ):
     """The strategy asks for 60s, but the operating limit is 20s.
 
     CLAMP applies 20s instead of 60s. REFUSE applies no hold (0s).
     The decision log keeps the original proposal and reason. Events show what
-    was allowed and when green actually leaves: 130 + applied hold seconds.
+    was allowed; mandatory waiting may absorb that shorter intervention.
     """
     rules = OperatingRulesConfig(
         max_hold_time=20, rule_action_map={"max_hold_exceeded": rule_action}
     )
-    events, decisions = run(tmp_path, rate_per_min=120, rules=rules)
+    events, decisions = run(
+        tmp_path, rate_per_min=120, rules=rules, clearance_s=clearance_s
+    )
     [record] = decisions
     assert record["chosen_hold_s"] == 60
     assert record["hold_search"]["max_hold_s"] == 60
     assert record["reason"].startswith("hold 60 s:")
+    chosen = next(c for c in record["candidates"] if c["hold_s"] == 60)
+    # Proposal economics describe departure at 190, even if the cap is absorbed.
+    d0 = clearance_s or 130
+    assert record["no_hold_departure_s"] == d0
+    assert chosen["departure_s"] == 190
+    assert chosen["incremental_delay_s"] == 190 - d0
+    assert chosen["cost_ps"] == 400 * (190 - d0)
     [hold] = holds(events)
     assert (
         hold["train_id"],
@@ -307,7 +322,9 @@ def test_enforcer_changes_applied_hold_without_changing_proposal(
         for e in events
         if e["event_type"] == "train_departure" and e["train_id"] == "green-1"
     ]
-    assert [(e["time_s"], e["hold_s"]) for e in green] == [(130 + applied_s, applied_s)]
+    assert [(e["time_s"], e["hold_s"]) for e in green] == [
+        (max(d0, 130 + applied_s), applied_s)
+    ]
     ends = [e for e in events if e["event_type"] == "hold_end"]
     assert [(e["train_id"], e["time_s"]) for e in ends] == (
         [("green-1", 150)] if applied_s else []
