@@ -3,10 +3,12 @@
 
 The playback schema mirrors the frontend's station view. Passenger positions
 are points on the selected transfer path; event and run times are seconds.
+The existing response models and adapters exceed 500 lines; this edit only
+changes how audit records are consumed, so it does not split the module.
 """
 
 import math
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict
 from typing import Annotated, Literal, cast
 
@@ -298,7 +300,7 @@ def build_station_view_response(
     scenario: Scenario,
     event_records: Sequence[dict[str, object]],
     transfers: TransferComponent,
-    decision_records: Sequence[dict[str, object]] = (),
+    decision_records: Iterable[dict[str, object]] = (),
     *,
     run_id: str,
 ) -> SimulationRunResponse:
@@ -312,6 +314,10 @@ def build_station_view_response(
     platform_by_id = {platform.platform_id: platform for platform in layout.platforms}
     shown_platforms = {connection.from_platform_id, connection.to_platform_id}
     decisions = _decision_records(event_records, shown_platforms)
+    timeline_holds = []
+    mode_switches, estimates = _playback_audit(
+        decision_records, decisions, shown_platforms, hold_records=timeline_holds
+    )
     response = SimulationRunResponse(
         **layout.model_dump(),
         run_id=run_id,
@@ -329,19 +335,42 @@ def build_station_view_response(
         ),
         train_events=_train_events(event_records, shown_platforms, platform_by_id),
         decisions=decisions,
-        mode_switches=_mode_switch_records(decision_records, shown_platforms),
-        estimates=_estimate_records(decision_records, decisions),
+        mode_switches=mode_switches,
+        estimates=estimates,
         rules=_rule_records(scenario.operating_rules),
         operating_rules=scenario.operating_rules.to_dict(),
         rule_check=_rule_check(event_records, scenario.operating_rules),
         time_series=_time_series_records(
             event_records,
-            decision_records,
+            timeline_holds,
             float(scenario.duration_s),
             shown_platforms,
         ),
     )
     return response
+
+
+def _playback_audit(records, decisions, platform_ids, *, hold_records=None):
+    """Read audit lines once, retaining only data actually displayed in playback.
+
+    Full-network estimate records can dwarf the passenger event log. Feed them
+    directly through the existing adapter rather than retaining every train at
+    every decision. Mode switches are small and keep their original stable sort.
+    """
+    switches = []
+
+    def estimates():
+        for record in records:
+            if record.get("kind") == KIND_MODE_SWITCH:
+                switches.append(record)
+            if hold_records is not None and record.get("kind") == "hold":
+                # The time-series adapter needs these small records after this
+                # iterator is consumed; never retain full-network estimates.
+                hold_records.append(record)
+            yield record
+
+    shown_estimates = _estimate_records(estimates(), decisions)
+    return _mode_switch_records(switches, platform_ids), shown_estimates
 
 
 def _rule_check(
@@ -439,7 +468,7 @@ def _mode_switch_records(
 
 
 def _estimate_records(
-    records: Sequence[dict[str, object]], decisions: Sequence[dict[str, object]]
+    records: Iterable[dict[str, object]], decisions: Sequence[dict[str, object]]
 ) -> list[dict[str, object]]:
     """Keep the estimates taken at each shown decision, cut to that decision.
 

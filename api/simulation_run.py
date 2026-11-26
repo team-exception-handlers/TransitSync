@@ -4,6 +4,10 @@
 The API selects scenario files by connection ID, applies validated request
 settings, then delegates event processing to the simulator. Simulation time
 and every hold duration are expressed in seconds.
+
+This module exceeds 500 lines because validation, caching and the component
+factory share scenario assembly. The audit readers below stay here, beside
+the run that writes them, rather than starting a split in a performance PR.
 """
 
 from __future__ import annotations
@@ -21,9 +25,10 @@ from functools import partial
 from hashlib import sha256
 from pathlib import Path
 from threading import RLock
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic_core import from_json
 
 from api.connection_data import index_connections
 from api.network_data import DATASET_ID, dataset_metadata, load_reference_network
@@ -36,6 +41,7 @@ from simulator.control.connection_configuration import (
     build_selected_connection_protection,
 )
 from simulator.control.decision import DecisionPipeline
+from simulator.control.decision_audit import KIND_ESTIMATES, EncodedDecisionRecord
 from simulator.control.headway_configuration import validate_headway_configuration
 from simulator.control.observation_builder import ObservationBuilder
 from simulator.control.prediction_error import (
@@ -51,6 +57,7 @@ from simulator.control.strategies import STRATEGIES
 from simulator.control.strategies.adaptive import AdaptiveStrategy
 from simulator.control.walking_cdf import ShiftedExponentialCdf
 from simulator.disruptions import get_disruption_preset
+from simulator.engine.events import EventType
 from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import Component, run_scenario
 from simulator.network_config import NetworkConfig
@@ -257,6 +264,7 @@ class SimulationRunService:
             request, layout.interchange.id, connection.to_platform_id
         )
         run_state: dict[str, TransferComponent] = {}
+        audit_sources: list[TrainComponent] = []
 
         def build_components(
             configured: Scenario, streams: object
@@ -271,6 +279,7 @@ class SimulationRunService:
                 configured, self._network, layout, connection, request, streams
             )
             run_state["transfers"] = transfers
+            audit_sources.append(trains)
             return trains, transfers
 
         log.info(
@@ -285,7 +294,12 @@ class SimulationRunService:
             )
             event_records = _read_json_lines(result.events_path)
             # The audit log carries adaptive mode switches for the timeline (#60).
-            decision_records = _read_json_lines(result.decisions_path)
+            decision_records = _decision_playback(
+                audit_sources[0] if audit_sources else None,
+                result.decisions_path,
+                event_records,
+                connection,
+            )
             return build_station_view_response(
                 layout,
                 connection,
@@ -737,9 +751,83 @@ def _departure_with_dwell(visit: ScheduledVisit) -> float:
     return visit.departure_s
 
 
+def _decision_playback(source, path, events, connection):
+    """Reuse compact views from a successful run; retain file-backed fallback.
+
+    The runner has already encoded and written the complete audit before this
+    path is used. Full records remain available to public readers and on disk.
+    Alternative runners without retained components still validate the log.
+    """
+    records = getattr(source, "playback_decision_records", None)
+    if records is None:
+        yield from _playback_audit_lines(path, events, connection)
+        return
+    for record in records():
+        if isinstance(record, EncodedDecisionRecord):
+            yield _decode_log_record(record.decision_line or record.line)
+        else:
+            yield record
+
+
 def _read_json_lines(path: Path) -> list[dict[str, object]]:
     """Parse an internal event log into its ordered records.
 
     File and JSON decoding errors propagate to the API's logged failure handler.
     """
-    return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    return list(_iter_json_lines(path))
+
+
+def _iter_json_lines(path: Path):
+    """Read one complete record at a time, avoiding a second full-log string."""
+    with path.open(encoding="utf-8") as file:
+        for line in file:
+            yield _decode_log_record(line)
+
+
+def _decode_log_record(line: str):
+    """Reuse the native decoder while retaining stdlib inputs and decode errors."""
+    try:
+        return from_json(line)
+    except ValueError:
+        return json.loads(line)
+
+
+class _AuditHeader(BaseModel):
+    """Validate whole-record JSON without allocating unused train dictionaries.
+
+    Keep metadata as-is, matching dict.get in the existing playback adapter.
+    Ignoring extra fields saves Python allocations, not JSON syntax checks.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+    kind: Any = None
+    time_s: Any = None
+    train_id: Any = None
+    platform_id: Any = None
+
+
+def _playback_audit_lines(path: Path, events, connection: Connection):
+    """Decode estimate bodies only for holds actually shown by the adapter.
+
+    The full audit is still written unchanged. Every line's JSON is validated;
+    mode switches and other audit kinds retain their existing reader path.
+    Unsupported legacy JSON falls back to the original decoder, including its
+    corruption errors. No passenger or movement record is filtered here.
+    """
+    platforms = {connection.from_platform_id, connection.to_platform_id}
+    needed = {
+        (event["time_s"], event["train_id"], event["platform_id"])
+        for event in events
+        if event.get("event_type") == EventType.HOLD.value
+        and event.get("platform_id") in platforms
+    }
+    with path.open(encoding="utf-8") as file:
+        for line in file:
+            try:
+                header = _AuditHeader.model_validate_json(line)
+            except ValueError:
+                yield json.loads(line)
+                continue
+            key = (header.time_s, header.train_id, header.platform_id)
+            if header.kind != KIND_ESTIMATES or key in needed:
+                yield _decode_log_record(line)
