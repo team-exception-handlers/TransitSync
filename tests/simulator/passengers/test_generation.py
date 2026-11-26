@@ -104,6 +104,45 @@ def test_ids_keep_text_sort_order_across_one_million_passengers(monkeypatch):
     ]
 
 
+def test_keyed_batches_name_passengers_after_their_key(monkeypatch):
+    # Keyed IDs come from the feeder arrival, so they leave the counter alone
+    # and a later unkeyed batch still starts at 1 (#240)
+    generator, _ = generator_with_count(monkeypatch, count=2)
+    keyed = generate(generator, key=("mcgill", "rem-1", 1))
+    unkeyed = generate(generator)
+
+    assert len(keyed) > 1
+    assert [p.passenger_id for p in keyed] == [
+        f"passenger-mcgill|rem-1|1|{n}" for n in range(1, len(keyed) + 1)
+    ]
+    assert unkeyed[0].passenger_id == "passenger-000000000001"
+
+
+def test_keys_that_differ_only_in_where_a_dash_falls_give_different_ids(monkeypatch):
+    # Joined with "-" both keys would read "mcgill-rem-1-1-..." (review on #418)
+    generator, _ = generator_with_count(monkeypatch, count=2)
+    first = generate(generator, key=("mcgill", "rem-1", 1))
+    second = generate(generator, key=("mcgill-rem", "1", 1))
+
+    assert first[0].passenger_id == "passenger-mcgill|rem-1|1|1"
+    assert second[0].passenger_id == "passenger-mcgill-rem|1|1|1"
+
+
+def test_real_gtfs_trip_ids_with_colons_are_accepted(monkeypatch):
+    # API runs key groups by feed-prefixed trip IDs, which contain ":" and "-"
+    generator, _ = generator_with_count(monkeypatch, count=2)
+    trip = "rem_20260520:RDS-32B220.xml_0015"
+    passengers = generate(generator, key=("STA_ZCD_BT_QUAI_01_MCG", trip, 1))
+
+    assert passengers[0].passenger_id == f"passenger-STA_ZCD_BT_QUAI_01_MCG|{trip}|1|1"
+
+
+def test_key_parts_containing_the_separator_are_rejected(monkeypatch):
+    generator, _ = generator_with_count(monkeypatch, count=2)
+    with pytest.raises(ValueError, match=r"must not contain '\|'"):
+        generate(generator, key=("mcgill", "rem|1", 1))
+
+
 def test_zero_share_destinations_are_never_assigned(monkeypatch):
     generator, _ = generator_with_count(monkeypatch, count=10)
     passengers = generate(

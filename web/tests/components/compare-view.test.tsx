@@ -15,7 +15,7 @@ import { EMPTY_COMPARISON, useComparisonStore } from "../../src/store/useCompari
 import { usePlaybackStore } from "../../src/store/usePlaybackStore";
 import { useRunSettingsStore } from "../../src/store/useRunSettingsStore";
 import { useViewStore } from "../../src/store/useViewStore";
-import type { StationViewData, TimeSeriesData } from "../../src/types/stationView";
+import type { PassengerOutcome, StationViewData, TimeSeriesData } from "../../src/types/stationView";
 
 const HOLDING_TITLE = "With holding · Connection protection";
 
@@ -30,13 +30,36 @@ function timeSeries(holdAt: number | null): TimeSeriesData {
   };
 }
 
-const HOLDING_RUN: StationViewData = { ...stationViewData, time_series: timeSeries(100) };
-const NO_HOLDING_RUN: StationViewData = { ...stationViewData, time_series: timeSeries(null) };
+/** One transferring passenger who leaves on their connecting train at `departure_s`. */
+function leaves(passenger_id: string, departure_s: number | null): PassengerOutcome {
+  return {
+    passenger_id, connection_id: "c", alighting_s: 0, platform_arrival_s: null,
+    missed_train_ids: [], boarded_train_id: null, boarding_s: null, departure_s,
+    transfer_time_s: null, delay_s: null, status: departure_s === null ? "pending" : "made",
+  };
+}
+
+// Holding gets a out 200 s sooner and b 50 s later; c changes by 10 s and d
+// never leaves. Net: -200 + 50 - 10 = -160 s.
+const HOLDING_RUN: StationViewData = {
+  ...stationViewData, time_series: timeSeries(100),
+  passenger_outcomes: [leaves("a", 100), leaves("b", 250), leaves("c", 300), leaves("d", null)],
+};
+const NO_HOLDING_RUN: StationViewData = {
+  ...stationViewData, time_series: timeSeries(null),
+  passenger_outcomes: [leaves("a", 300), leaves("b", 200), leaves("c", 310), leaves("d", null)],
+};
 const PAIR: SimulationComparison = {
   holding: HOLDING_RUN,
   noHolding: NO_HOLDING_RUN,
   holdingStrategy: "connection_protection",
   startingConditions: { serviceDate: "2026-10-05", masterSeed: 42, duration_s: 360 },
+  passengerSplit: {
+    better_off: 1, worse_off: 1, unaffected: 1, not_compared: 1,
+    left_in_one_run: 0, unaffected_threshold_s: 30,
+    total_time_saved_s: 200, total_time_lost_s: 50,
+    average_time_saved_s: 200, average_time_lost_s: 50,
+  },
 };
 
 const panel = (name: string) => screen.getByRole("region", { name });
@@ -80,6 +103,25 @@ describe("CompareView", () => {
     expect(within(panel(HOLDING_TITLE)).getByLabelText(/^With holding/)).toBeDefined();
     expect(screen.getByText("Same starting conditions: 2026-10-05 · seed 42")).toBeDefined();
     expect(screen.getByText("Both runs loaded · one shared playback clock")).toBeDefined();
+  });
+
+  it("builds up each side's time saved and lost, mirrored, as playback runs", async () => {
+    await openCompare();
+    const value = (name: string, label: string) =>
+      within(panel(name)).getByText(label).nextSibling?.textContent;
+
+    // At 0 s nobody has left, so nothing is counted yet (US-4.3 criterion 2)
+    expect(value(HOLDING_TITLE, "Time saved (better off)")).toBe("0 s · 0 passengers");
+    expect(screen.getByText(/4 not compared yet/)).toBeDefined();
+
+    act(() => usePlaybackStore.getState().seek(360));
+    expect(value(HOLDING_TITLE, "Time saved (better off)")).toBe("3 min 20 s · 1 passenger");
+    expect(value(HOLDING_TITLE, "Time lost (worse off)")).toBe("50 s · 1 passenger");
+    expect(value("No holding", "Time saved (better off)")).toBe("50 s · 1 passenger");
+    expect(value("No holding", "Time lost (worse off)")).toBe("3 min 20 s · 1 passenger");
+    expect(screen.getByText(/1 passenger unaffected \(30 s or less\)/)).toBeDefined();
+    expect(screen.getByText(/1 not compared yet/)).toBeDefined();
+    expect(screen.getByText(/holding saved 2 min 40 s in total/)).toBeDefined();
   });
 
   it("runs the API defaults, not unrun slider values, before anything is run", async () => {

@@ -3,6 +3,7 @@
 
 from fastapi.testclient import TestClient
 
+from api import main
 from api.main import create_app
 from api.passenger_outcomes import build_passenger_outcomes
 from api.simulation_run import SimulationRunService
@@ -61,24 +62,45 @@ def test_comparison_matches_each_cached_run():
     settings = dict(connection_id="mcgill-rem-green", strategy="connection_protection")
     response = client.post("/simulation/passenger-comparison", json=settings)
     assert response.status_code == 200
-    comparison = response.json()
-    for key, strategy in [
+    matched = response.json()["matched_passengers"]
+    for side, strategy in [
         ("without_holding", "no_control"),
         ("selected_strategy", "connection_protection"),
     ]:
         run = client.post(
             "/simulation/run", json={**settings, "strategy": strategy}
         ).json()
-        assert comparison[key] == run["passenger_outcomes"]
-        assert comparison[key]
+        outcomes = run["passenger_outcomes"]
+        assert outcomes
+        # By ID, since matched is in ID order and outcomes need not be. Both
+        # runs come from one seed, so every passenger is on both sides (#240)
+        assert {m["passenger_id"]: m[side] for m in matched} == {
+            o["passenger_id"]: o for o in outcomes
+        }
         metrics = run["passenger_metrics"]
-        assert metrics["total_affected_passengers"] == len(comparison[key])
+        assert metrics["total_affected_passengers"] == len(outcomes)
         assert metrics["missed_connections"] == sum(
-            passenger["status"] == "missed" for passenger in comparison[key]
+            passenger["status"] == "missed" for passenger in outcomes
         )
-        assert [o["passenger_id"] for o in comparison[key]] == [
+        assert [o["passenger_id"] for o in outcomes] == [
             t["passenger_id"] for t in run["passenger_tracks"]
         ]
+
+
+def test_runs_that_are_not_a_pair_are_logged_as_a_server_error(monkeypatch, caplog):
+    def not_a_pair(selected, baseline):
+        raise ValueError("passenger p is on two connections")
+
+    monkeypatch.setattr(main, "match_passengers", not_a_pair)
+    client = TestClient(create_app())
+    response = client.post(
+        "/simulation/passenger-comparison",
+        json={"connection_id": "mcgill-rem-green", "strategy": "connection_protection"},
+    )
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Passenger comparison failed"}
+    assert "not a pair for connection mcgill-rem-green" in caplog.text
 
 
 def test_comparison_reuses_baseline_across_slider_changes(monkeypatch):

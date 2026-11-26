@@ -10,7 +10,7 @@
 import { create } from "zustand";
 
 import { buildRunRequest } from "../lib/run-settings";
-import type { ComparisonRunner, StartingConditions } from "../lib/simulation-api";
+import type { ComparisonRunner, PassengerSplit, StartingConditions } from "../lib/simulation-api";
 import type { StationViewData } from "../types/stationView";
 import type { RunSettings } from "../types/runSettings";
 
@@ -25,6 +25,8 @@ interface ComparisonStore {
   noHolding: StationViewData | null;
   holdingStrategy: string | null;
   startingConditions: StartingConditions | null;
+  // Who holding helped or harmed in this pair (#285); null before the first load.
+  passengerSplit: PassengerSplit | null;
   status: ComparisonStatus;
   // User-facing reason for the last failure; null unless status is "error".
   error: string | null;
@@ -46,6 +48,7 @@ export const EMPTY_COMPARISON = {
   noHolding: null,
   holdingStrategy: null,
   startingConditions: null,
+  passengerSplit: null,
   status: "idle",
   error: null,
 } as const satisfies Omit<ComparisonStore, "loadComparison">;
@@ -96,6 +99,7 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => ({
         noHolding: pair.noHolding,
         holdingStrategy: pair.holdingStrategy,
         startingConditions: pair.startingConditions,
+        passengerSplit: pair.passengerSplit,
         status: "ready",
       });
       return true;

@@ -1,7 +1,12 @@
 // AI contribution: 50% or more AI-generated
 /** Unit tests for chart bucket conversion and clutter-reduction markers. */
 import { describe, expect, it } from "vitest";
-import { delayChartPoints, holdEventMarkers } from "../../src/lib/delaySeries";
+import {
+  delayChartPoints,
+  formatElapsedTime,
+  holdEventMarkers,
+  holdsForDelayBucket,
+} from "../../src/lib/delaySeries";
 
 describe("delayChartPoints", () => {
   it("maps 5-minute buckets to elapsed-axis points", () => {
@@ -21,6 +26,13 @@ describe("delayChartPoints", () => {
   });
 });
 
+describe("formatElapsedTime", () => {
+  it("rounds fractional event times to whole elapsed seconds", () => {
+    expect(formatElapsedTime(132.5)).toBe("2m 13s");
+    expect(formatElapsedTime(59.8)).toBe("1m 0s");
+  });
+});
+
 describe("holdEventMarkers", () => {
   it("removes near-duplicate markers and sorts by simulation time", () => {
     const markers = holdEventMarkers([
@@ -30,5 +42,18 @@ describe("holdEventMarkers", () => {
     ]);
 
     expect(markers.map((event) => event.time_s)).toStrictEqual([100, 300]);
+  });
+});
+
+describe("holdsForDelayBucket", () => {
+  it("includes holds at the bucket start and excludes the next bucket boundary", () => {
+    const holds = [
+      { time_s: 300, train_id: "T1", station_id: "32", platform_id: "P", applied_s: 20 },
+      { time_s: 599, train_id: "T2", station_id: "32", platform_id: "P", applied_s: 30 },
+      { time_s: 600, train_id: "T3", station_id: "32", platform_id: "P", applied_s: 40 },
+    ];
+
+    expect(holdsForDelayBucket(holds, 300, 600).map((event) => event.train_id))
+      .toStrictEqual(["T1", "T2"]);
   });
 });
