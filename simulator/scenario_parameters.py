@@ -48,8 +48,9 @@ class ParameterRange:
 
 
 # Lookup table of valid ranges, the single source of truth for the scenario
-# loader and the API request model. The web controls copy these numbers;
-# tests/simulator/test_scenario_parameters.py fails if they drift.
+# loader, the operating-rules parser and the API request model. The web
+# controls copy these numbers; tests/simulator/test_web_parameter_ranges.py
+# (added with the controls in #423) fails if they drift.
 PARAMETER_RANGES: Mapping[str, ParameterRange] = {
     # The wiki sweeps 40, 60 and 80; 0 runs with no transfers at all.
     "transfer_volume": ParameterRange(0, 200, 1),
@@ -74,7 +75,10 @@ class ScenarioParameters:
 
     Defaults are the values the run endpoint used before #258, except transfer
     volume, which is now a group size per train (60, the middle of the wiki's
-    sweep) instead of a Low, Normal or High label.
+    40/60/80 sweep) instead of a Low, Normal or High label. This is a
+    deliberate change: the old "Normal" rate of 12 per minute was about 42 per
+    train at McGill's 210 s REM headway, so default runs now carry about 40%
+    more transfers and their results differ from runs made before #258.
     """
 
     transfer_volume: int = 60

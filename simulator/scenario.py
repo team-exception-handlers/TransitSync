@@ -37,7 +37,9 @@ from simulator.scenario_parameters import (
 WORKLOAD_LIMIT_HOURS = 100
 DEFAULT_TIMEZONE = "America/Toronto"
 # Time-of-day presets (#264). Each one sets the window and the conditions
-# typical for it; "label" is the name the Scenario setup view shows.
+# typical for it; "label" is the name the Scenario setup view shows and
+# "weekdays" (Monday is 0) picks the service date, so a new preset needs only
+# this one entry.
 # "parameters" uses the scenario's "parameters" object and max_hold_time goes
 # to "operating_rules", so the normal loader validates preset values exactly
 # like a scenario file. A parameter a preset leaves out keeps its default.
@@ -48,6 +50,7 @@ DEFAULT_TIMEZONE = "America/Toronto"
 PRESET_SETTINGS: dict[str, dict[str, Any]] = {
     "weekday_morning": {
         "label": "Weekday morning peak",
+        "weekdays": frozenset({0, 1, 2, 3, 4}),
         "start_time": "07:00:00",
         "duration_s": 3600,
         "parameters": {
@@ -59,6 +62,7 @@ PRESET_SETTINGS: dict[str, dict[str, Any]] = {
     },
     "weekday_afternoon": {
         "label": "Weekday afternoon peak",
+        "weekdays": frozenset({0, 1, 2, 3, 4}),
         "start_time": "16:00:00",
         "duration_s": 3600,
         "parameters": {
@@ -70,6 +74,7 @@ PRESET_SETTINGS: dict[str, dict[str, Any]] = {
     },
     "saturday_morning": {
         "label": "Saturday morning",
+        "weekdays": frozenset({5}),
         "start_time": "10:00:00",
         "duration_s": 3600,
         "parameters": {
@@ -81,6 +86,7 @@ PRESET_SETTINGS: dict[str, dict[str, Any]] = {
     },
     "sunday_morning": {
         "label": "Sunday morning",
+        "weekdays": frozenset({6}),
         "start_time": "10:00:00",
         "duration_s": 3600,
         "parameters": {
@@ -225,16 +231,10 @@ def resolve_preset(
         raise ScenarioValidationError(
             f"preset: unknown name {name!r}; choose {choices}"
         )
-    weekday = {
-        "weekday_morning": {0, 1, 2, 3, 4},
-        "weekday_afternoon": {0, 1, 2, 3, 4},
-        "saturday_morning": {5},
-        "sunday_morning": {6},
-    }[name]
     preset = PRESET_SETTINGS[name]
     values: dict[str, Any] = {
         "dataset_id": dataset.dataset_id,
-        "date": _representative_date(dataset, weekday).isoformat(),
+        "date": _representative_date(dataset, preset["weekdays"]).isoformat(),
         "start_time": preset["start_time"],
         "duration_s": preset["duration_s"],
         "repetitions": 1,
@@ -564,7 +564,7 @@ def _service_day_end(horizons: Mapping[str, int | float], interchange: str) -> f
     return float(value)
 
 
-def _representative_date(dataset: DatasetMetadata, weekdays: set[int]) -> date:
+def _representative_date(dataset: DatasetMetadata, weekdays: frozenset[int]) -> date:
     midpoint = (
         dataset.coverage_start + (dataset.coverage_end - dataset.coverage_start) / 2
     )
