@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_RUN_SETTINGS,
+  DEFAULT_DISRUPTION_MAGNITUDES,
   ERROR_MAGNITUDE_RANGE,
   HEADWAY_IRREGULARITY_RANGE,
   MAX_HOLD_RANGE,
@@ -137,7 +138,8 @@ describe("applyRunSettings for run conditions", () => {
       disruption_preset: "platform_delay",
     });
 
-    expect(uneven.disruption_magnitude).toBe(0.3);
+    expect(uneven.disruption_magnitude)
+      .toBe(DEFAULT_DISRUPTION_MAGNITUDES.uneven_headways);
     expect(adjusted.disruption_magnitude).toBe(0.45);
     expect(platformDelay.disruption_magnitude).toBe(60);
     expect(HEADWAY_IRREGULARITY_RANGE).toStrictEqual({ min: 0.05, max: 1, step: 0.05 });

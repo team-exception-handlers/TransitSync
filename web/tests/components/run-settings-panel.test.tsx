@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "../../src/App";
+import { RunSummary } from "../../src/components/run-summary";
 import { RunSettingsPanel } from "../../src/components/run-settings-panel";
 import { connectionRuns } from "../../src/data/connection-runs";
 import { stationViewData } from "../../src/data/stationViewData";
@@ -165,6 +166,27 @@ describe("run settings controls", () => {
     fireEvent.change(irregularity, { target: { value: "0.6" } });
     expect(draft().disruption_magnitude).toBe(0.6);
     expect(slider(/Headway irregularity/).getAttribute("aria-valuetext")).toBe("0.60 CV");
+  });
+
+  it("uses the shared CV default when an applied run omits its magnitude", () => {
+    usePlaybackStore.setState({
+      selectedConnectionId: CONNECTION,
+      simulatedConnectionIds: [CONNECTION],
+    });
+    useRunSettingsStore.setState({
+      applied: {
+        [CONNECTION]: {
+          ...DEFAULT_RUN_SETTINGS,
+          disruption_preset: "uneven_headways",
+          disruption_magnitude: undefined,
+        },
+      },
+    });
+
+    render(<RunSummary />);
+
+    expect(screen.getByText("Headway irregularity")).toBeDefined();
+    expect(screen.getByText("0.30 CV")).toBeDefined();
   });
 
   it("opens and closes the maximum hold help note", () => {
