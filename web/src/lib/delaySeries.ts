@@ -16,6 +16,12 @@ export function formatElapsedMinutes(time_s: number): string {
   return `${Math.floor(time_s / 60)}m`;
 }
 
+/** Format simulation seconds to the nearest whole elapsed second. */
+export function formatElapsedTime(time_s: number): string {
+  const rounded_s = Math.round(time_s);
+  return `${Math.floor(rounded_s / 60)}m ${rounded_s % 60}s`;
+}
+
 /** Convert API buckets to Recharts points; missing buckets cannot hide horizon gaps. */
 export function delayChartPoints(timeSeries: TimeSeriesData): DelayChartPoint[] {
   return timeSeries.buckets.map((bucket) => ({
@@ -24,6 +30,15 @@ export function delayChartPoints(timeSeries: TimeSeriesData): DelayChartPoint[] 
     average_passenger_delay_s: bucket.average_passenger_delay_s,
     passenger_count: bucket.passenger_count,
   }));
+}
+
+/** Return holds within one bucket so the hover readout can show local events. */
+export function holdsForDelayBucket(
+  holdEvents: readonly HoldEvent[],
+  start_s: number,
+  end_s: number,
+): HoldEvent[] {
+  return holdEvents.filter((event) => event.time_s >= start_s && event.time_s < end_s);
 }
 
 /**

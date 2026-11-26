@@ -161,6 +161,30 @@ def _stop_trip(trip_id: str, platform_id: str, arrival_s: float, departure_s: fl
     )
 
 
+def _route_trip(
+    trip_id: str,
+    route_id: str,
+    platform_id: str,
+    relative_departure_s: float,
+    direction_id: int = 0,
+):
+    """Build one single-stop trip with a 30-second dwell at the chosen platform."""
+    arrival_s = START_S + relative_departure_s - 30
+    visit = SimpleNamespace(
+        stop_id="32",
+        platform_id=platform_id,
+        arrival_s=arrival_s,
+        departure_s=arrival_s,
+    )
+    return SimpleNamespace(
+        feed_id="stm",
+        trip_id=trip_id,
+        route_id=route_id,
+        direction_id=direction_id,
+        visits=(visit,),
+    )
+
+
 def test_trains_carry_the_onboard_load_and_connecting_trips_ride_on(monkeypatch):
     """Only a trip ending at the connecting platform gets the onward stop.
 
@@ -244,7 +268,7 @@ def test_perfect_information_shows_no_gap_in_the_decision_estimates(monkeypatch)
     [
         ("platform_delay", 90.0, 75.0),
         ("line_suspension", 90.0, 75.0),
-        ("uneven_headways", 90.0, 75.0),
+        ("uneven_headways", 90.0, 0.75),
     ],
 )
 def test_disruption_presets_validate_custom_time_and_magnitude(
@@ -262,51 +286,52 @@ def test_disruption_presets_validate_custom_time_and_magnitude(
     assert request.disruption_magnitude == expected_magnitude
 
 
+def test_uneven_headways_rejects_magnitude_above_one_cv() -> None:
+    """Prevent API requests from reaching the spacing model with an invalid CV."""
+    with pytest.raises(
+        ValueError,
+        match="disruption_magnitude must be at most 1 as a coefficient of variation",
+    ):
+        simulation_run.SimulationRunRequest(
+            connection_id="mcgill-rem-green",
+            disruption_preset="uneven_headways",
+            disruption_magnitude=1.01,
+        )
+
+
 def test_uneven_headways_perturbs_green_line_dispatch_times(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The uneven preset uses the seeded spacing disruption on Green route 1."""
+    """The configured start and CV perturb only later Green dispatch intervals."""
     monkeypatch.setattr(simulation_run, "scenario_start_clock_s", lambda _: START_S)
-    green_one = SimpleNamespace(
-        feed_id="stm",
-        trip_id="green-one",
-        route_id="1",
-        visits=(
-            SimpleNamespace(
-                stop_id="32",
-                platform_id="green_mcgill_0",
-                arrival_s=START_S + 60,
-                departure_s=START_S + 90,
-            ),
-        ),
+    green_one = _route_trip("green-one", "1", "green_mcgill_0", 90)
+    green_two = _route_trip("green-two", "1", "green_mcgill_0", 390)
+    green_three = _route_trip("green-three", "1", "green_mcgill_0", 690)
+    green_reverse_one = _route_trip(
+        "green-reverse-one", "1", "green_mcgill_1", 90, direction_id=1
     )
-    green_two = SimpleNamespace(
-        feed_id="stm",
-        trip_id="green-two",
-        route_id="1",
-        visits=(
-            SimpleNamespace(
-                stop_id="32",
-                platform_id="green_mcgill_0",
-                arrival_s=START_S + 360,
-                departure_s=START_S + 390,
-            ),
-        ),
+    green_reverse_two = _route_trip(
+        "green-reverse-two", "1", "green_mcgill_1", 390, direction_id=1
     )
-    rem = SimpleNamespace(
-        feed_id="rem",
-        trip_id="rem-one",
-        route_id="S1",
-        visits=(
-            SimpleNamespace(
-                stop_id="MCG",
-                platform_id="rem_mcgill_0",
-                arrival_s=START_S + 120,
-                departure_s=START_S + 150,
-            ),
-        ),
+    green_reverse_three = _route_trip(
+        "green-reverse-three", "1", "green_mcgill_1", 690, direction_id=1
     )
-    network = SimpleNamespace(trips_for_date=lambda _: (green_one, green_two, rem))
+    green_after_horizon = _route_trip(
+        "green-after-horizon", "1", "green_mcgill_0", 3990
+    )
+    rem = _route_trip("rem-one", "S1", "rem_mcgill_0", 150)
+    network = SimpleNamespace(
+        trips_for_date=lambda _: (
+            green_one,
+            green_two,
+            green_three,
+            green_reverse_one,
+            green_reverse_two,
+            green_reverse_three,
+            green_after_horizon,
+            rem,
+        )
+    )
     scenario = SimpleNamespace(
         service_date=None,
         duration_s=DURATION_S,
@@ -314,8 +339,9 @@ def test_uneven_headways_perturbs_green_line_dispatch_times(
     request = simulation_run.SimulationRunRequest(
         connection_id="mcgill-rem-green",
         disruption_preset="uneven_headways",
+        disruption_time_s=300,
+        disruption_magnitude=0.3,
     )
-
     trains = simulation_run._build_trains(
         network,
         scenario,
@@ -323,15 +349,47 @@ def test_uneven_headways_perturbs_green_line_dispatch_times(
         request,
         StreamManager(42),
     )
-
-    green_departures = [
-        train.schedule[0].departure_s for train in trains if train.line_id == "1"
-    ]
-    rem_departure = next(
-        train.schedule[0].departure_s for train in trains if train.line_id == "S1"
+    lower_magnitude_trains = simulation_run._build_trains(
+        network,
+        scenario,
+        "green_mcgill_0",
+        simulation_run.SimulationRunRequest(
+            connection_id="mcgill-rem-green",
+            disruption_preset="uneven_headways",
+            disruption_time_s=300,
+            disruption_magnitude=0.1,
+        ),
+        StreamManager(42),
     )
-    assert green_departures != [90.0, 390.0]
-    assert rem_departure == 150.0
+    preset_default_trains = simulation_run._build_trains(
+        network,
+        scenario,
+        "green_mcgill_0",
+        simulation_run.SimulationRunRequest(
+            connection_id="mcgill-rem-green",
+            disruption_preset="uneven_headways",
+            disruption_time_s=300,
+        ),
+        StreamManager(42),
+    )
+
+    green_departures = {train.id: train.schedule[0].departure_s for train in trains}
+    lower_departures = {
+        train.id: train.schedule[0].departure_s for train in lower_magnitude_trains
+    }
+    preset_departures = {
+        train.id: train.schedule[0].departure_s for train in preset_default_trains
+    }
+    assert green_departures["stm:green-one"] == 90.0
+    assert green_departures["stm:green-two"] == 390.0
+    assert green_departures["stm:green-three"] != 690.0
+    assert green_departures["stm:green-reverse-one"] == 90.0
+    assert green_departures["stm:green-reverse-two"] == 390.0
+    assert green_departures["stm:green-reverse-three"] != 690.0
+    assert green_departures["stm:green-three"] != lower_departures["stm:green-three"]
+    assert green_departures["stm:green-after-horizon"] == 3990.0
+    assert preset_departures == green_departures
+    assert green_departures["stm:rem-one"] == 150.0
 
 
 def test_line_suspension_targets_the_connection_metro_route_id() -> None:

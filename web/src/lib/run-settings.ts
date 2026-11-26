@@ -66,6 +66,14 @@ export const DISRUPTION_PRESETS: readonly DisruptionPreset[] = [
 ];
 export const DISRUPTION_TIME_RANGE: SettingRange = { min: 0, max: 3300, step: 30 };
 export const DISRUPTION_MAGNITUDE_RANGE: SettingRange = { min: 30, max: 600, step: 30 };
+/** The uneven-headways preset uses coefficient of variation, not seconds. */
+export const HEADWAY_IRREGULARITY_RANGE: SettingRange = { min: 0.05, max: 1, step: 0.05 };
+export const DEFAULT_DISRUPTION_MAGNITUDES: Readonly<Record<DisruptionPreset, number>> = {
+  none: 60,
+  platform_delay: 60,
+  line_suspension: 60,
+  uneven_headways: 0.3,
+};
 
 /** Passenger flow levels in the order shown, lowest first. */
 export const PASSENGER_FLOWS: readonly PassengerFlow[] = ["Low", "Normal", "High"];
@@ -107,6 +115,18 @@ export function isStrategyName(value: unknown): value is StrategyName {
  */
 export function applyRunSettings(current: RunSettings, patch: Partial<RunSettings>): RunSettings {
   const merged = { ...current, ...patch };
+  const disruptionPreset = DISRUPTION_PRESETS.includes(
+    merged.disruption_preset as DisruptionPreset,
+  )
+    ? merged.disruption_preset
+    : current.disruption_preset;
+  const presetChanged = disruptionPreset !== current.disruption_preset;
+  const magnitudeRange = disruptionPreset === "uneven_headways"
+    ? HEADWAY_IRREGULARITY_RANGE
+    : DISRUPTION_MAGNITUDE_RANGE;
+  const magnitudeValue = presetChanged && patch.disruption_magnitude === undefined
+    ? DEFAULT_DISRUPTION_MAGNITUDES[disruptionPreset]
+    : merged.disruption_magnitude ?? DEFAULT_DISRUPTION_MAGNITUDES[disruptionPreset];
   return {
     strategy: isStrategyName(merged.strategy) ? merged.strategy : current.strategy,
     max_hold_time: snapToRange(merged.max_hold_time, MAX_HOLD_RANGE, current.max_hold_time),
@@ -118,13 +138,12 @@ export function applyRunSettings(current: RunSettings, patch: Partial<RunSetting
     passenger_flow: PASSENGER_FLOWS.includes(merged.passenger_flow)
       ? merged.passenger_flow
       : current.passenger_flow,
-    disruption_preset: DISRUPTION_PRESETS.includes(merged.disruption_preset as DisruptionPreset)
-      ? merged.disruption_preset
-      : current.disruption_preset,
+    disruption_preset: disruptionPreset,
     disruption_time_s: snapToRange(
       merged.disruption_time_s, DISRUPTION_TIME_RANGE, current.disruption_time_s),
     disruption_magnitude: snapToRange(
-      merged.disruption_magnitude, DISRUPTION_MAGNITUDE_RANGE, current.disruption_magnitude),
+      magnitudeValue, magnitudeRange, current.disruption_magnitude
+        ?? DEFAULT_DISRUPTION_MAGNITUDES[disruptionPreset]),
     disruption_enabled: merged.disruption_preset === "platform_delay"
       || (typeof merged.disruption_enabled === "boolean"
         && merged.disruption_enabled),
@@ -139,6 +158,11 @@ export function strategyLabel(name: string): string {
 /** A duration in whole seconds with its unit, for example "45 s". */
 export function formatSeconds(value: number): string {
   return `${value} s`;
+}
+
+/** Format the headway coefficient of variation as a unitless value. */
+export function formatHeadwayIrregularity(value: number): string {
+  return `${value.toFixed(2)} CV`;
 }
 
 /** The dimensionless threshold with two decimals, for example "0.25". */

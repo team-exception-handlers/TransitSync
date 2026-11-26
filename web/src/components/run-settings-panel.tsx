@@ -15,11 +15,13 @@ import {
   DISRUPTION_MAGNITUDE_RANGE,
   DISRUPTION_PRESETS,
   DISRUPTION_TIME_RANGE,
+  HEADWAY_IRREGULARITY_RANGE,
   MAX_HOLD_RANGE,
   PASSENGER_FLOWS,
   STRATEGY_OPTIONS,
   THRESHOLD_RANGE,
   formatErrorMagnitude,
+  formatHeadwayIrregularity,
   formatSeconds,
   formatThreshold,
 } from "../lib/run-settings";
@@ -37,14 +39,22 @@ const ERROR_MAGNITUDE_HELP =
   "How wrong the strategy's predictions are. At 0 it decides on the true values, "
   + "which gives the best result that strategy can reach.";
 const DISRUPTION_HELP =
-  "None leaves a baseline run. Platform delay delays the feeder train; line suspension "
-  + "halts Green line dispatch; uneven headways vary dispatch gaps.";
+  "None leaves a baseline run. Platform delay and line suspension use seconds; uneven "
+  + "headways uses a coefficient of variation (CV). Its start time begins irregular spacing.";
 const DISRUPTION_LABELS: Record<DisruptionPreset, string> = {
   none: "None",
   platform_delay: "Platform delay",
   line_suspension: "Line suspension",
   uneven_headways: "Uneven headways",
 };
+
+/** Name the numeric control in units appropriate to the selected preset. */
+function disruptionMagnitudeLabel(preset: DisruptionPreset): string {
+  if (preset === "uneven_headways") return "Headway irregularity";
+  if (preset === "line_suspension") return "Suspension duration";
+  return "Disruption magnitude";
+}
+
 // Wording from the Scenario setup mockup's help popover.
 const MAX_HOLD_HELP =
   "The longest any train may wait for transfers, whatever the strategy asks for.";
@@ -194,12 +204,14 @@ export function RunSettingsPanel({ runner, provenance, onShowSources }: Readonly
                 format={formatSeconds}
                 onChange={(value) => update({ disruption_time_s: value })} />
               <SettingSlider
-                label={(draft.disruption_preset ?? "none") === "line_suspension"
-                  ? "Suspension duration"
-                  : "Disruption magnitude"}
+                label={disruptionMagnitudeLabel(draft.disruption_preset ?? "none")}
                 value={draft.disruption_magnitude ?? 60}
-                range={DISRUPTION_MAGNITUDE_RANGE}
-                format={formatSeconds}
+                range={draft.disruption_preset === "uneven_headways"
+                  ? HEADWAY_IRREGULARITY_RANGE
+                  : DISRUPTION_MAGNITUDE_RANGE}
+                format={draft.disruption_preset === "uneven_headways"
+                  ? formatHeadwayIrregularity
+                  : formatSeconds}
                 onChange={(value) => update({ disruption_magnitude: value })} />
             </>
           )}

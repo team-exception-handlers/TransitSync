@@ -38,8 +38,10 @@ Passenger delay-over-time chart and disruption preset controls (#286, #287, #288
 Aggregate passenger waiting into 300-second buckets, return full-horizon delay/hold time-series data
 through the run response, render it with Recharts markers and hover values, and replace the
 disruption toggle with preset, time and magnitude controls. Backend compatibility keeps
-`disruption_enabled` for older clients. Tests cover bucket assignment, full-horizon buckets,
-hold marking, preset validation, picker state and chart marker de-cluttering.
+`disruption_enabled` for older clients. Uneven headways now apply the configured coefficient of
+variation after the selected start time; the chart hover readout also shows hold details in the
+corresponding bucket. Tests cover bucket assignment, full-horizon buckets, hold marking and
+hover details, preset validation, disruption timing and magnitude, picker state and marker de-cluttering.
 Files: api/simulation_run.py, api/station_view.py, web/package.json,
 web/src/types/runSettings.ts, web/src/types/stationView.ts,
 web/src/lib/run-settings.ts, web/src/lib/delaySeries.ts,
@@ -50,9 +52,16 @@ tests/api/test_simulation_run_inputs.py,
 web/tests/lib/delaySeries.test.ts, web/tests/lib/run-settings.test.ts,
 web/tests/lib/run-simulation.test.ts, web/tests/store/useRunSettingsStore.test.ts,
 web/tests/components/run-settings-panel.test.tsx, AI_USAGE.md.
-- **Verification:** 23 targeted backend tests passed for time-series/preset coverage, 376 frontend
-  tests passed and frontend lint/typecheck passed. The chart was also checked through the
-  frontend test suite; the Recharts dependency is pinned in `package-lock.json`.
+- **Verification:** Full pytest passed (1,831 passed, 36 deselected), and all 483 frontend
+  tests passed. Frontend lint, typecheck and production build passed; full Ruff lint/format
+  checks passed, and the changed Python files passed the extended Ruff rules.
+- **Corrections:** Review found that the uneven-headways control ignored its start and magnitude,
+  and the hover tooltip omitted the hold details requested by #289. Both gaps now have regression
+  tests; the CV is bounded at 1 and defaults to the named preset's 0.3 when omitted. PR #426
+  review also caught mixed-direction departures failing the spacing validator and comparison
+  baselines losing the omitted-CV default; schedules are now perturbed per direction within the
+  run horizon, and paired comparisons retain the same seeded CV. Tooltip event times round to
+  whole seconds, and the settings store is the sole source of preset-specific magnitude defaults.
 
 Hash-locked Python dependencies and non-root nginx (no issue): Claude (Claude Code, Anthropic), 50% or more AI-generated.
 Fixes the two remaining SonarQube security findings. `docker:S8544`: the root
