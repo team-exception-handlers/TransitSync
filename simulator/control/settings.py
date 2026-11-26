@@ -45,6 +45,7 @@ from simulator.control.strategies.connection_protection import (
     ConnectionProtectionStrategy,
 )
 from simulator.control.strategies.headway_regulation import HeadwayRegulationStrategy
+from simulator.scenario_parameters import PARAMETER_RANGES
 
 DEFAULT_STRATEGY = "no_control"
 DEFAULT_IRREGULARITY_WINDOW_SIZE = 5
@@ -307,9 +308,7 @@ def parse_operating_rules(value: object) -> OperatingRulesConfig:
     # Fields are checked in this order, so the first bad one is reported.
     kwargs = {}
     if "max_hold_time" in value:
-        kwargs["max_hold_time"] = _rule_seconds(
-            value["max_hold_time"], "max_hold_time", allow_zero=False
-        )
+        kwargs["max_hold_time"] = _max_hold_seconds(value["max_hold_time"])
     if "min_safe_gap" in value:
         kwargs["min_safe_gap"] = _rule_seconds(
             value["min_safe_gap"], "min_safe_gap", allow_zero=True
@@ -317,6 +316,23 @@ def parse_operating_rules(value: object) -> OperatingRulesConfig:
     if "rule_action_map" in value:
         kwargs["rule_action_map"] = _parse_rule_action_map(value["rule_action_map"])
     return OperatingRulesConfig(**kwargs)
+
+
+def _max_hold_seconds(value: object) -> float:
+    """Return the hold limit after the positive check and the range check.
+
+    The range comes from ``PARAMETER_RANGES`` (#258), the table the API and the
+    web controls also use, so a scenario or preset with a limit the hold search
+    cannot use (7 s, 999 s) fails when it loads instead of during the run.
+    """
+    seconds = _rule_seconds(value, "max_hold_time", allow_zero=False)
+    bounds = PARAMETER_RANGES["max_hold_time"]
+    if not bounds.contains(seconds):
+        raise OperatingRulesError(
+            f"operating_rules.max_hold_time: must be between {bounds.minimum:g} "
+            f"and {bounds.maximum:g} in steps of {bounds.step:g}"
+        )
+    return seconds
 
 
 def _rule_seconds(value: object, field_name: str, *, allow_zero: bool) -> float:

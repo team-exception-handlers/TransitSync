@@ -579,6 +579,32 @@ def test_each_preset_carries_its_conditions_into_the_scenario(dataset, name):
     assert preset["label"]
 
 
+def test_bad_preset_max_hold_fails_when_the_preset_loads(dataset, monkeypatch):
+    """#258: a maximum hold off the 5 s grid fails in resolve_preset, not mid-run."""
+    broken = {**PRESET_SETTINGS["sunday_morning"], "max_hold_time": 999}
+    monkeypatch.setitem(PRESET_SETTINGS, "sunday_morning", broken)
+    dataset = replace(dataset, service_dates=(date(2026, 10, 11),))
+    with pytest.raises(
+        ScenarioValidationError, match=r"operating_rules\.max_hold_time"
+    ):
+        resolve_preset("sunday_morning", dataset)
+
+
+def test_new_preset_needs_only_its_own_entry(dataset, monkeypatch):
+    """A preset added to PRESET_SETTINGS alone resolves; its weekdays pick the date."""
+    monkeypatch.setitem(
+        PRESET_SETTINGS,
+        "saturday_evening",
+        {**PRESET_SETTINGS["saturday_morning"], "start_time": "19:00:00"},
+    )
+    dataset = replace(
+        dataset,
+        service_dates=(date(2026, 10, 5), date(2026, 10, 10), date(2026, 10, 11)),
+    )
+    scenario = resolve_preset("saturday_evening", dataset)
+    assert scenario.service_date == date(2026, 10, 10)
+
+
 def test_bad_preset_value_fails_with_the_field_name(dataset, monkeypatch):
     broken = {
         **PRESET_SETTINGS["weekday_morning"],
