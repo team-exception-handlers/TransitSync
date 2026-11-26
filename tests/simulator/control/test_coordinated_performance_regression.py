@@ -19,6 +19,12 @@ and count is identical; with keyed draws only the prediction-error run shows
 it. Both hashes come from running c1f3d0a itself, on Windows and in
 ``python:3.12-slim`` (glibc 2.41), never from the optimized code. The two
 single-run oracles below that still match 8ddf153 were not affected by #192.
+
+#418 names each transfer passenger after its feeder arrival (#240), which
+changes passenger IDs in the event logs of the three seeded runs. Their event
+hashes were recaptured from main c05d95d, which has #418 but none of the
+optimizations, and match on Windows and Linux. Their decision-log hashes and
+both single-run oracles are unchanged.
 """
 
 import hashlib
@@ -34,7 +40,7 @@ from tests.simulator.control.test_coordinated_run import run_harmful
 from tests.simulator.control.test_rolling_horizon_review import independent_stations
 from tests.simulator.control.test_rolling_horizon_run import run
 
-# Baseline decision-log hashes from c1f3d0a, keyed by run and then sys.platform
+# Decision-log hashes from c1f3d0a, still current at c05d95d; by run, then sys.platform
 _DECISION_HASHES = {
     "exact": {
         "win32": "9b5e0b89ab8dc32e1f92454303f40940919a55ba676a4e434de6443020e4372b",
@@ -67,17 +73,17 @@ def _for_this_platform(hashes: dict[str, str]) -> str:
     [
         (
             {},
-            "d8504ab070facdbb2938896fd7b20ecf4559a2970bf304831055c80a70985e07",
+            "e0ceb5cd4b90a8cfa0c7320425d5f780b99e6bc22613741e2c46059b8e1ffffe",
             _DECISION_HASHES["exact"],
         ),
         (
             {"with_errors": True},
-            "49cbf91a8a72e76c8a0d8d33baa024c866827cc059eabf339b84411af0389869",
+            "d8b64f6c5cd0ec1a8f1e931de6b1ba9e9d9e84c6564b3965b0bc0f17125061b2",
             _DECISION_HASHES["prediction-errors"],
         ),
         (
             {"cap": 5},
-            "19ec3ffaae634cd5c755a673724f13650b6c01582ef2b81111f8886f99c10d22",
+            "587c1bd0630d8eaff71f87525f1b097d70f65eebac47e5650e428cb20063805b",
             _DECISION_HASHES["rule-clamp"],
         ),
     ],
