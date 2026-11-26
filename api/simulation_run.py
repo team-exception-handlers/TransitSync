@@ -372,6 +372,12 @@ class SimulationRunService:
         A requested preset is filled and validated by ``resolve_preset``
         (#265); otherwise the committed weekday-morning file is used. Request
         parameter values then replace the scenario's (#259).
+        The file and the "weekday_morning" preset share a time window but not
+        their conditions, on purpose: the file has no "parameters" object, so
+        it runs with the neutral ``ScenarioParameters`` defaults and a 300 s
+        maximum hold, the baseline earlier results and the response baselines
+        were made with. The preset adds the assumed peak demand (80 transfers,
+        450 on board, 130 s walk) and a 60 s maximum hold.
         Headway regulation uses platform targets, and connection protection uses
         the selected destination's median service gap. Adaptive mode uses both.
         A chosen train frequency replaces the connecting platform's gap.

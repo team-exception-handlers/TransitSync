@@ -190,3 +190,20 @@ def test_presets_endpoint_fails_loudly_on_a_bad_preset(monkeypatch):
     monkeypatch.setattr("api.scenario_presets.PRESET_SETTINGS", broken)
     with pytest.raises(ValueError, match=r"parameters\.onboard_load"):
         TestClient(create_app()).get("/scenario/presets")
+
+
+@pytest.mark.parametrize("max_hold_time", [7, 999])
+def test_presets_endpoint_rejects_a_preset_max_hold_off_the_range(
+    monkeypatch, max_hold_time
+):
+    """A hold the search cannot use fails when listed, not as a 500 mid-run."""
+    broken = {
+        **PRESET_SETTINGS,
+        "sunday_morning": {
+            **PRESET_SETTINGS["sunday_morning"],
+            "max_hold_time": max_hold_time,
+        },
+    }
+    monkeypatch.setattr("api.scenario_presets.PRESET_SETTINGS", broken)
+    with pytest.raises(ValueError, match=r"operating_rules\.max_hold_time"):
+        TestClient(create_app()).get("/scenario/presets")
