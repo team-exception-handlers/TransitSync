@@ -12,6 +12,7 @@ group, M = 80, s = 60, H = 300 and both weights 1:
 """
 
 import math
+from dataclasses import replace
 
 import pytest
 from hypothesis import given
@@ -26,11 +27,14 @@ from simulator.control.hold_search import (
     HoldSearchSettings,
 )
 from simulator.control.interface import (
+    CurrentVisitState,
     IncomingTransfer,
     ObservationSnapshot,
+    PlatformState,
     TrainState,
 )
 from simulator.control.walking_cdf import ShiftedExponentialCdf
+from simulator.trains.suspension import LineSuspension
 
 EQUAL = BreakEvenWeights(w_wait=1.0, w_onboard=1.0)
 TEN_TO_THIRTY = HoldSearchSettings(step_s=10.0, max_hold_s=30.0)
@@ -231,3 +235,117 @@ def test_inputs_need_the_deciding_train_in_the_observation():
 def test_inputs_reject_bad_values(load, headway_s, transfers, message):
     with pytest.raises(ValueError, match=message):
         HoldInputs(0.0, "green_1", "mcgill", "green", load, headway_s, transfers)
+
+
+class UniformCdf:
+    """Spread walking times evenly from zero to end_s seconds for simple arithmetic."""
+
+    def __init__(self, end_s=200):
+        self.end_s = end_s
+
+    def cdf(self, t_s):
+        return min(1, max(0, t_s / self.end_s))
+
+
+def clearance_inputs(ready_s=100, previous_s=50, suspensions=()):
+    """Build search inputs and a snapshot of the train's current restrictions."""
+    context = ObservationSnapshot(
+        ready_s,
+        "green_1",
+        "mcgill",
+        "green",
+        ready_s,
+        (TrainState("green_1", "green", None, None, None, 0, 100, 800),),
+        (PlatformState("rem", 0, 30), PlatformState("green", 0, previous_s)),
+        (IncomingTransfer("g1", "green", 100, 0, 500, 0, 100),),
+        current_visit=CurrentVisitState("green", True),
+        suspensions=suspensions,
+    )
+    return HoldInputs.from_observation(context, 300), context
+
+
+@pytest.mark.parametrize(
+    (
+        "ready",
+        "previous",
+        "closures",
+        "hold",
+        "end",
+        "d0",
+        "departure",
+        "caught",
+        "benefit",
+        "cost",
+        "net",
+    ),
+    [
+        (100, 50, (), 30, 200, 140, 140, 0, 0, 0, 0),
+        (100, 50, (), 40, 200, 140, 140, 0, 0, 0, 0),
+        (100, 50, (), 60, 200, 140, 160, 10, 3000, 2000, 1000),
+        (100, None, (), 60, 200, 100, 160, 30, 9000, 6000, 3000),
+        (
+            280,
+            None,
+            (LineSuspension("green", 300, 450),),
+            120,
+            500,
+            280,
+            450,
+            34,
+            10200,
+            17000,
+            -6800,
+        ),
+    ],
+)
+def test_clearance_economics_use_projected_departure_endpoints(
+    ready, previous, closures, hold, end, d0, departure, caught, benefit, cost, net
+):
+    built, context = clearance_inputs(ready, previous, closures)
+    result = HoldSearch(UniformCdf(end), EQUAL, HoldSearchSettings(hold, hold)).run(
+        built, departure_context=context
+    )
+    candidate = result.candidates[-1]
+    assert result.no_hold_departure_s == d0
+    assert candidate.hold_s == hold
+    assert candidate.departure_s == departure
+    assert candidate.incremental_delay_s == departure - d0
+    # Group size 100, headway 300 s, onboard load 100, both weights 1.
+    # Tolerances allow only rounding in the walking-time probabilities.
+    assert candidate.n_caught == pytest.approx(caught, abs=1e-9, rel=0)
+    assert candidate.benefit_ps == pytest.approx(benefit, abs=1e-6, rel=0)
+    assert candidate.cost_ps == pytest.approx(cost, abs=1e-6, rel=0)
+    assert candidate.net_ps == pytest.approx(net, abs=1e-6, rel=0)
+
+
+def test_nonlinear_burst_excludes_connections_during_mandatory_wait():
+    class PulseCdf:
+        def cdf(self, t_s):
+            return 0.5 * (t_s >= 130) + 0.5 * (t_s >= 150)
+
+    built, context = clearance_inputs()
+    result = HoldSearch(PulseCdf(), EQUAL).run(built, departure_context=context)
+    # Half the group can already connect at 140 s without a hold.
+    # Requesting 50 s moves departure to 150 s, adding 10 s and catching 50 more.
+    assert result.hold_s == 50
+    assert result.chosen.n_caught == 50
+    assert result.chosen.benefit_ps == 15000
+    assert result.chosen.cost_ps == 1000
+    assert result.candidates[-1].cost_ps == 2000
+
+
+def test_fully_absorbed_holds_decline_even_with_zero_load():
+    built, context = clearance_inputs(previous_s=110)
+    result = HoldSearch(UniformCdf(), EQUAL).run(
+        replace(built, load=0), departure_context=context
+    )
+    assert result.hold_s == 0
+    assert all(c.n_caught == 0 for c in result.candidates)
+
+
+def test_departure_context_must_match_the_deciding_visit():
+    built, context = clearance_inputs()
+    other = replace(context, platform_id="rem")
+    hold_search = HoldSearch(UniformCdf())
+    with pytest.raises(ValueError, match="match the deciding visit"):
+        hold_search.run(built, departure_context=other)

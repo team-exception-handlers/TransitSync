@@ -46,6 +46,7 @@ from simulator.control.observation_builder import ObservationBuilder
 from simulator.control.prediction_error import PredictionErrorModel
 from simulator.control.rules import OperatingRulesEnforcer
 from simulator.control.settings import OperatingRulesConfig
+from simulator.control.strategies import STRATEGIES
 from simulator.engine.random_streams import StreamManager
 from simulator.engine.runner import run_scenario
 from simulator.passengers import (
@@ -57,6 +58,7 @@ from simulator.passengers import (
 )
 from simulator.passengers.platform_queue import PlatformQueue
 from simulator.scenario import DatasetMetadata, load_scenario_json
+from simulator.trains.suspension import LineSuspension
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
 
@@ -65,12 +67,9 @@ WALK_MIN_S = 30.0
 HEADWAY_S = 300.0
 
 
-def build_components(scenario, streams, rate_per_min):
-    """Build fresh components using the saved strategy and passenger demand.
-    Use the real train, transfer, strategy and rule-checking components.
-    Pass the same routes to passenger generation and the controller.
-    ``rate_per_min`` controls demand; saved rules set the operating limit.
-    """
+def build_components(scenario, streams, rate_per_min, clearance_s=None):
+    """Build trains and passengers using shared routes and saved control settings.
+    Demand is passengers/minute; clearance_s is when dispatch can resume."""
     route = TransferRoute(
         station_id="mcgill",
         feeder_platform_id="rem",
@@ -83,8 +82,10 @@ def build_components(scenario, streams, rate_per_min):
     )
     routes = [route]
     transfers = TransferComponent(routes, streams)
-    strategy = build_selected_connection_protection(
-        scenario.control, routes, ("rem", "green")
+    strategy = (
+        build_selected_connection_protection(scenario.control, routes, ("rem", "green"))
+        if scenario.control.strategy == "connection_protection"
+        else STRATEGIES.build(scenario.control.strategy)
     )
     pipeline = DecisionPipeline(
         strategy,
@@ -97,27 +98,36 @@ def build_components(scenario, streams, rate_per_min):
     )
     trains = TrainComponent(
         [
-            Train("rem-1", 800, (ScheduledStop("mcgill", "rem", 100, 130),)),
+            Train(
+                "rem-1", 800, (ScheduledStop("mcgill", "rem", 100, 130),), line_id="rem"
+            ),
             Train(
                 "green-1",
                 800,
                 (ScheduledStop("mcgill", "green", 100, 130),),
                 onboard_load=400,
+                line_id="green",
             ),
         ],
         passenger_queue=PlatformQueue(("green",)),
         decision=pipeline,
         control=scenario.control,
+        suspensions=()
+        if clearance_s is None
+        else (LineSuspension("green", 130, clearance_s),),
     )
     return [transfers, trains]
 
 
-def run(tmp_path, rate_per_min, rules=None):
-    """Load saved scenario settings and return events and decisions from a run.
-
-    Use local dataset metadata and seed 42. All time values are seconds.
-    Let callers lower the operating cap without changing the saved search cap.
-    """
+def run(
+    tmp_path,
+    rate_per_min,
+    rules=None,
+    *,
+    clearance_s=None,
+    strategy="connection_protection",
+):
+    """Load saved settings and run seed 42 with prediction error turned off."""
     dataset = DatasetMetadata(
         "test",
         date(2026, 10, 5),
@@ -133,7 +143,7 @@ def run(tmp_path, rate_per_min, rules=None):
         "master_seed": 42,
         "interchanges": ["mcgill"],
         "control": {
-            "strategy": "connection_protection",
+            "strategy": strategy,
             "connection_headways_s": {"green": HEADWAY_S},
             "prediction_error": {
                 "arrival_kappa": 0,
@@ -143,17 +153,19 @@ def run(tmp_path, rate_per_min, rules=None):
         },
         "operating_rules": (rules or OperatingRulesConfig()).to_dict(),
     }
+    if strategy == "no_control":
+        del values["control"]["connection_headways_s"]
     scenario = load_scenario_json(json.dumps(values), {"test": dataset})
     result = run_scenario(
         scenario,
         StreamManager,
-        lambda settings, built: build_components(settings, built, rate_per_min),
+        lambda settings, built: build_components(
+            settings, built, rate_per_min, clearance_s
+        ),
         tmp_path,
     )
     events = [json.loads(line) for line in result.events_path.read_text().splitlines()]
-    records = [
-        json.loads(line) for line in result.decisions_path.read_text().splitlines()
-    ]
+    records = map(json.loads, result.decisions_path.read_text().splitlines())
     # The error model also writes an estimates record per decision (#39)
     decisions = [r for r in records if r["kind"] == KIND_HOLD_SEARCH]
     return events, decisions
@@ -300,3 +312,58 @@ def test_enforcer_changes_applied_hold_without_changing_proposal(
     assert [(e["train_id"], e["time_s"]) for e in ends] == (
         [("green-1", 150)] if applied_s else []
     )
+
+
+@pytest.mark.parametrize(
+    ("clearance_s", "requested_s", "departure"), [(150, 60, 190), (200, 0, 200)]
+)
+def test_saved_connection_protection_projects_paired_dispatch_departures(
+    tmp_path, clearance_s, requested_s, departure
+):
+    """Check logged departure estimates against actual runs with and without holds."""
+    baseline, baseline_decisions = run(
+        tmp_path / "baseline", 120, clearance_s=clearance_s, strategy="no_control"
+    )
+    protected, decisions = run(tmp_path / "protected", 120, clearance_s=clearance_s)
+    record = green_decision(decisions)
+    assert baseline_decisions == []
+    assert record["time_s"] == 130
+    assert record["chosen_hold_s"] == requested_s
+    assert record["no_hold_departure_s"] == clearance_s
+    for events, expected in ((baseline, clearance_s), (protected, departure)):
+        [actual] = [
+            e
+            for e in events
+            if e["event_type"] == "train_departure" and e["train_id"] == "green-1"
+        ]
+        assert actual["time_s"] == expected
+        # The 400 spare seats do not limit boarding.
+        assert actual["boarded_count"] < 400
+    assert holds(baseline) == []
+    assert [(e["requested_s"], e["applied_s"]) for e in holds(protected)] == (
+        [(requested_s, requested_s)] if requested_s else []
+    )
+    chosen = next(c for c in record["candidates"] if c["hold_s"] == requested_s)
+    assert chosen["departure_s"] == departure
+    assert chosen["incremental_delay_s"] == departure - clearance_s
+    assert record["departure_context"]["suspensions"] == [
+        {"line_id": "green", "start_s": 130, "end_s": clearance_s}
+    ]
+    [group] = record["inputs"]["transfers"]
+    # The train is ready 30 s after the feeder arrives (130 - 100).
+    assert group["conn_window_s"] == 30
+    mean, minimum = record["walking"]["mean_s"], record["walking"]["min_s"]
+    for candidate in record["candidates"]:
+        projected = max(clearance_s, 130 + candidate["hold_s"])
+        delta = projected - clearance_s
+        # F(x)=1-exp(-(x-minimum)/(mean-minimum)). Count only walkers
+        # arriving after no-hold departure and by the held departure.
+        caught = group["group_size"] * (
+            math.exp(-(clearance_s - 100 - minimum) / (mean - minimum))
+            - math.exp(-(projected - 100 - minimum) / (mean - minimum))
+        )
+        assert candidate["departure_s"] == projected
+        assert candidate["incremental_delay_s"] == delta
+        assert candidate["n_caught"] == pytest.approx(caught, abs=1e-9, rel=0)
+        assert candidate["benefit_ps"] == pytest.approx(caught * 600, abs=1e-6, rel=0)
+        assert candidate["cost_ps"] == 400 * delta

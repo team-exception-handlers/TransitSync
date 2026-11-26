@@ -18,7 +18,7 @@ The result keeps every candidate and the inputs behind it, so the decision
 audit (#44) can record why each candidate lost without recomputing anything.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from simulator.control.break_even import (
     BreakEvenResult,
@@ -33,6 +33,7 @@ from simulator.control.expected_arrivals import (
 from simulator.control.interface import ObservationSnapshot
 from simulator.control.validation import finite_number
 from simulator.control.walking_cdf import WalkingCdf
+from simulator.trains.departure_timing import departure_timing_s
 
 # Assumed until the operating rules (#56) set the maximum hold
 DEFAULT_STEP_S = 5.0
@@ -149,14 +150,38 @@ class HoldSearch:
     weights: BreakEvenWeights = field(default_factory=BreakEvenWeights)
     settings: HoldSearchSettings = field(default_factory=HoldSearchSettings)
 
-    def run(self, inputs: HoldInputs) -> "HoldSearchResult":
+    def run(
+        self,
+        inputs: HoldInputs,
+        *,
+        departure_context: ObservationSnapshot | None = None,
+    ) -> "HoldSearchResult":
         """Return every candidate's result and the chosen hold, if any.
 
-        Pure: the same inputs always give the same result, and nothing is
-        stored between calls.
+        The same inputs always give the same result; no state is kept.
+        Pass ``departure_context`` to compare departure with and without each
+        hold, using the current stop's restrictions (#206; Mathematical
+        Foundations sections 1, 2 and 8). Missing stop data or platform history
+        raises ValueError. Without context, score holds from train readiness.
         """
+        no_hold_s = inputs.time_s
+        transfers = inputs.transfers
+        if departure_context is not None:
+            if any(
+                getattr(inputs, name) != getattr(departure_context, name)
+                for name in ("time_s", "train_id", "station_id", "platform_id")
+            ):
+                raise ValueError("departure context must match the deciding visit")
+            no_hold_s = _project_departure(departure_context, inputs.time_s)
+            # Score from no-hold departure; log the original readiness windows.
+            shift_s = no_hold_s - inputs.time_s
+            transfers = tuple(
+                replace(g, conn_window_s=g.conn_window_s + shift_s)
+                for g in inputs.transfers
+            )
         candidates = tuple(
-            self._evaluate(inputs, hold_s) for hold_s in self.settings.candidates()
+            self._evaluate(inputs, hold_s, transfers, no_hold_s, departure_context)
+            for hold_s in self.settings.candidates()
         )
         # J can have several peaks when groups arrive at different times,
         # so every candidate is checked instead of stopping at the first drop.
@@ -164,13 +189,57 @@ class HoldSearch:
         # tie goes to the shorter hold
         best = max(candidates, key=lambda result: result.net_ps)
         chosen = best if best.worthwhile else None
-        return HoldSearchResult(self, inputs, candidates, chosen)
-
-    def _evaluate(self, inputs: HoldInputs, hold_s: float) -> BreakEvenResult:
-        n_caught = total_expected_caught(inputs.transfers, hold_s, self.walking)
-        return evaluate_hold(
-            hold_s, n_caught, inputs.headway_s, inputs.load, self.weights
+        return HoldSearchResult(
+            self, inputs, candidates, chosen, no_hold_s, departure_context
         )
+
+    def _evaluate(
+        self,
+        inputs: HoldInputs,
+        hold_s: float,
+        transfers: tuple[TransferEstimate, ...],
+        no_hold_s: float,
+        context: ObservationSnapshot | None,
+    ) -> BreakEvenResult:
+        departure_s = None
+        delay_s = hold_s
+        if context is not None:
+            departure_s = (
+                no_hold_s
+                if hold_s == 0
+                else _project_departure(context, inputs.time_s + hold_s)
+            )
+            delay_s = departure_s - no_hold_s
+        n_caught = total_expected_caught(transfers, delay_s, self.walking)
+        return evaluate_hold(
+            hold_s,
+            n_caught,
+            inputs.headway_s,
+            inputs.load,
+            self.weights,
+            incremental_delay_s=delay_s if context is not None else None,
+            departure_s=departure_s,
+        )
+
+
+def _project_departure(context: ObservationSnapshot, ready_s: float) -> float:
+    """Estimate departure in seconds: apply dispatch restrictions, then the gap."""
+    visit = context.current_visit
+    if visit is None:
+        raise ValueError("connection protection requires current_visit clearance")
+    platform = next(
+        (p for p in context.platforms if p.platform_id == context.platform_id), None
+    )
+    if platform is None:
+        raise ValueError("connection protection requires deciding platform history")
+    return departure_timing_s(
+        ready_s,
+        line_id=visit.line_id,
+        is_trip_origin=visit.is_trip_origin,
+        suspensions=context.suspensions,
+        previous_departure_s=platform.last_departure_s,
+        minimum_gap_s=context.minimum_gap_s,
+    )[1]
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,6 +250,8 @@ class HoldSearchResult:
     inputs: HoldInputs
     candidates: tuple[BreakEvenResult, ...]
     chosen: BreakEvenResult | None
+    no_hold_departure_s: float
+    departure_context: ObservationSnapshot | None = None
 
     @property
     def hold_s(self) -> float:

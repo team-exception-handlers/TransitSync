@@ -13,9 +13,11 @@ import pytest
 from simulator.control.break_even import BreakEvenWeights
 from simulator.control.hold_search import HoldSearch, HoldSearchSettings
 from simulator.control.interface import (
+    CurrentVisitState,
     HoldAction,
     IncomingTransfer,
     ObservationSnapshot,
+    PlatformState,
     TrainState,
 )
 from simulator.control.strategies.connection_protection import (
@@ -75,7 +77,8 @@ def snapshot(platform="green", load=10, transfers=True):
             TrainState("other", "other", None, None, None, 0, 900, 1000),
             TrainState("deciding", platform, None, None, None, 0, load, 1000),
         ),
-        platforms=(),
+        platforms=(PlatformState(platform, 0, None),),
+        current_visit=CurrentVisitState(platform, True),
         incoming_transfers=groups if transfers else (),
     )
 
@@ -144,7 +147,9 @@ def test_platform_inputs_drive_actions_and_audit(
 def test_unprotected_departure_has_no_action_or_audit():
     """Skip other platforms without needing their walking model or train data."""
     strategy = ConnectionProtectionStrategy(*configuration())
-    observation = replace(snapshot("elsewhere"), trains=())
+    observation = replace(
+        snapshot("elsewhere"), trains=(), current_visit=None, platforms=()
+    )
     assert strategy.evaluate(observation) == ()
     assert strategy.decision_records() == ()
 
@@ -223,3 +228,18 @@ def test_invalid_configuration_fails_at_construction(searches, headways, message
     """
     with pytest.raises(ValueError, match=message):
         ConnectionProtectionStrategy(searches, headways)
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"current_visit": None}, "current_visit"),
+        ({"platforms": ()}, "platform history"),
+    ],
+)
+def test_protected_departure_requires_clearance(changes, message):
+    strategy = ConnectionProtectionStrategy(*configuration())
+    observation = replace(snapshot(), **changes)
+    with pytest.raises(ValueError, match=message):
+        strategy.evaluate(observation)
+    assert strategy.decision_records() == ()

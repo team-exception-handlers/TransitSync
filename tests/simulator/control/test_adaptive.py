@@ -4,7 +4,12 @@
 import pytest
 
 from simulator.control.decision_audit import KIND_MODE_SWITCH
-from simulator.control.interface import ObservationSnapshot, PlatformState, TrainState
+from simulator.control.interface import (
+    CurrentVisitState,
+    ObservationSnapshot,
+    PlatformState,
+    TrainState,
+)
 from simulator.control.settings import (
     ControlSettings,
     ControlSettingsError,
@@ -67,6 +72,7 @@ def observation(time_s, platform_id, score, *, line_id="green"):
         platforms=(PlatformState(platform_id, 0, time_s - 40),),
         incoming_transfers=(),
         service_irregularity=score,
+        current_visit=CurrentVisitState(line_id, True),
     )
 
 
