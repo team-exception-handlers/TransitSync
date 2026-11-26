@@ -8,6 +8,8 @@ import {
   DEFAULT_DISRUPTION_MAGNITUDES,
   DEFAULT_RUN_SETTINGS,
   formatErrorMagnitude,
+  formatHeadway,
+  formatPassengers,
   formatHeadwayIrregularity,
   formatSeconds,
   formatThreshold,
@@ -58,7 +60,10 @@ function summaryRows(settings: RunSettings): [label: string, text: string][] {
   }
   rows.push(
     ["Error magnitude", formatErrorMagnitude(settings.error_magnitude)],
-    ["Passenger flow", settings.passenger_flow],
+    ["Transfer volume", formatPassengers(settings.transfer_volume)],
+    ["Train frequency", formatHeadway(settings.train_headway_s)],
+    ["Onboard load", formatPassengers(settings.onboard_load)],
+    ["Walking time", formatSeconds(settings.walking_mean_s)],
     ["Disruption", DISRUPTION_LABELS[disruptionPreset]],
   );
   if (disruptionPreset !== "none") {

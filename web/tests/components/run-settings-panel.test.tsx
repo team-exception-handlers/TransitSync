@@ -126,18 +126,14 @@ describe("run settings controls", () => {
     expect(slider(/Error magnitude/).max).toBe("3");
   });
 
-  it("stores the passenger flow, with Normal pressed by default", () => {
+  it("stores the transfer volume, 60 passengers by default", () => {
     render(<RunSettingsPanel runner={null} />);
-    const flow = screen.getByRole("group", { name: "Passenger flow" });
-    const pressed = () => Array.from(flow.querySelectorAll("button"))
-      .filter((button) => button.getAttribute("aria-pressed") === "true")
-      .map((button) => button.textContent);
-    expect(pressed()).toStrictEqual(["Normal"]);
+    expect(slider(/Transfer volume/).value).toBe("60");
 
-    fireEvent.click(screen.getByRole("button", { name: "High" }));
+    fireEvent.change(slider(/Transfer volume/), { target: { value: "80" } });
 
-    expect(draft().passenger_flow).toBe("High");
-    expect(pressed()).toStrictEqual(["High"]);
+    expect(draft().transfer_volume).toBe(80);
+    expect(screen.getByText("80 passengers")).toBeDefined();
   });
 
   it("stores the disruption preset, none by default", () => {
@@ -206,7 +202,7 @@ describe("run settings controls", () => {
     fireEvent.click(screen.getByRole("radio", { name: /^Adaptive/ }));
     fireEvent.change(slider(/Maximum hold/), { target: { value: "60" } });
     fireEvent.change(slider(/Error magnitude/), { target: { value: "0" } });
-    fireEvent.click(screen.getByRole("button", { name: "High" }));
+    fireEvent.change(slider(/Transfer volume/), { target: { value: "80" } });
     fireEvent.click(screen.getByRole("button", { name: "Platform delay" }));
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
 
@@ -279,7 +275,7 @@ describe("Run scenario through the API client", () => {
     fireEvent.click(screen.getByRole("radio", { name: /^Adaptive/ }));
     fireEvent.change(slider(/Maximum hold/), { target: { value: "60" } });
     fireEvent.change(slider(/Error magnitude/), { target: { value: "0" } });
-    fireEvent.click(screen.getByRole("button", { name: "High" }));
+    fireEvent.change(slider(/Transfer volume/), { target: { value: "80" } });
     fireEvent.click(screen.getByRole("button", { name: "Platform delay" }));
     fireEvent.click(runButton());
     await waitFor(() => expect(usePlaybackStore.getState().runStatus).toBe("simulated"));
@@ -292,7 +288,9 @@ describe("Run scenario through the API client", () => {
       strategy: "adaptive",
       max_hold_time: 60,
       error_magnitude: 0,
-      passenger_flow: "High",
+      transfer_volume: 80,
+      onboard_load: 300,
+      walking_mean_s: 120,
       disruption_enabled: true,
       disruption_preset: "platform_delay",
       disruption_time_s: 120,
@@ -305,7 +303,8 @@ describe("Run scenario through the API client", () => {
     expect(summary.textContent).toContain("Max hold60 s");
     expect(summary.textContent).toContain("Irregularity threshold0.25");
     expect(summary.textContent).toContain("Error magnitude0.0 · upper bound (perfect information)");
-    expect(summary.textContent).toContain("Passenger flowHigh");
+    expect(summary.textContent).toContain("Transfer volume80 passengers");
+    expect(summary.textContent).toContain("Train frequencyTimetable");
     expect(summary.textContent).toContain("DisruptionPlatform delay");
   });
 

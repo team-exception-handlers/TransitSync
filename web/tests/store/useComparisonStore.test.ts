@@ -64,14 +64,14 @@ describe("useComparisonStore", () => {
     expect(await load(runner, { ...DEFAULT_RUN_SETTINGS })).toBe(false);
     expect(runner).toHaveBeenCalledTimes(1);
 
-    await load(runner, { ...DEFAULT_RUN_SETTINGS, passenger_flow: "High" });
+    await load(runner, { ...DEFAULT_RUN_SETTINGS, transfer_volume: 80 });
     expect(runner).toHaveBeenCalledTimes(2);
   });
 
   it("drops a response overtaken by a newer request", async () => {
     const { runner, pending } = deferredRunner();
     const first = load(runner);
-    const second = load(runner, { ...DEFAULT_RUN_SETTINGS, passenger_flow: "High" });
+    const second = load(runner, { ...DEFAULT_RUN_SETTINGS, transfer_volume: 80 });
 
     pending[1].resolve(pairFor("newer", 300));
     pending[0].resolve(pairFor("older", 200));
@@ -103,7 +103,7 @@ describe("useComparisonStore", () => {
     // The user changes settings, then leaves Compare before the runs return.
     const { runner, pending } = deferredRunner();
     const controller = new AbortController();
-    const abandoned = load(runner, { ...DEFAULT_RUN_SETTINGS, passenger_flow: "High" }, controller.signal);
+    const abandoned = load(runner, { ...DEFAULT_RUN_SETTINGS, transfer_volume: 80 }, controller.signal);
     expect(useComparisonStore.getState().status).toBe("loading");
     controller.abort();
     pending[0].reject(new DOMException("Aborted", "AbortError"));
@@ -124,7 +124,7 @@ describe("useComparisonStore", () => {
 
     // A load for other settings is still running when the original ones come back.
     const { runner, pending } = deferredRunner();
-    const inFlight = load(runner, { ...DEFAULT_RUN_SETTINGS, passenger_flow: "High" });
+    const inFlight = load(runner, { ...DEFAULT_RUN_SETTINGS, transfer_volume: 80 });
     expect(await load(runner)).toBe(false);
     expect(useComparisonStore.getState().status).toBe("ready");
 
@@ -137,7 +137,7 @@ describe("useComparisonStore", () => {
   it("reusing the pair shown clears an earlier failure", async () => {
     await load(vi.fn<ComparisonRunner>(async () => pairFor("connection_protection")));
     const failing = vi.fn<ComparisonRunner>(async () => { throw new Error("Server down"); });
-    await load(failing, { ...DEFAULT_RUN_SETTINGS, passenger_flow: "Low" });
+    await load(failing, { ...DEFAULT_RUN_SETTINGS, transfer_volume: 20 });
 
     expect(await load(failing)).toBe(false);
     expect(useComparisonStore.getState()).toMatchObject({ status: "ready", error: null });
@@ -166,7 +166,7 @@ describe("useComparisonStore", () => {
     const shown = useComparisonStore.getState().holding;
 
     const failing = vi.fn<ComparisonRunner>(async () => { throw new Error("Server down"); });
-    expect(await load(failing, { ...DEFAULT_RUN_SETTINGS, passenger_flow: "Low" })).toBe(false);
+    expect(await load(failing, { ...DEFAULT_RUN_SETTINGS, transfer_volume: 20 })).toBe(false);
 
     const state = useComparisonStore.getState();
     expect(state.status).toBe("error");

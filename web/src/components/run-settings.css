@@ -50,3 +50,10 @@
 @media (max-width: 930px) {
   .run-settings-body { grid-template-columns: 1fr; }
 }
+/* Typed entry next to a slider and its error (#256) */
+.setting-entry { width: 84px; height: 32px; padding: 0 8px; border: 1px solid #c9ccc6; border-radius: 6px; font: inherit; font-size: 14px; }
+.setting-entry[aria-invalid="true"] { border-color: #b42318; }
+.setting-error { margin: 0; color: #b42318; font-size: 13px; }
+.preset-conditions { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; margin: 0; font-size: 13px; }
+.preset-conditions dt { color: #5b6168; }
+.preset-conditions dd { margin: 0; font-family: "IBM Plex Mono", monospace; }

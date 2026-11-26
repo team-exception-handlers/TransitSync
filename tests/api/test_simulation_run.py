@@ -24,13 +24,14 @@ from simulator.control.strategies.connection_protection import (
     ConnectionProtectionStrategy,
 )
 from simulator.engine.random_streams import StreamManager
+from simulator.scenario_parameters import ScenarioParameters
 
 RUN_SETTINGS = {
     "connection_id": "mcgill-rem-green",
     "strategy": "schedule_based",
     "max_hold_time": 120,
     "error_magnitude": 1,
-    "passenger_flow": "Normal",
+    "transfer_volume": 42,
     "disruption_enabled": False,
 }
 
@@ -237,19 +238,19 @@ def test_run_settings_change_demand_and_apply_selected_feeder_disruption() -> No
 
     low_flow = client.post(
         "/simulation/run",
-        json={**base_settings, "passenger_flow": "Low"},
+        json={**base_settings, "transfer_volume": 21},
     ).json()
     high_flow = client.post(
         "/simulation/run",
-        json={**base_settings, "passenger_flow": "High"},
+        json={**base_settings, "transfer_volume": 84},
     ).json()
     uninterrupted = client.post(
         "/simulation/run",
-        json={**base_settings, "passenger_flow": "Normal"},
+        json={**base_settings, "transfer_volume": 42},
     ).json()
     disrupted = client.post(
         "/simulation/run",
-        json={**base_settings, "passenger_flow": "Normal", "disruption_enabled": True},
+        json={**base_settings, "transfer_volume": 42, "disruption_enabled": True},
     ).json()
 
     assert len(high_flow["passenger_tracks"]) > len(low_flow["passenger_tracks"])
@@ -291,7 +292,7 @@ def test_run_settings_change_demand_and_apply_selected_feeder_disruption() -> No
     "invalid_settings",
     [
         {"strategy": "not-registered"},
-        {"passenger_flow": "Extreme"},
+        {"transfer_volume": 201},
         {"max_hold_time": 301},
         {"max_hold_time": 121},
         {"error_magnitude": -1},
@@ -349,7 +350,7 @@ def test_every_registered_strategy_builds_through_the_api(
     request_settings = {
         **RUN_SETTINGS,
         "strategy": strategy,
-        "passenger_flow": "Low",
+        "transfer_volume": 21,
         "error_magnitude": 0,
     }
     if strategy == "adaptive":
@@ -480,7 +481,7 @@ def _build_trains_from(monkeypatch, *trips: SimpleNamespace) -> dict:
     """Run ``_build_trains`` on fake trips with the scenario starting at 07:00."""
     monkeypatch.setattr(simulation_run, "scenario_start_clock_s", lambda _: 25200)
     network = SimpleNamespace(trips_for_date=lambda _: trips)
-    scenario = SimpleNamespace(service_date=None)
+    scenario = SimpleNamespace(service_date=None, parameters=ScenarioParameters())
     # No trip ends at this platform, so no onward stop is added
     trains = simulation_run._build_trains(network, scenario, "unused_platform")
     return {train.id: train.schedule for train in trains}

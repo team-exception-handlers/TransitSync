@@ -85,7 +85,7 @@ def test_connection_protection_runs_with_destination_settings(
             "strategy": "connection_protection",
             "max_hold_time": max_hold_s,
             "error_magnitude": 0,
-            "passenger_flow": "Normal",
+            "transfer_volume": 42,
         },
     )
     assert response.status_code == 200
@@ -120,7 +120,7 @@ def test_connection_protection_is_reproducible_across_api_instances():
         "strategy": "connection_protection",
         "max_hold_time": 120,
         "error_magnitude": 1,
-        "passenger_flow": "Normal",
+        "transfer_volume": 42,
     }
     first = TestClient(create_app()).post("/simulation/run", json=settings)
     second = TestClient(create_app()).post("/simulation/run", json=settings)
