@@ -199,6 +199,20 @@ def test_operating_rules_accept_zero_gap_and_store_seconds_as_float():
             "operating_rules.rule_action_map.headway_violation: "
             "action must be CLAMP or REFUSE",
         ),
+        # #258: the limit must sit in PARAMETER_RANGES (5 to 300 in steps of 5),
+        # the range the hold search and the web controls also use.
+        (
+            {"max_hold_time": 7},
+            "operating_rules.max_hold_time: must be between 5 and 300 in steps of 5",
+        ),
+        (
+            {"max_hold_time": 999},
+            "operating_rules.max_hold_time: must be between 5 and 300 in steps of 5",
+        ),
+        (
+            {"max_hold_time": 3},
+            "operating_rules.max_hold_time: must be between 5 and 300 in steps of 5",
+        ),
         # Both fields are bad: the hold limit is checked before the gap.
         (
             {"max_hold_time": -5, "min_safe_gap": -1},
@@ -209,6 +223,12 @@ def test_operating_rules_accept_zero_gap_and_store_seconds_as_float():
 def test_operating_rules_reject_invalid_values(value, message):
     with pytest.raises(OperatingRulesError, match=f"^{re.escape(message)}$"):
         parse_operating_rules(value)
+
+
+@pytest.mark.parametrize("seconds", [5, 5.0, 300, 300.0])
+def test_operating_rules_accept_both_ends_of_the_hold_range(seconds):
+    """#258: 5 s and 300 s are the hand-picked ends of the shared range."""
+    assert parse_operating_rules({"max_hold_time": seconds}).max_hold_time == seconds
 
 
 def test_prediction_error_defaults_to_published_level():
