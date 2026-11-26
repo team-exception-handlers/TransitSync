@@ -191,6 +191,11 @@ class SimulationRunService:
         self._connections = index_connections(station_layouts)
         self._network = load_reference_network()
         self._dataset = dataset_metadata(self._network)
+        # Compile the prediction kernel during application setup, so the first
+        # user request does not wait for it. Later planner kernels add their own.
+        from simulator.control.compiled_prediction import warmup as warmup_prediction
+
+        warmup_prediction()
         self._cache: OrderedDict[str, dict[str, object]] = OrderedDict()
         self._in_flight: dict[str, Future[SimulationRunResponse]] = {}
         self._cache_lock = RLock()
