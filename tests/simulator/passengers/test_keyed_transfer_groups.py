@@ -65,3 +65,42 @@ def test_repeat_visits_of_one_train_are_separate_groups():
         groups["passenger-group-mcgill-rem-1-1"]
         != groups["passenger-group-mcgill-rem-1-2"]
     )
+
+
+def mcgill_ids(arrivals):
+    """Run the feeder arrivals; return the IDs in McGill's group, in batch order."""
+    component = TransferComponent(
+        [
+            route(),
+            route(
+                station_id="bonaventure",
+                feeder_platform_id="rem-b",
+                transfer_fractions={"mcgill": 1},
+            ),
+        ],
+        StreamManager(42),
+    )
+    scheduler = Scheduler()
+    for arrival in arrivals:
+        scheduler.schedule(arrival)
+    advance(component, scheduler, 2000)
+    group = "passenger-group-mcgill-rem-100-1"
+    walks = component.walk_records().items()
+    ids = [pid for pid, walk in walks if walk.group_id == group]
+    # By the place in the batch, the last part of the ID ("...|10" after "...|2")
+    return sorted(ids, key=lambda pid: int(pid.rsplit("|", 1)[1]))
+
+
+def test_passenger_ids_ignore_groups_drawn_before_them():
+    # A run-wide counter gave McGill's group new IDs once Bonaventure's group
+    # drew first, so paired runs could not match the same person (#240)
+    mcgill = feeder(100)
+    alone = mcgill_ids([mcgill])
+    after_other = mcgill_ids(
+        [feeder(50, station_id="bonaventure", platform_id="rem-b"), mcgill]
+    )
+    assert after_other == alone
+    assert alone[:2] == [
+        "passenger-mcgill|rem-100|1|1",
+        "passenger-mcgill|rem-100|1|2",
+    ]

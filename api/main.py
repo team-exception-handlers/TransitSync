@@ -16,7 +16,7 @@ from api.connection_data import (
     index_connections,
     list_connections,
 )
-from api.passenger_outcomes import PassengerComparison
+from api.passenger_outcomes import PassengerComparison, match_passengers
 from api.run_results import RunResultsResponse
 from api.settings import Settings
 from api.simulation_comparison import (
@@ -186,7 +186,11 @@ def _add_simulation_routes(
         """
         return _cached_results(simulation_runs, run_id)
 
-    @application.post("/simulation/passenger-comparison", tags=["simulation"])
+    @application.post(
+        "/simulation/passenger-comparison",
+        tags=["simulation"],
+        responses={500: {"description": "Passenger comparison failed"}},
+    )
     def compare_passengers(settings: SimulationRunRequest) -> PassengerComparison:
         """Return cached outcomes for matched settings with and without control."""
         # Same baseline builder as /simulation/comparison, so both endpoints
@@ -195,7 +199,19 @@ def _add_simulation_routes(
         selected = baseline
         if settings.strategy != NO_HOLDING_STRATEGY:
             selected = run_simulation(settings).passenger_outcomes
-        return PassengerComparison(without_holding=baseline, selected_strategy=selected)
+        try:
+            # Matched now, not when the response is serialized, so a bad pair
+            # is logged and returned as a clear error (#240)
+            matched = match_passengers(selected, baseline)
+        except ValueError as error:
+            log.exception(
+                "passenger comparison runs are not a pair for connection %s",
+                settings.connection_id,
+            )
+            raise HTTPException(
+                status_code=500, detail="Passenger comparison failed"
+            ) from error
+        return PassengerComparison(matched_passengers=matched)
 
     @application.post(
         "/simulation/comparison",
