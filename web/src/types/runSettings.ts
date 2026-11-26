@@ -61,7 +61,7 @@ export interface RunSettings {
   disruption_preset?: DisruptionPreset;
   /** Disruption start in relative simulation seconds. */
   disruption_time_s?: number;
-  /** Seconds of delay or suspension duration (headway magnitude is seconds). */
+  /** Seconds for delay/suspension; coefficient of variation for uneven headways. */
   disruption_magnitude?: number;
 }
 

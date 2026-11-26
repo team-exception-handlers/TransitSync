@@ -3,12 +3,18 @@
 
 A Facade over ``SimulationRunService``: both runs share its cache and the
 scenario's master seed (common random numbers), so they differ only in holding.
+The response also splits the pair's passengers into better off, worse off and
+unaffected (US-6.3, #285). That split is from one seed. #285 names the US-6.2
+replicated comparison (#274), which does not exist yet; it should call
+``split_passengers`` once per replication rather than reuse this response.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from api.passenger_outcomes import match_passengers
+from api.passenger_split import PassengerSplit, split_passengers
 from api.simulation_run import SimulationRunRequest, SimulationRunService
 from api.station_view import SimulationRunResponse
 
@@ -32,6 +38,7 @@ class SimulationComparisonResponse(BaseModel):
     service_date: str = Field(min_length=10, max_length=10)
     master_seed: int = Field(ge=0)
     duration_s: float = Field(gt=0, allow_inf_nan=False)
+    passenger_split: PassengerSplit
 
 
 def paired_requests(
@@ -67,9 +74,16 @@ def run_comparison(
     holding_request, baseline_request = paired_requests(request)
     # Looked up first so an unknown connection fails before any run starts.
     scenario = service.starting_conditions(request.connection_id)
+    holding = service.run(holding_request)
+    no_holding = service.run(baseline_request)
+    # Sides that are not one pair raise ValueError, which the route logs as a 500
+    matched = match_passengers(
+        holding.passenger_outcomes, no_holding.passenger_outcomes
+    )
     return SimulationComparisonResponse(
-        holding=service.run(holding_request),
-        no_holding=service.run(baseline_request),
+        holding=holding,
+        no_holding=no_holding,
+        passenger_split=split_passengers(matched, float(scenario.duration_s)),
         holding_strategy=holding_request.strategy,
         service_date=scenario.service_date.isoformat(),
         master_seed=scenario.master_seed,

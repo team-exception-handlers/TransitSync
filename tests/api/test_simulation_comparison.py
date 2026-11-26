@@ -7,6 +7,7 @@ Runs use the committed Édouard-Montpetit scenario, so no external service is ne
 import pytest
 from fastapi.testclient import TestClient
 
+import api.simulation_comparison as simulation_comparison
 from api.main import create_app
 from api.simulation_comparison import (
     CONTROL_ONLY_FIELDS,
@@ -73,6 +74,62 @@ def test_no_control_selection_falls_back_to_connection_protection():
     assert no_holding.strategy == "no_control"
 
 
+def test_paired_uneven_headways_requests_share_default_cv():
+    """Both comparison runs retain the same 0.3 CV when the caller omits it."""
+    request = SimulationRunRequest(
+        connection_id="mcgill-rem-green",
+        strategy="connection_protection",
+        disruption_preset="uneven_headways",
+        disruption_time_s=300,
+    )
+
+    holding, no_holding = paired_requests(request)
+
+    assert holding.disruption_magnitude == 0.3
+    assert no_holding.disruption_magnitude == 0.3
+    assert holding.disruption_preset == no_holding.disruption_preset
+    assert holding.disruption_time_s == no_holding.disruption_time_s
+    assert no_holding.strategy == "no_control"
+
+
+def test_uneven_headways_comparison_without_magnitude_returns_both_runs(
+    client: TestClient,
+):
+    """The endpoint accepts an omitted CV and shares its perturbed schedule."""
+    response = client.post(
+        "/simulation/comparison",
+        json={
+            "connection_id": "mcgill-rem-green",
+            "strategy": "connection_protection",
+            "transfer_volume": 21,
+            "disruption_preset": "uneven_headways",
+            "disruption_time_s": 300,
+        },
+    )
+
+    assert response.status_code == 200
+    result = response.json()
+    holding_schedules = sorted(
+        (
+            event["train_id"],
+            event["event_type"],
+            event["station_id"],
+            event["scheduled_s"],
+        )
+        for event in result["holding"]["train_events"]
+    )
+    baseline_schedules = sorted(
+        (
+            event["train_id"],
+            event["event_type"],
+            event["station_id"],
+            event["scheduled_s"],
+        )
+        for event in result["no_holding"]["train_events"]
+    )
+    assert holding_schedules == baseline_schedules
+
+
 def test_comparison_shares_starting_conditions(comparison: dict):
     assert comparison["holding_strategy"] == "connection_protection"
     assert comparison["service_date"] == "2026-10-05"
@@ -103,6 +160,42 @@ def test_same_request_twice_gives_the_same_payload(comparison: dict):
     # A fresh app has an empty cache, so this reruns both simulations.
     again = TestClient(create_app()).post("/simulation/comparison", json=SETTINGS)
     assert again.json() == comparison
+
+
+def test_split_of_the_fixed_seed_pair_is_pinned(comparison: dict):
+    # Pinned for this scenario's seed, so a change to the IDs, the matching or
+    # the threshold shows up here as a deliberate update (review on #419)
+    assert comparison["passenger_split"] == {
+        "better_off": 45,
+        "worse_off": 0,
+        "unaffected": 1238,
+        "not_compared": 82,
+        "left_in_one_run": 0,
+        "unaffected_threshold_s": 30.0,
+        "total_time_saved_s": 11490.0,
+        "total_time_lost_s": 0.0,
+        "average_time_saved_s": pytest.approx(11490 / 45),
+        "average_time_lost_s": None,
+    }
+    # Every passenger of either run is in exactly one group
+    ids = {
+        outcome["passenger_id"]
+        for side in ("holding", "no_holding")
+        for outcome in comparison[side]["passenger_outcomes"]
+    }
+    assert 45 + 0 + 1238 + 82 == len(ids)
+
+
+def test_runs_that_are_not_a_pair_return_a_server_error(monkeypatch):
+    # Edge: one ID on two connections must not become a wrong split
+    def not_a_pair(*_runs):
+        raise ValueError("passenger p is on two connections")
+
+    monkeypatch.setattr(simulation_comparison, "match_passengers", not_a_pair)
+    client = TestClient(create_app(), raise_server_exceptions=False)
+    response = client.post("/simulation/comparison", json=SETTINGS)
+    assert response.status_code == 500
+    assert response.json()["detail"] == "Simulation comparison failed"
 
 
 def test_unknown_connection_returns_not_found(client: TestClient):
