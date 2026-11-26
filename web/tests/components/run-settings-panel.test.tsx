@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import App from "../../src/App";
+import { RunSummary } from "../../src/components/run-summary";
 import { RunSettingsPanel } from "../../src/components/run-settings-panel";
 import { connectionRuns } from "../../src/data/connection-runs";
 import { stationViewData } from "../../src/data/stationViewData";
@@ -152,6 +153,42 @@ describe("run settings controls", () => {
     expect(delay.getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("shows CV and start-time controls for uneven headways", () => {
+    render(<RunSettingsPanel runner={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Uneven headways" }));
+
+    const irregularity = slider(/Headway irregularity/);
+    expect(irregularity.min).toBe("0.05");
+    expect(irregularity.max).toBe("1");
+    expect(irregularity.step).toBe("0.05");
+    expect(irregularity.getAttribute("aria-valuetext")).toBe("0.30 CV");
+
+    fireEvent.change(irregularity, { target: { value: "0.6" } });
+    expect(draft().disruption_magnitude).toBe(0.6);
+    expect(slider(/Headway irregularity/).getAttribute("aria-valuetext")).toBe("0.60 CV");
+  });
+
+  it("uses the shared CV default when an applied run omits its magnitude", () => {
+    usePlaybackStore.setState({
+      selectedConnectionId: CONNECTION,
+      simulatedConnectionIds: [CONNECTION],
+    });
+    useRunSettingsStore.setState({
+      applied: {
+        [CONNECTION]: {
+          ...DEFAULT_RUN_SETTINGS,
+          disruption_preset: "uneven_headways",
+          disruption_magnitude: undefined,
+        },
+      },
+    });
+
+    render(<RunSummary />);
+
+    expect(screen.getByText("Headway irregularity")).toBeDefined();
+    expect(screen.getByText("0.30 CV")).toBeDefined();
+  });
+
   it("opens and closes the maximum hold help note", () => {
     render(<RunSettingsPanel runner={null} />);
     const help = screen.getByRole("button", { name: "What is maximum hold?" });
@@ -270,6 +307,26 @@ describe("Run scenario through the API client", () => {
     expect(summary.textContent).toContain("Error magnitude0.0 · upper bound (perfect information)");
     expect(summary.textContent).toContain("Passenger flowHigh");
     expect(summary.textContent).toContain("DisruptionPlatform delay");
+  });
+
+  it("posts the configured start and CV for uneven headways", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse(200, simulatedRun()));
+    render(<App runLoader={null} scenarioRunner={runnerWith(fetchImpl)} />);
+    fireEvent.click(screen.getByRole("button", { name: "Uneven headways" }));
+    fireEvent.change(slider(/Disruption start/), { target: { value: "300" } });
+    fireEvent.change(slider(/Headway irregularity/), { target: { value: "0.55" } });
+    fireEvent.click(runButton());
+    await waitFor(() => expect(usePlaybackStore.getState().runStatus).toBe("simulated"));
+
+    const init = (fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1];
+    const body = JSON.parse(init.body as string);
+    expect(body.disruption_preset).toBe("uneven_headways");
+    expect(body.disruption_time_s).toBe(300);
+    expect(body.disruption_magnitude).toBe(0.55);
+    openStationView();
+    const summary = screen.getByLabelText("Settings used for this run");
+    expect(summary.textContent).toContain("Disruption start300 s");
+    expect(summary.textContent).toContain("Headway irregularity0.55 CV");
   });
 
   it("shows no settings summary for mock playback", () => {

@@ -132,12 +132,37 @@ class SimulationRunRequest(BaseModel):
         default=120.0, ge=0, allow_inf_nan=False, strict=True
     )
     disruption_magnitude: float = Field(
-        default=60.0, gt=0, allow_inf_nan=False, strict=True
+        default=60.0,
+        gt=0,
+        allow_inf_nan=False,
+        strict=True,
+        description=(
+            "Seconds for delay and suspension; coefficient of variation for "
+            "uneven headways."
+        ),
     )
 
     irregularity_threshold: float | None = Field(
         default=None, ge=0, allow_inf_nan=False, strict=True
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def apply_disruption_defaults(cls, values: object) -> object:
+        """Resolve the uneven-headway CV before requests are copied for comparisons."""
+        if not isinstance(values, dict):
+            return values
+        if (
+            values.get("disruption_preset") != "uneven_headways"
+            or "disruption_magnitude" in values
+        ):
+            return values
+        preset_magnitude = get_disruption_preset(
+            "uneven_headways"
+        ).spacing_irregularity_level
+        if preset_magnitude is None:
+            raise ValueError("uneven_headways preset requires a spacing irregularity")
+        return {**values, "disruption_magnitude": preset_magnitude}
 
     @property
     def run_id(self) -> str:
@@ -145,13 +170,20 @@ class SimulationRunRequest(BaseModel):
         return sha256(self.model_dump_json().encode("utf-8")).hexdigest()
 
     @model_validator(mode="after")
-    def validate_adaptive_threshold(self) -> SimulationRunRequest:
-        """Require a threshold only when adaptive mode is requested."""
+    def validate_run_settings(self) -> SimulationRunRequest:
+        """Validate adaptive thresholds and preset-specific magnitude units."""
         if self.strategy == AdaptiveStrategy.name:
             if self.irregularity_threshold is None:
                 raise ValueError("irregularity_threshold is required for adaptive")
         elif "irregularity_threshold" in self.model_fields_set:
             raise ValueError("irregularity_threshold is only valid for adaptive")
+        if (
+            self.disruption_preset == "uneven_headways"
+            and self.disruption_magnitude > 1
+        ):
+            raise ValueError(
+                "disruption_magnitude must be at most 1 as a coefficient of variation"
+            )
         return self
 
     @field_validator("strategy")
@@ -600,17 +632,17 @@ def _irregular_green_starts(
     request: SimulationRunRequest | None,
     streams: StreamManager | None,
 ) -> dict[tuple[str, str], float]:
-    """Perturb Green-line dispatch starts using the named preset level."""
+    """Perturb Green dispatches after the configured start time.
+
+    The magnitude is the headway coefficient of variation.
+    """
     if request is None or request.disruption_preset != "uneven_headways":
         return {}
-    preset = get_disruption_preset("uneven_headways")
-    level = preset.spacing_irregularity_level
-    if level is None:
-        return {}
+    level = request.disruption_magnitude
     if streams is None:
         raise ValueError("Uneven headways require a seeded disruptions stream")
 
-    departures = []
+    departures_by_direction: dict[int, list[tuple[tuple[str, str], float]]] = {}
     for trip in network.trips_for_date(scenario.service_date):
         if trip.route_id != "1":
             continue
@@ -619,23 +651,37 @@ def _irregular_green_starts(
         ]
         if active_visits:
             nominal = _nominal_first_departure(active_visits, start_clock_s)
-            departures.append(((trip.feed_id, trip.trip_id), nominal))
+            if request.disruption_time_s <= nominal <= scenario.duration_s:
+                departures_by_direction.setdefault(trip.direction_id, []).append(
+                    ((trip.feed_id, trip.trip_id), nominal)
+                )
 
-    ordered = sorted(departures, key=lambda item: item[1])
-    nominal_starts = [nominal for _key, nominal in ordered]
-    perturbed_starts = perturb_dispatch_times(
-        nominal_starts,
-        level,
-        streams.get_stream("disruptions"),
-    )
-    return {
-        key: perturbed
-        for (key, _nominal), perturbed in zip(
-            ordered,
-            perturbed_starts,
-            strict=True,
+    perturbed_by_trip = {}
+    disruption_stream = streams.get_stream("disruptions")
+    # Directions have independent timetables and may share scheduled times.
+    # Perturb each direction separately so duplicate times never enter the
+    # strictly increasing spacing model as adjacent departures.
+    for direction_id in sorted(departures_by_direction):
+        direction_departures = sorted(
+            departures_by_direction[direction_id], key=lambda item: item[1]
         )
-    }
+        if len(direction_departures) < 2:
+            continue
+        nominal_starts = [nominal for _key, nominal in direction_departures]
+        perturbed_starts = perturb_dispatch_times(
+            nominal_starts,
+            level,
+            disruption_stream,
+        )
+        perturbed_by_trip.update(
+            {
+                key: perturbed
+                for (key, _nominal), perturbed in zip(
+                    direction_departures, perturbed_starts, strict=True
+                )
+            }
+        )
+    return perturbed_by_trip
 
 
 def _build_trains(
