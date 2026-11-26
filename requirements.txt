@@ -7,6 +7,7 @@
 # (CI fails while the two disagree):
 #   pip-compile --allow-unsafe --generate-hashes --no-emit-index-url --output-file=requirements.lock --pip-args='--only-binary :all:' --strip-extras requirements.txt
 numpy==2.5.4
+numba==0.68.1
 
 # FastAPI backend and ASGI server.
 fastapi==0.162.0

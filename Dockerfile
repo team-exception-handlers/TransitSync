@@ -20,8 +20,16 @@ COPY api ./api
 COPY config ./config
 COPY simulator ./simulator
 
-RUN addgroup --system app && adduser --system --ingroup app app
+# Numba caches compiled code next to the sources by default, but /app is
+# read-only for the non-root user, so importing a compiled module would fail.
+# Give it a cache folder that user owns, and fill it at build time so a
+# container started on a machine with the same CPU features skips the
+# compile. On other CPUs Numba recompiles into the same folder.
+ENV NUMBA_CACHE_DIR=/var/cache/numba
+RUN addgroup --system app && adduser --system --ingroup app app \
+    && mkdir -p "$NUMBA_CACHE_DIR" && chown app:app "$NUMBA_CACHE_DIR"
 USER app
+RUN python -c "from simulator.control.compiled_prediction import warmup; warmup()"
 
 EXPOSE 8000
 

@@ -21,6 +21,9 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from functools import partial
+from typing import Protocol, runtime_checkable
+
+import numpy as np
 
 from simulator.control.interface import (
     IncomingTransfer,
@@ -111,6 +114,9 @@ class PredictionErrorModel:
     ) -> None:
         self.settings = settings
         self._draw = draw
+        # Cache only validated rows of the exact same frozen input object.
+        # Estimates and draws are always recomputed for each decision.
+        self._train_rows: dict[int, tuple[TrainState, tuple[float, ...]]] = {}
 
     def apply(self, truth: ObservationSnapshot) -> ObservationSnapshot:
         """Return ``truth`` with error on arrivals, transfer counts and loads.
@@ -211,8 +217,54 @@ class PredictionErrorModel:
         draw: Callable[..., float],
         arrival_z: dict[str, float],
     ) -> tuple[TrainState, ...]:
-        """Estimate each train with this decision's bound keyed draw."""
+        """Batch the numeric arithmetic, keeping the scalar extension path.
+
+        Only the run's own keyed source (a ``BoundDraw``) is batched: its draws
+        depend only on their key, so drawing every load and arrival first gives
+        the same values as one train at a time. Any other callable keeps main's
+        contract, one call per value in train order, because it may be stateful
+        or slow. The compiled kernel reads the load-then-arrival layout.
+        """
+        rows = None
+        if isinstance(draw, BoundDraw):
+            rows = _numeric_trains(trains, now_s, self._train_rows)
+        if rows is not None and self._numeric_settings():
+            draws = _train_draws(draw, trains, rows)
+            # Keyed draws are plain floats; this guards the compiled arithmetic
+            # if that ever changes. Re-drawing a pure keyed source is harmless.
+            if all(type(z) is float for z in draws):
+                return self._batched(trains, rows, draws, now_s, arrival_z)
         return tuple(self._train(t, now_s, draw, arrival_z) for t in trains)
+
+    def _numeric_settings(self) -> bool:
+        """Large multipliers stay on Python arithmetic, so round fits in int64."""
+        return max(self.settings.arrival_kappa, self.settings.load_kappa) <= 1e4
+
+    def _batched(
+        self,
+        trains: tuple[TrainState, ...],
+        rows: list[tuple[float, ...]],
+        draws: list[float],
+        now_s: float,
+        arrival_z: dict[str, float],
+    ) -> tuple[TrainState, ...]:
+        """Run the compiled arithmetic and copy its results into train states."""
+        from simulator.control.compiled_prediction import train_values
+
+        values = train_values(
+            np.asarray(rows),
+            np.asarray(draws),
+            float(now_s),
+            self.settings.arrival_kappa,
+            self.settings.load_kappa,
+        )
+        result = []
+        for train, row in zip(trains, values.tolist(), strict=True):
+            arrival = train.predicted_arrival_s
+            if arrival is not None:
+                arrival, arrival_z[train.train_id] = row[0], row[2]
+            result.append(_copy_train(train, arrival, int(row[1])))
+        return tuple(result)
 
     def _train(
         self,
@@ -265,6 +317,93 @@ def _decision_draw(draw: Callable[..., float], decision: tuple) -> Callable[...,
     ):
         return func.__self__.keyed_normal_from(*draw.args, *decision)
     return partial(draw, *decision)
+
+
+@runtime_checkable
+class BoundDraw(Protocol):
+    """The run's keyed draw, whose values depend only on their key.
+
+    ``bind(*more)`` returns the same kind of draw with ``more`` fixed at the
+    start of every key. Only draws of this kind are safe to batch, because
+    calling them early or in a different order cannot change any value.
+    """
+
+    def __call__(self, *key: str | float) -> float:
+        """Return the standard normal value for ``key``."""
+        ...
+
+    def bind(self, *more: str | float) -> Callable[..., float]:
+        """Return this draw with ``more`` fixed in front of every key."""
+        ...
+
+
+def _train_draws(
+    draw: BoundDraw, trains: tuple[TrainState, ...], rows: list[tuple[float, ...]]
+) -> list[float]:
+    """Every train's load draw, then its arrival draw if it has a next stop.
+
+    The kernel reads them in that interleaved order. Binding the value kind
+    once means the key's shared start is hashed once per kind, not per train.
+    """
+    load = draw.bind("load")
+    arrival = draw.bind("arrival")
+    draws = []
+    for train, row in zip(trains, rows, strict=True):
+        draws.append(load(train.train_id))
+        if row[2]:
+            draws.append(arrival(train.train_id))
+    return draws
+
+
+def _numeric_trains(
+    trains: tuple[TrainState, ...],
+    now_s: float,
+    cache: dict[int, tuple[TrainState, tuple[float, ...]]],
+) -> list[tuple[float, ...]] | None:
+    """Keep extension types, huge values and nonfinite inputs on Python arithmetic.
+
+    Small populations are not worth a compiled call. Cached positions require
+    identical frozen objects: reorderings and changed values miss rather than
+    hashing train IDs or all dataclass fields. Retain at most 8192 rows even
+    when callers replace their entire train population.
+    """
+    if len(trains) < 32 or not math.isfinite(now_s) or abs(now_s) > 1e9:
+        return None
+    rows = []
+    for index, train in enumerate(trains):
+        previous = cache.get(index)
+        if previous is not None and previous[0] is train:
+            rows.append(previous[1])
+            continue
+        row = _numeric_train_row(train)
+        if row is None:
+            return None
+        if index < 8192:
+            cache[index] = (train, row)
+        rows.append(row)
+    return rows
+
+
+def _numeric_train_row(train: TrainState) -> tuple[float, ...] | None:
+    """Validate a fixed-schema input before it can reach int64 arithmetic."""
+    if (
+        type(train) is not TrainState
+        or type(train.onboard_load) is not int
+        or not 0 <= train.onboard_load <= 1e9
+    ):
+        return None
+    arrival = train.predicted_arrival_s
+    if arrival is not None and (
+        type(arrival) not in (int, float)
+        or not math.isfinite(arrival)
+        or abs(arrival) > 1e9
+    ):
+        return None
+    return (
+        float(train.onboard_load),
+        float(arrival) if arrival is not None else 0.0,
+        float(arrival is not None),
+    )
 
 
 def _copy_train(train: TrainState, arrival_s: float | None, load: int) -> TrainState:

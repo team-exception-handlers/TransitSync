@@ -4,8 +4,8 @@
 The fixed-schema constructor and dataclass replacement must produce the same
 estimates. A subclass forces the original replacement path and adds metadata
 that a careless fast copy could silently discard. Each error is keyed by what
-it predicts (#192), so the fast path (draws bound to each decision's key
-prefix) must give exactly the values of drawing every full key separately.
+it predicts (#192), so the fast path (prefix-bound draws and compiled
+arithmetic) must give exactly the values of the plain one-train-at-a-time path.
 """
 
 from dataclasses import dataclass, fields, replace
@@ -16,6 +16,7 @@ import pytest
 from simulator.control.interface import TrainState
 from simulator.control.planning import FutureVisit
 from simulator.control.prediction_error import (
+    BoundDraw,
     PredictionErrorModel,
     PredictionErrorSettings,
     _decision_draw,
@@ -37,11 +38,11 @@ def keyed(seed):
 
 
 class ExactFloat(float):
-    """A float subclass, so a custom draw is told apart from the run's source."""
+    """A float subclass the compiled path refuses, forcing scalar arithmetic."""
 
 
 def scalar(seed):
-    """Same keyed numbers, each drawn from its full key (not prefix-bound)."""
+    """Same keyed numbers, but neither prefix-bound nor batched."""
     draw = keyed(seed)
     return lambda *key: ExactFloat(draw(*key))
 
@@ -83,12 +84,12 @@ def test_prediction_clone_preserves_keyed_draws_and_subclass(seed):
 @pytest.mark.parametrize("seed", [0, 7, 42])
 @pytest.mark.parametrize("size", [0, 1, 64, 1679])
 @pytest.mark.parametrize("kappa", [0, 1, 3])
-def test_prefix_bound_trains_match_full_key_draws(seed, size, kappa):
-    """Mixed next-stop branches give the full-key path's exact values.
+def test_batched_keyed_trains_match_scalar_values(seed, size, kappa):
+    """Mixed next-stop branches give the scalar path's exact values.
 
-    Empty, single, small and the real hourly population (1,679 trains) are
-    covered, with perfect information (kappa 0) too. Repeating the snapshot
-    checks that nothing carries over between decisions.
+    Sizes below and above the 32-train batching threshold, the real hourly
+    population and perfect information (kappa 0) are all covered. Repeating
+    the snapshot checks that the reused input rows change nothing.
     """
     original = snapshot()
     trains = tuple(
@@ -106,8 +107,8 @@ def test_prefix_bound_trains_match_full_key_draws(seed, size, kappa):
 
 @pytest.mark.parametrize("value_type", [float, ExactFloat])
 def test_custom_draw_is_called_once_per_value_in_train_order(value_type):
-    """A custom callable keeps main's contract: one call per value, load
-    before arrival, train by train.
+    """Only the run's keyed source is batched; any other callable keeps main's
+    contract of one call per value, load before arrival, train by train.
 
     A counter makes the callable stateful, so a second call or a different
     order would also change the estimates.
@@ -180,6 +181,54 @@ def test_the_run_draw_takes_the_prefix_fast_path():
     decision = ("A", "P1", 130.0)
     bound = _decision_draw(keyed(7), decision)
     assert not isinstance(bound, partial)
-    assert callable(bound.bind)
+    assert isinstance(bound, BoundDraw)
     custom = _decision_draw(ExactFloat, decision)
     assert isinstance(custom, partial)
+    assert not isinstance(custom, BoundDraw)
+
+
+@pytest.mark.parametrize(("size", "calls"), [(31, 0), (32, 1), (1679, 1)])
+def test_the_run_draw_uses_the_compiled_kernel_from_32_trains(monkeypatch, size, calls):
+    """Below 32 trains a compiled call costs more than it saves.
+
+    Checks the path, not the values: the batched test above covers those.
+    """
+    import simulator.control.compiled_prediction as compiled
+
+    original_kernel = compiled.train_values
+    used = []
+
+    def counting(*args):
+        used.append(len(args[0]))
+        return original_kernel(*args)
+
+    monkeypatch.setattr(compiled, "train_values", counting)
+    original = snapshot()
+    truth = replace(
+        original,
+        trains=tuple(
+            replace(original.trains[i % 2], train_id=str(i)) for i in range(size)
+        ),
+    )
+    PredictionErrorModel(PredictionErrorSettings(), keyed(7)).apply(truth)
+    assert used == [size] * calls
+
+
+def test_large_multipliers_stay_on_python_arithmetic(monkeypatch):
+    """Kappa above 10,000 could overflow int64 rounding, so it is not batched."""
+    import simulator.control.compiled_prediction as compiled
+
+    monkeypatch.setattr(
+        compiled, "train_values", lambda *args: pytest.fail("kernel was used")
+    )
+    original = snapshot()
+    truth = replace(
+        original,
+        trains=tuple(
+            replace(original.trains[i % 2], train_id=str(i)) for i in range(64)
+        ),
+    )
+    settings = PredictionErrorSettings(1e5, 1.0, 1.0)
+    fast = PredictionErrorModel(settings, keyed(7)).apply(truth)
+    slow = PredictionErrorModel(settings, scalar(7)).apply(truth)
+    assert repr(fast) == repr(slow)
