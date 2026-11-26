@@ -143,23 +143,41 @@ body {
   text-transform: uppercase;
 }
 
-/* Sidebar items are buttons; the open screen is dark, with aria-current for
-   screen readers and bold text so it does not rely on color alone. */
+/* Sidebar items are buttons (#408); the current screen keeps the dark
+   highlight the static label used, and aria-current drives it so the look
+   and the screen-reader state cannot disagree. The current item is also bold
+   so it does not rely on color alone. */
 .nav-item {
-  width: 100%;
   height: 44px;
+
   display: flex;
   align-items: center;
+
+  margin-bottom: 4px;
   padding: 0 12px;
+
+  background-color: transparent;
+
   border: 0;
   border-radius: 8px;
-  background: transparent;
+
   color: #3d434a;
+
   font: 500 14px "IBM Plex Sans", Arial, sans-serif;
+  text-align: left;
+
   cursor: pointer;
 }
-.nav-item:hover:not([aria-current="page"]) { background: #ecede9; }
-.nav-item[aria-current="page"] { background: #16191d; color: #ffffff; font-weight: 600; }
+
+.nav-item:hover:not([aria-current="page"]) { background-color: #ecede9; }
+
+.nav-item[aria-current="page"] {
+  background-color: #16191d;
+
+  color: #ffffff;
+
+  font-weight: 600;
+}
 
 /* MAIN CONTENT LAYOUT */
 
@@ -176,6 +194,15 @@ body {
 
   display: grid;
 
+  /* Default for every screen: one column of panels stacked from the top. */
+  grid-template-columns: minmax(0, 1fr);
+  align-content: start;
+
+  gap: 16px;
+}
+
+/* Station view: map and inspector side by side, playback bar underneath. */
+.content--station {
   grid-template-columns:
     minmax(0, 1fr)
     320px;
@@ -184,8 +211,11 @@ body {
     minmax(650px, 1fr)
     96px;
 
-  gap: 16px;
+  align-content: stretch;
 }
+
+.view-title { margin: 0; font-size: 20px; }
+.view-message { margin: 0; padding: 20px; color: #5b6168; }
 
 /* CONTENT CONTAINERS */
 
@@ -434,7 +464,9 @@ button:disabled { cursor: default; opacity: 0.45; }
 @media (max-width: 1250px) {
   .content {
     padding: 16px;
+  }
 
+  .content--station {
     grid-template-columns:
       minmax(0, 1fr)
       280px;
@@ -446,11 +478,21 @@ button:disabled { cursor: default; opacity: 0.45; }
     grid-template-columns: 1fr;
   }
 
+  /* Narrow screens: the sidebar becomes a scrolling row of screen buttons
+     above the content, so every screen stays reachable. */
   .sidebar {
-    display: none;
+    flex-direction: row;
+    gap: 4px;
+    overflow-x: auto;
+    padding: 8px 16px;
+    border-right: 0;
+    border-bottom: 1px solid #d8dbd5;
   }
 
-  .content {
+  .sidebar .section-label { display: none; }
+  .nav-item { flex-shrink: 0; margin-bottom: 0; }
+
+  .content--station {
     grid-template-columns: 1fr;
 
     grid-template-rows:
@@ -474,7 +516,7 @@ button:disabled { cursor: default; opacity: 0.45; }
 }
 
 @media (max-width: 660px) {
-  .content {
+  .content--station {
     grid-template-rows:
       520px
       auto
@@ -494,12 +536,12 @@ button:disabled { cursor: default; opacity: 0.45; }
 /* Keep control overrides after shell breakpoints so wrapped rows can grow. */
 @media (max-width: 1400px) {
   .playback-region { flex-wrap: wrap; height: auto; }
-  .content { grid-template-rows: minmax(650px, 1fr) auto; }
+  .content--station { grid-template-rows: minmax(650px, 1fr) auto; }
   .speed-selector { margin-left: auto; }
   .timeline-clock { min-width: 180px; }
 }
 @media (max-width: 930px) {
-  .content { grid-template-rows: auto auto auto; }
+  .content--station { grid-template-rows: auto auto auto; }
 }
 @media (max-width: 660px) {
   .topbar { padding: 12px 16px; gap: 8px; }

@@ -112,4 +112,31 @@ describe("StationCanvas passenger selection (#237)", () => {
 
     expect(usePlaybackStore.getState().snapshot()).toEqual(before);
   });
+
+  it("draws a run passed as a prop instead of the store's run", () => {
+    // The prop run has one passenger at (500, 300) at t = 10 s; the store run has none there.
+    const run: StationViewData = { ...stationViewData, passenger_tracks: tracksAt([{ id: "prop-1", x: 500, y: 300 }]) };
+    render(<StationCanvas data={run} label="No holding" />);
+    act(() => usePlaybackStore.getState().seek(10));
+
+    expect(arc).toHaveBeenCalledWith(500, 300, 4, 0, 2 * Math.PI);
+    expect(screen.getByLabelText(/simulation seconds/).getAttribute("aria-label"))
+      .toBe(`No holding: ${run.interchange.name} at 10.0 simulation seconds`);
+  });
+
+  it("ignores clicks and keys and draws no follow ring when not interactive", () => {
+    act(() => usePlaybackStore.getState().selectPassenger("p-001"));
+    render(<StationCanvas interactive={false} />);
+    act(() => usePlaybackStore.getState().seek(85));
+    const canvas = screen.getByLabelText(/simulation seconds/);
+
+    fireEvent.click(canvas, { clientX: 391, clientY: 137 });
+    fireEvent.keyDown(canvas, { key: "Escape" });
+
+    // The store pick is untouched, and this canvas neither rings nor names it.
+    expect(usePlaybackStore.getState().selectedPassengerId).toBe("p-001");
+    expect(arc).not.toHaveBeenCalledWith(...RING(389, 135));
+    expect(canvas.getAttribute("aria-label")).not.toContain("following");
+    expect(canvas.getAttribute("tabindex")).toBeNull();
+  });
 });

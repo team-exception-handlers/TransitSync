@@ -1,0 +1,52 @@
+/* AI contribution: 50% or more AI-generated */
+/* Compare screen (US-4.1): heading, two run panels side by side, and the
+   shared playback bar. The panels stack into one column on narrow screens. */
+
+.comparison-heading { display: flex; flex-direction: column; gap: 4px; }
+.comparison-heading .station-status { color: #5b6168; font-size: smaller; }
+.comparison-conditions { margin: 0; font-family: "IBM Plex Mono", monospace; font-size: 13px; }
+.comparison-error { margin: 0; color: #a21b1b; font-size: 13px; }
+
+.comparison-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.comparison-panel { display: flex; flex-direction: column; min-height: 480px; }
+.comparison-panel-title { margin: 0; padding: 12px 16px 0; font-size: 15px; }
+
+.comparison-stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid #d8dbd5;
+}
+
+/* Outlined as well as filled, so it stands out in high-contrast modes. */
+.hold-badge {
+  padding: 2px 10px;
+  border: 1px solid #8a5a00;
+  border-radius: 999px;
+  background: #fdf0d5;
+  color: #8a5a00;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.comparison-stats-values { display: flex; flex-wrap: wrap; gap: 16px; margin: 0; }
+.comparison-note { margin: 0; color: #5b6168; font-size: 13px; }
+.comparison-stats-values dt { font-size: 11px; color: #5b6168; }
+.comparison-stats-values dd { margin: 2px 0 0; font-family: "IBM Plex Mono", monospace; font-size: 16px; font-weight: 600; }
+
+@media (max-width: 1400px) {
+  .content--compare .playback-region { flex-wrap: wrap; }
+}
+
+@media (max-width: 930px) {
+  .comparison-panels { grid-template-columns: 1fr; }
+  .comparison-panel { min-height: 400px; }
+}
