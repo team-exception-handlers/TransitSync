@@ -37,7 +37,8 @@
   text-transform: uppercase;
 }
 
-.comparison-stats-values { display: flex; gap: 16px; margin: 0; }
+.comparison-stats-values { display: flex; flex-wrap: wrap; gap: 16px; margin: 0; }
+.comparison-note { margin: 0; color: #5b6168; font-size: 13px; }
 .comparison-stats-values dt { font-size: 11px; color: #5b6168; }
 .comparison-stats-values dd { margin: 2px 0 0; font-family: "IBM Plex Mono", monospace; font-size: 16px; font-weight: 600; }
 

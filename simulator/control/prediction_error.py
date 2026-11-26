@@ -20,6 +20,7 @@ same prediction the same e even when a hold changes the other snapshots
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, replace
+from functools import partial
 
 from simulator.control.interface import (
     IncomingTransfer,
@@ -28,6 +29,7 @@ from simulator.control.interface import (
 )
 from simulator.control.planning import FutureVisit
 from simulator.control.validation import finite_number
+from simulator.engine.random_streams import StreamManager
 
 # Published: the Caltrans GTFS-RT "reliable accuracy" band (Master Service
 # Agreement, Exhibit H, equation from Swiftly), with error bounds of
@@ -119,21 +121,19 @@ class PredictionErrorModel:
         # this names the same decision in both runs of a pair
         decision = (truth.train_id, truth.platform_id, truth.scheduled_departure_s)
         arrival_z: dict[str, float] = {}
-        trains = tuple(
-            self._train(train, truth.time_s, decision, arrival_z)
-            for train in truth.trains
-        )
+        draw = _decision_draw(self._draw, decision)
+        trains = self._trains(truth.trains, truth.time_s, draw, arrival_z)
         transfers = tuple(
-            self._transfer(group, decision) for group in truth.incoming_transfers
+            self._transfer(group, draw) for group in truth.incoming_transfers
         )
         if not truth.future_visits and not truth.headway_visits:
             return _updated(truth, trains=trains, incoming_transfers=transfers)
         departures: dict[str, float] = {}
         visits = self._visits(
-            truth.future_visits, truth.time_s, decision, arrival_z, departures
+            truth.future_visits, truth.time_s, draw, arrival_z, departures
         )
         headways = self._visits(
-            truth.headway_visits, truth.time_s, decision, arrival_z, departures
+            truth.headway_visits, truth.time_s, draw, arrival_z, departures
         )
         # Use the same bounded forecast in both representations of a next stop.
         next_arrivals = {}
@@ -143,11 +143,12 @@ class PredictionErrorModel:
                     (visit.train_id, visit.platform_id), visit.arrival_s
                 )
         trains = tuple(
-            _updated(
+            _copy_train(
                 train,
-                predicted_arrival_s=next_arrivals.get(
+                next_arrivals.get(
                     (train.train_id, train.next_platform_id), train.predicted_arrival_s
                 ),
+                train.onboard_load,
             )
             for train in trains
         )
@@ -163,7 +164,7 @@ class PredictionErrorModel:
         self,
         source: tuple[FutureVisit, ...],
         now_s: float,
-        decision: tuple,
+        draw: Callable[..., float],
         arrival_z: dict[str, float],
         departures: dict[str, float],
     ) -> tuple[FutureVisit, ...]:
@@ -171,7 +172,7 @@ class PredictionErrorModel:
         visits = []
         for visit in source:
             previous_s = departures.get(visit.train_id, now_s)
-            estimated = self._visit(visit, now_s, decision, arrival_z, previous_s)
+            estimated = self._visit(visit, now_s, draw, arrival_z, previous_s)
             departures[visit.train_id] = estimated.departure_s
             visits.append(estimated)
         return tuple(visits)
@@ -180,7 +181,7 @@ class PredictionErrorModel:
         self,
         visit: FutureVisit,
         now_s: float,
-        decision: tuple,
+        draw: Callable[..., float],
         arrival_z: dict[str, float],
         previous_s: float,
     ) -> FutureVisit:
@@ -194,40 +195,48 @@ class PredictionErrorModel:
         if visit.arrived or visit.arrival_s <= now_s:
             return visit
         if visit.train_id not in arrival_z:
-            arrival_z[visit.train_id] = self._draw(*decision, "arrival", visit.train_id)
+            arrival_z[visit.train_id] = draw("arrival", visit.train_id)
         sigma = arrival_sigma_s(visit.arrival_s - now_s)
         error = self.settings.arrival_kappa * sigma * arrival_z[visit.train_id]
         arrival = visit.arrival_s + error
         if self.settings.arrival_kappa:
             arrival = max(arrival, now_s, previous_s, visit.earliest_arrival_s)
         shift = arrival - visit.arrival_s
-        return _updated(
-            visit,
-            arrival_s=arrival,
-            departure_s=visit.departure_s + shift,
-        )
+        return _copy_visit(visit, arrival, visit.departure_s + shift)
+
+    def _trains(
+        self,
+        trains: tuple[TrainState, ...],
+        now_s: float,
+        draw: Callable[..., float],
+        arrival_z: dict[str, float],
+    ) -> tuple[TrainState, ...]:
+        """Estimate each train with this decision's bound keyed draw."""
+        return tuple(self._train(t, now_s, draw, arrival_z) for t in trains)
 
     def _train(
         self,
         train: TrainState,
         now_s: float,
-        decision: tuple,
+        draw: Callable[..., float],
         arrival_z: dict[str, float],
     ) -> TrainState:
-        z_load = self._draw(*decision, "load", train.train_id)
+        z_load = draw("load", train.train_id)
         load = _scaled(train.onboard_load, self.settings.load_kappa, z_load)
-        if train.predicted_arrival_s is None:
-            return _updated(train, onboard_load=load)
-        sigma = arrival_sigma_s(train.predicted_arrival_s - now_s)
-        z = self._draw(*decision, "arrival", train.train_id)
-        arrival_z[train.train_id] = z
-        error_s = sigma * z
-        arrival_s = train.predicted_arrival_s + self.settings.arrival_kappa * error_s
-        return _updated(train, predicted_arrival_s=arrival_s, onboard_load=load)
+        arrival_s = train.predicted_arrival_s
+        if arrival_s is not None:
+            sigma = arrival_sigma_s(arrival_s - now_s)
+            z = draw("arrival", train.train_id)
+            arrival_z[train.train_id] = z
+            error_s = sigma * z
+            arrival_s = arrival_s + self.settings.arrival_kappa * error_s
+        return _copy_train(train, arrival_s, load)
 
-    def _transfer(self, group: IncomingTransfer, decision: tuple) -> IncomingTransfer:
+    def _transfer(
+        self, group: IncomingTransfer, draw: Callable[..., float]
+    ) -> IncomingTransfer:
         # One draw scales both counts, so still walking <= group size holds
-        z = self._draw(*decision, "transfer", group.group_id)
+        z = draw("transfer", group.group_id)
         kappa = self.settings.transfer_kappa
         return _updated(
             group,
@@ -239,3 +248,84 @@ class PredictionErrorModel:
 def _scaled(value: int, kappa: float, z: float) -> int:
     """A count with relative error ``kappa * 10% * z``, rounded, never below 0."""
     return max(0, round(value * (1.0 + kappa * COUNT_RELATIVE_SIGMA * z)))
+
+
+def _decision_draw(draw: Callable[..., float], decision: tuple) -> Callable[..., float]:
+    """Return ``draw`` with this decision's key fixed in front of every call.
+
+    The run passes ``partial(streams.keyed_normal, name)``. For exactly that
+    form the stream manager hashes the shared key start once per decision
+    (#412), and the numbers are identical. Any other callable is wrapped as is.
+    """
+    func = getattr(draw, "func", None)
+    if (
+        type(draw) is partial
+        and not draw.keywords
+        and getattr(func, "__func__", None) is StreamManager.keyed_normal
+    ):
+        return func.__self__.keyed_normal_from(*draw.args, *decision)
+    return partial(draw, *decision)
+
+
+def _copy_train(train: TrainState, arrival_s: float | None, load: int) -> TrainState:
+    """Copy the fixed train schema without rediscovering dataclass fields.
+
+    Fields are passed by position, so test_prediction_copy pins the field
+    order. Full-day observations create millions of these values. Keep subclass
+    handling on dataclasses.replace so extensions retain their concrete type
+    and extra fields. Random draws and arithmetic remain in the caller.
+    """
+    if (
+        load == train.onboard_load
+        and type(load) is type(train.onboard_load)
+        and _same_number(arrival_s, train.predicted_arrival_s)
+    ):
+        return train
+    if type(train) is not TrainState:
+        return _updated(train, predicted_arrival_s=arrival_s, onboard_load=load)
+    return TrainState(
+        train.train_id,
+        train.line_id,
+        train.next_platform_id,
+        arrival_s,
+        train.scheduled_departure_s,
+        train.delay_s,
+        load,
+        train.capacity,
+    )
+
+
+def _same_number(first: float | None, second: float | None) -> bool:
+    """Reuse frozen values only when type and signed-zero representation match."""
+    return first is second or (
+        type(first) is type(second)
+        and first == second
+        and (first != 0 or math.copysign(1, first) == math.copysign(1, second))
+    )
+
+
+def _copy_visit(
+    visit: FutureVisit, arrival_s: float, departure_s: float
+) -> FutureVisit:
+    """Copy a fixed forecast schema, preserving subclass extension fields.
+
+    Positional like ``_copy_train``; its field order is pinned by a test too.
+    """
+    if type(visit) is not FutureVisit:
+        return _updated(visit, arrival_s=arrival_s, departure_s=departure_s)
+    return FutureVisit(
+        visit.train_id,
+        visit.trip_index,
+        visit.stop_index,
+        visit.station_id,
+        visit.platform_id,
+        arrival_s,
+        departure_s,
+        visit.scheduled_arrival_s,
+        visit.scheduled_departure_s,
+        visit.can_hold,
+        visit.skips_departure,
+        visit.recovery_s,
+        visit.arrived,
+        visit.earliest_arrival_s,
+    )

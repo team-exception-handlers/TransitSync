@@ -5,10 +5,12 @@
  * has no settings.
  */
 import {
+  DEFAULT_DISRUPTION_MAGNITUDES,
   DEFAULT_RUN_SETTINGS,
   formatErrorMagnitude,
   formatHeadway,
   formatPassengers,
+  formatHeadwayIrregularity,
   formatSeconds,
   formatThreshold,
   strategyLabel,
@@ -24,11 +26,31 @@ const DISRUPTION_LABELS: Record<RunSettings["disruption_preset"], string> = {
   uneven_headways: "Uneven headways",
 };
 
+/** Format the selected disruption magnitude with its correct unit. */
+function disruptionMagnitudeRow(
+  preset: Exclude<RunSettings["disruption_preset"], "none" | undefined>,
+  magnitude: number | undefined,
+): [string, string] {
+  if (preset === "uneven_headways") {
+    return [
+      "Headway irregularity",
+      formatHeadwayIrregularity(
+        magnitude ?? DEFAULT_DISRUPTION_MAGNITUDES.uneven_headways,
+      ),
+    ];
+  }
+  if (preset === "line_suspension") {
+    return ["Suspension duration", formatSeconds(magnitude ?? 60)];
+  }
+  return ["Disruption magnitude", formatSeconds(magnitude ?? 60)];
+}
+
 /**
  * Label and display text for each setting, in reading order. The threshold
  * is listed only for Adaptive, the one strategy that uses it.
  */
 function summaryRows(settings: RunSettings): [label: string, text: string][] {
+  const disruptionPreset = settings.disruption_preset ?? "none";
   const rows: [string, string][] = [
     ["Strategy", strategyLabel(settings.strategy)],
     ["Max hold", formatSeconds(settings.max_hold_time)],
@@ -42,8 +64,12 @@ function summaryRows(settings: RunSettings): [label: string, text: string][] {
     ["Train frequency", formatHeadway(settings.train_headway_s)],
     ["Onboard load", formatPassengers(settings.onboard_load)],
     ["Walking time", formatSeconds(settings.walking_mean_s)],
-    ["Disruption", DISRUPTION_LABELS[settings.disruption_preset ?? "none"]],
+    ["Disruption", DISRUPTION_LABELS[disruptionPreset]],
   );
+  if (disruptionPreset !== "none") {
+    rows.push(["Disruption start", formatSeconds(settings.disruption_time_s ?? 120)]);
+    rows.push(disruptionMagnitudeRow(disruptionPreset, settings.disruption_magnitude));
+  }
   return rows;
 }
 

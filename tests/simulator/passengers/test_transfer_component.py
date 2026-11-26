@@ -138,9 +138,9 @@ def test_full_group_is_created_at_actual_train_arrival_then_spread_by_walking(
 
     reached = arrivals(advance(component, scheduler, 200))
     assert [(e.passenger_id, e.time_s) for e in reached] == [
-        ("passenger-000000000002", 105),
-        ("passenger-000000000003", 110),
-        ("passenger-000000000001", 120),
+        ("passenger-mcgill|rem-100|1|2", 105),
+        ("passenger-mcgill|rem-100|1|3", 110),
+        ("passenger-mcgill|rem-100|1|1", 120),
     ]
     assert {e.group_id for e in reached} == {"passenger-group-mcgill-rem-100-1"}
     assert {e.platform_id for e in reached} == {"green"}
@@ -193,7 +193,7 @@ def test_zero_demand_does_not_spend_ids_or_create_a_walk(monkeypatch):
     assert scheduler.pending == 1  # Only the next feeder, no passenger timer.
     reached = arrivals(advance(component, scheduler, 200))
     assert means == [60]
-    assert reached[0].passenger_id == "passenger-000000000001"
+    assert reached[0].passenger_id == "passenger-mcgill|rem-120|1|1"
     assert reached[0].group_id == "passenger-group-mcgill-rem-120-1"
 
 
@@ -210,10 +210,10 @@ def test_overlapping_groups_enter_corridor_in_physical_arrival_order(monkeypatch
 
     # The second train's walkers reach the queue before the first train's walkers.
     assert [(e.passenger_id, e.time_s) for e in reached] == [
-        ("passenger-000000000003", 21),
-        ("passenger-000000000004", 22),
-        ("passenger-000000000001", 110),
-        ("passenger-000000000002", 120),
+        ("passenger-mcgill|rem-20|1|1", 21),
+        ("passenger-mcgill|rem-20|1|2", 22),
+        ("passenger-mcgill|rem-10|1|1", 110),
+        ("passenger-mcgill|rem-10|1|2", 120),
     ]
 
 
@@ -407,7 +407,7 @@ def test_demand_start_and_unknown_passenger_events(monkeypatch):
     reached = arrivals(advance(component, scheduler, 200))
     assert means == [30]
     assert reached[-1].time_s == 91
-    assert list(component.passengers) == ["passenger-000000000001"]
+    assert list(component.passengers) == ["passenger-mcgill|rem-90|1|1"]
 
 
 @pytest.mark.parametrize("invalid", [None, "route", [object()]])

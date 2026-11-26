@@ -162,12 +162,37 @@ class SimulationRunRequest(BaseModel):
         default=120.0, ge=0, allow_inf_nan=False, strict=True
     )
     disruption_magnitude: float = Field(
-        default=60.0, gt=0, allow_inf_nan=False, strict=True
+        default=60.0,
+        gt=0,
+        allow_inf_nan=False,
+        strict=True,
+        description=(
+            "Seconds for delay and suspension; coefficient of variation for "
+            "uneven headways."
+        ),
     )
 
     irregularity_threshold: float | None = Field(
         default=None, ge=0, allow_inf_nan=False, strict=True
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def apply_disruption_defaults(cls, values: object) -> object:
+        """Resolve the uneven-headway CV before requests are copied for comparisons."""
+        if not isinstance(values, dict):
+            return values
+        if (
+            values.get("disruption_preset") != "uneven_headways"
+            or "disruption_magnitude" in values
+        ):
+            return values
+        preset_magnitude = get_disruption_preset(
+            "uneven_headways"
+        ).spacing_irregularity_level
+        if preset_magnitude is None:
+            raise ValueError("uneven_headways preset requires a spacing irregularity")
+        return {**values, "disruption_magnitude": preset_magnitude}
 
     @property
     def run_id(self) -> str:
@@ -175,13 +200,20 @@ class SimulationRunRequest(BaseModel):
         return sha256(self.model_dump_json().encode("utf-8")).hexdigest()
 
     @model_validator(mode="after")
-    def validate_adaptive_threshold(self) -> SimulationRunRequest:
-        """Require a threshold only when adaptive mode is requested."""
+    def validate_run_settings(self) -> SimulationRunRequest:
+        """Validate adaptive thresholds and preset-specific magnitude units."""
         if self.strategy == AdaptiveStrategy.name:
             if self.irregularity_threshold is None:
                 raise ValueError("irregularity_threshold is required for adaptive")
         elif "irregularity_threshold" in self.model_fields_set:
             raise ValueError("irregularity_threshold is only valid for adaptive")
+        if (
+            self.disruption_preset == "uneven_headways"
+            and self.disruption_magnitude > 1
+        ):
+            raise ValueError(
+                "disruption_magnitude must be at most 1 as a coefficient of variation"
+            )
         return self
 
     @field_validator("preset")
@@ -674,6 +706,7 @@ def _line_suspensions(
 
 def _uneven_green_dispatch(
     trains: list[Train],
+    scenario: Scenario,
     request: SimulationRunRequest | None,
     streams: StreamManager | None,
 ) -> list[Train]:
@@ -686,20 +719,29 @@ def _uneven_green_dispatch(
     can leave at the same second as one going the other way. Directions are
     drawn in platform order and trains by first departure, so the seeded
     draws always come in the same order.
+
+    The magnitude is the headway coefficient of variation. Only trains whose
+    first departure falls between the disruption time and the end of the run
+    are perturbed, and a direction with fewer than two such trains has no
+    headway to vary, so it is left as scheduled.
     """
     if request is None or request.disruption_preset != "uneven_headways":
         return trains
-    level = get_disruption_preset("uneven_headways").spacing_irregularity_level
-    if level is None:
-        return trains
+    level = request.disruption_magnitude
+    duration_s = float(scenario.duration_s)
     if streams is None:
         raise ValueError("Uneven headways require a seeded disruptions stream")
     directions: dict[str, list[Train]] = defaultdict(list)
     for train in trains:
-        if train.line_id == "1":
+        first_departure = train.schedule[0].departure_s
+        if train.line_id == "1" and (
+            request.disruption_time_s <= first_departure <= duration_s
+        ):
             directions[train.schedule[0].platform_id].append(train)
     offsets: dict[str, float] = {}
     for platform_id in sorted(directions):
+        if len(directions[platform_id]) < 2:
+            continue
         ordered = sorted(
             directions[platform_id], key=lambda train: train.schedule[0].departure_s
         )
@@ -784,7 +826,7 @@ def _build_trains(
             parameters.train_headway_s,
             float(scenario.duration_s),
         )
-    return _uneven_green_dispatch(trains, request, streams)
+    return _uneven_green_dispatch(trains, scenario, request, streams)
 
 
 def _onward_station_id(platform_id: str) -> str:

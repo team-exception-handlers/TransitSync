@@ -128,5 +128,10 @@
     "classification": "assumed",
     "source_name": "Scenario parameter until load data exists (simulator/scenario_parameters.py)",
     "source_link": ""
+  },
+  "UNAFFECTED_THRESHOLD_S": {
+    "classification": "assumed",
+    "source_name": "Passenger split threshold, pending team decision (api/passenger_split.py)",
+    "source_link": ""
   }
 }

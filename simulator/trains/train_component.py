@@ -18,11 +18,12 @@ All event times, dwell durations and separation gaps are simulation seconds.
 
 import math
 from collections import defaultdict, deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from types import MappingProxyType
 from typing import Any
 
 from simulator.control.decision import DecisionPipeline
+from simulator.control.decision_audit import EncodedDecisionRecord
 from simulator.control.interface import PlatformState, TrainState
 from simulator.control.irregularity import ServiceIrregularity
 from simulator.control.planning import FutureVisit
@@ -349,6 +350,12 @@ class TrainComponent:
     def decision_records(self) -> tuple[dict[str, Any], ...]:
         """Return the strategy's audit records for ``decisions.jsonl`` (#44)."""
         return self.decision.decision_records()
+
+    def encoded_decision_records(
+        self,
+    ) -> Iterator[EncodedDecisionRecord | dict[str, Any]]:
+        """Pass immutable encoded estimates directly to the audit log writer."""
+        return self.decision.encoded_decision_records()
 
     def train_states(self) -> tuple[TrainState, ...]:
         """Copy each train's next stop, delay and load for an observation (#38)."""
