@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from simulator.control.settings import parse_operating_rules
 from simulator.scenario import PRESET_SETTINGS
 from simulator.scenario_parameters import parse_scenario_parameters
 
@@ -43,13 +44,17 @@ class ScenarioPreset(BaseModel):
 def list_presets() -> list[ScenarioPreset]:
     """Return the presets in definition order with every value filled in.
 
-    Parameter values go through ``parse_scenario_parameters``, the scenario
-    loader's own check, so a bad preset fails here with its field name
-    instead of reaching the page. Raises ``ScenarioParametersError``.
+    Parameter values go through ``parse_scenario_parameters`` and the maximum
+    hold through ``parse_operating_rules``, the scenario loader's own checks,
+    so a bad preset (a 7 s hold the search cannot step through, or 5000 on
+    board) fails here with its field name instead of being listed and then
+    failing mid-run. Raises ``ScenarioParametersError`` or
+    ``OperatingRulesError``, both ``ValueError``.
     """
     presets = []
     for name, preset in PRESET_SETTINGS.items():
         parameters = parse_scenario_parameters(preset["parameters"])
+        rules = parse_operating_rules({"max_hold_time": preset["max_hold_time"]})
         presets.append(
             ScenarioPreset(
                 name=name,
@@ -58,7 +63,7 @@ def list_presets() -> list[ScenarioPreset]:
                 duration_s=preset["duration_s"],
                 conditions=PresetConditions(
                     **parameters.to_dict(),
-                    max_hold_time=preset["max_hold_time"],
+                    max_hold_time=rules.max_hold_time,
                 ),
             )
         )

@@ -86,6 +86,15 @@ export function RunSettingsPanel({ runner, provenance, onShowSources }: Readonly
     });
   }, []);
   const errorList = Object.values(entryErrors);
+  // Bumped by "Reset to defaults" to remount the value rows. A bad typed
+  // entry never reaches the store, so when the stored value is already the
+  // default, Reset changes nothing a row could see; a fresh row drops it.
+  const [resetCount, setResetCount] = useState(0);
+  function resetToDefaults() {
+    reset();
+    setEntryErrors({});
+    setResetCount((count) => count + 1);
+  }
 
   // A run belongs to the connection it was started for: leaving that
   // connection (or the page) cancels it so it cannot replace a newer view.
@@ -126,7 +135,7 @@ export function RunSettingsPanel({ runner, provenance, onShowSources }: Readonly
               Where these values come from
             </button>
           )}
-          <button type="button" className="playback-button" onClick={reset}>
+          <button type="button" className="playback-button" onClick={resetToDefaults}>
             Reset to defaults
           </button>
           <button type="button" className="playback-button primary" disabled={!canRun}
@@ -183,7 +192,7 @@ export function RunSettingsPanel({ runner, provenance, onShowSources }: Readonly
             provenance={provenance?.irregularity_threshold} />
         </fieldset>
 
-        <div className="run-settings-values">
+        <div className="run-settings-values" key={resetCount}>
           <ParameterControls provenance={provenance} onEntryError={reportEntryError} />
           <SettingSlider label="Error magnitude" value={draft.error_magnitude}
             range={ERROR_MAGNITUDE_RANGE} format={formatErrorMagnitude}

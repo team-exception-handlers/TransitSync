@@ -3,9 +3,15 @@
 
 Train frequency is given as a headway h: the time in seconds between one
 train and the next at the connecting platform. The GTFS timetable gives the
-real, slightly uneven spacing. When a user sets h, the connecting line's
-trips are replaced by copies of its first trip, one every h seconds, so the
-platform sees exactly the requested service.
+real, slightly uneven spacing. When a user sets h, the trains that call at
+the connecting platform are replaced by copies of the first of them, one
+every h seconds, so that platform sees exactly the requested service.
+
+Platforms are one per direction, so only the direction passengers transfer
+onto is re-spaced; the opposite direction keeps its GTFS timetable. That is
+enough for the transfer: a hold decision and a connection's outcome depend
+only on trains at the connecting platform. The station view therefore shows
+the two directions at different frequencies while a custom headway is set.
 
 Copies are used because a shorter headway needs more trains than the
 timetable has, and a longer one fewer. REM trains keep their timetable.
