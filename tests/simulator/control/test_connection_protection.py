@@ -233,8 +233,9 @@ def test_invalid_configuration_fails_at_construction(searches, headways, message
 @pytest.mark.parametrize(
     ("changes", "message"),
     [
-        ({"current_visit": None}, "current_visit"),
-        ({"platforms": ()}, "platform history"),
+        # The message names the deciding train, platform and time from snapshot()
+        ({"current_visit": None}, "current_visit .* for deciding at green, t=220 s"),
+        ({"platforms": ()}, "platform history for deciding at green, t=220 s"),
     ],
 )
 def test_protected_departure_requires_clearance(changes, message):

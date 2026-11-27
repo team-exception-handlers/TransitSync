@@ -159,10 +159,14 @@ class HoldSearch:
         """Return every candidate's result and the chosen hold, if any.
 
         The same inputs always give the same result; no state is kept.
-        Pass ``departure_context`` to compare departure with and without each
+        With ``departure_context``, compare departure with and without each
         hold, using the current stop's restrictions (#206; Mathematical
-        Foundations sections 1, 2 and 8). Missing stop data or platform history
-        raises ValueError. Without context, score holds from train readiness.
+        Foundations sections 1, 2 and 8). Candidate holds are counted from
+        readiness, so a mandatory wait uses part of ``max_hold_s``.
+        With ``departure_context=None`` (older callers), score holds from
+        readiness. A context without ``current_visit`` or platform history
+        raises ValueError, because scoring without it would count
+        connections made during mandatory waits as a benefit of holding.
         """
         no_hold_s = inputs.time_s
         transfers = inputs.transfers
@@ -224,14 +228,20 @@ class HoldSearch:
 
 def _project_departure(context: ObservationSnapshot, ready_s: float) -> float:
     """Estimate departure in seconds: apply dispatch restrictions, then the gap."""
+    # Name the deciding visit so a failed run shows where the data was missing
+    where = f"for {context.train_id} at {context.platform_id}, t={context.time_s:g} s"
     visit = context.current_visit
     if visit is None:
-        raise ValueError("connection protection requires current_visit clearance")
+        raise ValueError(
+            f"connection protection requires current_visit clearance {where}"
+        )
     platform = next(
         (p for p in context.platforms if p.platform_id == context.platform_id), None
     )
     if platform is None:
-        raise ValueError("connection protection requires deciding platform history")
+        raise ValueError(
+            f"connection protection requires deciding platform history {where}"
+        )
     return departure_timing_s(
         ready_s,
         line_id=visit.line_id,
