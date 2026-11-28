@@ -33,12 +33,12 @@ function trainText(journey: JourneyNow): string {
 }
 
 /** The outcome so far, naming the missed train and the extra wait once known. */
-function outcomeText(journey: JourneyNow): string {
-  if (journey.where === "absent") return "Not in this run";
-  if (journey.outcome === "made") return "Made the connection";
-  if (journey.outcome === null) return "Not decided yet";
-  const missed = journey.missedTrainId ? `Missed train ${journey.missedTrainId}` : "Missed the connection";
-  return journey.delay_s === null ? missed : `${missed}, left ${formatDuration(journey.delay_s)} later`;
+function outcomeText({ where, outcome }: JourneyNow): string {
+  if (where === "absent") return "Not in this run";
+  if (outcome.kind === "open") return "Not decided yet";
+  if (outcome.kind === "made") return "Made the connection";
+  const missed = `Missed train ${outcome.trainId}`;
+  return outcome.delay_s === null ? missed : `${missed}, left ${formatDuration(outcome.delay_s)} later`;
 }
 
 /** Where the followed passenger is in this panel's run; nothing when nobody is followed. */

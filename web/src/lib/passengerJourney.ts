@@ -6,7 +6,9 @@
  * "made" when their train leaves with them, "missed" when one leaves without.
  */
 import { missedAt } from "./comparisonStats";
-import type { PassengerPhase, PassengerTrack, StationViewData } from "../types/stationView";
+import type {
+  PassengerOutcome, PassengerPhase, PassengerTrack, StationViewData,
+} from "../types/stationView";
 
 /** "absent": not in this run; "arriving": still on the train they transfer from. */
 export type Whereabouts =
@@ -16,23 +18,22 @@ export type Whereabouts =
   | "onboard"
   | "left";
 
+/** The connection so far; a miss names the train that left without them. */
+export type ConnectionOutcome =
+  | { kind: "open" }
+  | { kind: "made" }
+  | { kind: "missed"; trainId: string; delay_s: number | null };
+
 /** The followed passenger's state in one run at one moment. */
 export interface JourneyNow {
   where: Whereabouts;
   connectionLabel: string | null;
   trainId: string | null;
-  /** Null while the connection is still open. */
-  outcome: "made" | "missed" | null;
-  /** First train that left without them, once it has; null in mock runs. */
-  missedTrainId: string | null;
-  /** Extra wait from that miss, once they leave on a later train. */
-  delay_s: number | null;
+  outcome: ConnectionOutcome;
 }
 
-const ABSENT: JourneyNow = {
-  where: "absent", connectionLabel: null, trainId: null,
-  outcome: null, missedTrainId: null, delay_s: null,
-};
+const OPEN: ConnectionOutcome = { kind: "open" };
+const ABSENT: JourneyNow = { where: "absent", connectionLabel: null, trainId: null, outcome: OPEN };
 
 /** Phase of the track's latest sample at `time_s`; before the first one they have not alighted. */
 function phaseAt(track: PassengerTrack | undefined, time_s: number): Whereabouts {
@@ -40,6 +41,21 @@ function phaseAt(track: PassengerTrack | undefined, time_s: number): Whereabouts
   if (sample === undefined) return "arriving";
   // Mock runs have no outcomes, so a "boarded" sample is all they say
   return sample.phase === "boarded" ? "onboard" : sample.phase;
+}
+
+/**
+ * The outcome once it has happened. It checks `status` as the panel's counts
+ * do, so the readout and the panel can never give different answers.
+ */
+function outcomeAt(
+  run: StationViewData, outcome: PassengerOutcome | undefined, time_s: number, left: boolean,
+): ConnectionOutcome {
+  if (outcome?.status === "made") return left ? { kind: "made" } : OPEN;
+  if (outcome?.status !== "missed") return OPEN;
+  const miss = missedAt(run, outcome);
+  if (miss === null || miss.time_s > time_s) return OPEN;
+  // Someone who missed a train and left on a later one still missed
+  return { kind: "missed", trainId: miss.trainId, delay_s: left ? outcome.delay_s : null };
 }
 
 /**
@@ -54,25 +70,16 @@ export function journeyAt(run: StationViewData, passengerId: string, time_s: num
 
   const connectionId = track?.connection_id ?? outcome?.connection_id;
   const label = run.connections.find((item) => item.id === connectionId)?.label ?? null;
-  const missAt = outcome ? missedAt(run, outcome) : null;
-  const missed = missAt !== null && missAt <= time_s;
   const boarded = outcome?.boarding_s != null && outcome.boarding_s <= time_s;
   const left = outcome?.departure_s != null && outcome.departure_s <= time_s;
 
   let where = phaseAt(track, time_s);
   if (left) where = "left";
   else if (boarded) where = "onboard";
-  // Someone who missed a train and left on a later one still missed
-  let result: JourneyNow["outcome"] = null;
-  if (missed) result = "missed";
-  else if (left) result = "made";
-
   return {
     where,
     connectionLabel: label,
     trainId: boarded ? (outcome?.boarded_train_id ?? null) : null,
-    outcome: result,
-    missedTrainId: missed ? (outcome?.missed_train_ids[0] ?? null) : null,
-    delay_s: missed && left ? (outcome?.delay_s ?? null) : null,
+    outcome: outcomeAt(run, outcome, time_s, left),
   };
 }

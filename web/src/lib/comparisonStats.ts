@@ -89,12 +89,16 @@ export function comparisonStatsAt(run: StationViewData, time_s: number): Compari
 }
 
 /**
- * When one passenger's first missed train left in `run`, or null if they have
- * not missed one. The followed passenger's journey uses this so its miss
- * shows at the same moment the panel's missed count goes up (#239).
+ * The first train that left without one passenger in `run` and when it left,
+ * or null if they have not missed one. The followed passenger's journey uses
+ * this so its miss shows at the same moment the panel's missed count goes up.
  */
-export function missedAt(run: StationViewData, outcome: PassengerOutcome): number | null {
-  return firstMissAt(outcome, transferPlatforms(run), departuresByVisit(run));
+export function missedAt(
+  run: StationViewData, outcome: PassengerOutcome,
+): { trainId: string; time_s: number } | null {
+  const time_s = firstMissAt(outcome, transferPlatforms(run), departuresByVisit(run));
+  const trainId = outcome.missed_train_ids[0];
+  return time_s === null || trainId === undefined ? null : { trainId, time_s };
 }
 
 /** Time one side saved and lost passengers against the other run (US-4.3). */
