@@ -458,3 +458,43 @@ def test_schedule_feeds_link_to_their_data_with_the_licence_credit(
     assert entry["source_link"] == link
     assert agency in entry["source_name"]
     assert "CC BY 4.0" in entry["source_name"]
+
+
+def test_every_parameter_in_response_matches_its_configured_source(
+    client: TestClient,
+) -> None:
+    """US-7.2 (#318): each parameter the API returns is associated with the
+    correct source, checked for every entry, not just a sample.
+
+    Guards against a key being dropped, renamed or paired with the wrong
+    source when the provenance config changes.
+    """
+    from simulator.parameter_provenance import load_parameter_provenance
+
+    expected = load_parameter_provenance()
+    response = client.get("/parameters")
+    assert response.status_code == 200
+    data = response.json()
+
+    assert set(data.keys()) == set(expected.keys())
+    for name, entry in expected.items():
+        assert data[name]["classification"] == entry.classification, name
+        assert data[name]["source_name"] == entry.source_name, name
+        assert data[name]["source_link"] == entry.source_link, name
+
+
+def test_parameters_response_has_no_entries_missing_from_config(
+    client: TestClient,
+) -> None:
+    """Every value shown in the Sources table must have a source behind it.
+
+    A silently empty classification or source_name would show as "No source
+    recorded yet" in the UI for a parameter that should have one.
+    """
+    response = client.get("/parameters")
+    data = response.json()
+
+    assert data, "GET /parameters must not be empty"
+    for name, entry in data.items():
+        assert entry["classification"], f"{name} has no classification"
+        assert entry["source_name"].strip(), f"{name} has no source_name"
