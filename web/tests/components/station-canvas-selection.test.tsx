@@ -124,19 +124,20 @@ describe("StationCanvas passenger selection (#237)", () => {
       .toBe(`No holding: ${run.interchange.name} at 10.0 simulation seconds`);
   });
 
-  it("ignores clicks and keys and draws no follow ring when not interactive", () => {
-    act(() => usePlaybackStore.getState().selectPassenger("p-001"));
-    render(<StationCanvas interactive={false} />);
+  it("rings and updates a passed-in pick instead of the station view's (#238)", () => {
+    act(() => usePlaybackStore.getState().selectPassenger("p-002"));
+    const selection = { passengerId: "p-001", select: vi.fn() };
+    render(<StationCanvas selection={selection} />);
     act(() => usePlaybackStore.getState().seek(85));
     const canvas = screen.getByLabelText(/simulation seconds/);
 
-    fireEvent.click(canvas, { clientX: 391, clientY: 137 });
-    fireEvent.keyDown(canvas, { key: "Escape" });
+    // p-001 is at (389, 135) at t = 85; the station view's p-002 gets no ring
+    expect(arc).toHaveBeenCalledWith(...RING(389, 135));
+    expect(canvas.getAttribute("aria-label")).toContain("following passenger p-001");
 
-    // The store pick is untouched, and this canvas neither rings nor names it.
-    expect(usePlaybackStore.getState().selectedPassengerId).toBe("p-001");
-    expect(arc).not.toHaveBeenCalledWith(...RING(389, 135));
-    expect(canvas.getAttribute("aria-label")).not.toContain("following");
-    expect(canvas.getAttribute("tabindex")).toBeNull();
+    fireEvent.click(canvas, { clientX: 120, clientY: 300 });
+    fireEvent.keyDown(canvas, { key: "Escape" });
+    expect(selection.select.mock.calls).toEqual([[null], [null]]);
+    expect(usePlaybackStore.getState().selectedPassengerId).toBe("p-002");
   });
 });

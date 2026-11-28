@@ -3,9 +3,10 @@
  * The holding and no-holding runs shown side by side on the Compare screen
  * (US-4.1, #230).
  *
- * This store only holds the loaded pair and its loading status. It has no
- * playback state: both panels read the time from `usePlaybackStore`, so one
- * clock (Observer pattern) drives both and they can never drift apart.
+ * This store only holds the loaded pair, its loading status and the passenger
+ * followed in both panels (#238). It has no playback state: both panels read
+ * the time from `usePlaybackStore`, so one clock (Observer pattern) drives
+ * both and they can never drift apart.
  */
 import { create } from "zustand";
 
@@ -30,6 +31,11 @@ interface ComparisonStore {
   status: ComparisonStatus;
   // User-facing reason for the last failure; null unless status is "error".
   error: string | null;
+  // Passenger followed in both panels (#238); null when nobody is picked.
+  // Keyed IDs (#240) name the same person in both runs, so one ID is enough.
+  selectedPassengerId: string | null;
+  // Pick a passenger drawn in either run, or pass null to stop following.
+  selectPassenger: (passengerId: string | null) => void;
   // Fetch both runs for these settings. Resolves true only when a new pair is
   // now shown; a pair already loaded for the same request is reused.
   loadComparison: (
@@ -51,7 +57,8 @@ export const EMPTY_COMPARISON = {
   passengerSplit: null,
   status: "idle",
   error: null,
-} as const satisfies Omit<ComparisonStore, "loadComparison">;
+  selectedPassengerId: null,
+} as const satisfies Omit<ComparisonStore, "loadComparison" | "selectPassenger">;
 
 // Numbers every load that really starts, so only the newest one may publish.
 let latestLoad = 0;
@@ -101,6 +108,8 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => ({
         startingConditions: pair.startingConditions,
         passengerSplit: pair.passengerSplit,
         status: "ready",
+        // A new pair may not hold the followed passenger, so start unpicked
+        selectedPassengerId: null,
       });
       return true;
     } catch (error) {
@@ -110,5 +119,17 @@ export const useComparisonStore = create<ComparisonStore>((set, get) => ({
       set({ status: "error", error: reason });
       return false;
     }
+  },
+
+  // Only a passenger the canvases draw (a track on the pair's connection) can
+  // be picked. One found in a single run is still allowed: that panel rings
+  // them and the other says they are not in its run.
+  selectPassenger: (passengerId) => {
+    const { holding, noHolding, connectionId } = get();
+    const known = passengerId === null || [holding, noHolding].some((run) =>
+      run?.passenger_tracks.some((track) =>
+        track.passenger_id === passengerId && track.connection_id === connectionId));
+    if (!known) throw new Error(`Unknown passenger: ${passengerId}`);
+    set({ selectedPassengerId: passengerId });
   },
 }));

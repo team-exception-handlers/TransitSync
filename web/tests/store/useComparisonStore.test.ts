@@ -173,4 +173,38 @@ describe("useComparisonStore", () => {
     expect(state.error).toBe("Server down");
     expect(state.holding).toBe(shown);
   });
+
+  it("follows a drawn passenger and stops following on null (#238)", async () => {
+    await load(vi.fn<ComparisonRunner>(async () => pairFor("connection_protection")));
+
+    useComparisonStore.getState().selectPassenger("p-002");
+    expect(useComparisonStore.getState().selectedPassengerId).toBe("p-002");
+
+    useComparisonStore.getState().selectPassenger(null);
+    expect(useComparisonStore.getState().selectedPassengerId).toBeNull();
+  });
+
+  // Edge: someone in one run only can be followed; the other panel says so
+  it("accepts a passenger found in only one run, but rejects one in neither", async () => {
+    const pair = pairFor("connection_protection");
+    const holding = { ...pair.holding, passenger_tracks: pair.holding.passenger_tracks.slice(1) };
+    await load(vi.fn<ComparisonRunner>(async () => ({ ...pair, holding })));
+
+    useComparisonStore.getState().selectPassenger("p-001");
+    expect(useComparisonStore.getState().selectedPassengerId).toBe("p-001");
+    expect(() => useComparisonStore.getState().selectPassenger("nobody")).toThrow("Unknown passenger: nobody");
+    expect(useComparisonStore.getState().selectedPassengerId).toBe("p-001");
+  });
+
+  it("stops following when a new pair loads, but not when the pair is reused", async () => {
+    const runner = vi.fn<ComparisonRunner>(async () => pairFor("connection_protection"));
+    await load(runner);
+    useComparisonStore.getState().selectPassenger("p-001");
+
+    await load(runner);
+    expect(useComparisonStore.getState().selectedPassengerId).toBe("p-001");
+
+    await load(runner, { ...DEFAULT_RUN_SETTINGS, transfer_volume: 80 });
+    expect(useComparisonStore.getState().selectedPassengerId).toBeNull();
+  });
 });

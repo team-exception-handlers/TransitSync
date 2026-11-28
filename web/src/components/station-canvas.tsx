@@ -6,7 +6,8 @@
  * fixture's fixed map box to the available viewport is handled by the pure
  * fitLayout() helper; this component only wires it to a ResizeObserver and a
  * canvas transform. Clicking a marker follows that passenger (#237); the pick
- * lives in the playback store so other views can highlight the same person.
+ * lives in the playback store, or in the one the caller passes, so Compare can
+ * share a single pick between its two canvases (#238).
  */
 import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { fitLayout } from "../lib/fitLayout";
@@ -210,15 +211,21 @@ function drawPassengerCount(
   context.fillText(label, 12, 20);
 }
 
+/** A followed passenger and how to change it, for a canvas that does not use the station view's pick. */
+export interface PassengerSelection {
+  passengerId: string | null;
+  select: (passengerId: string | null) => void;
+}
+
 interface StationCanvasProps {
   /** Run to draw instead of the playback store's run, e.g. one side of a comparison. */
   data?: StationViewData;
   /**
-   * False turns off passenger picking and the follow ring. The Compare screen
-   * draws two runs whose passenger IDs differ, so a pick made in one panel
-   * could point at nobody in the other.
+   * Pick to ring and update instead of the station view's. Compare passes the
+   * same one to both canvases: keyed IDs (#240) name one person in both runs,
+   * so a click in either panel rings them in both.
    */
-  interactive?: boolean;
+  selection?: PassengerSelection;
   /** Prefix for the accessible name, so two canvases on one screen can be told apart. */
   label?: string;
 }
@@ -231,7 +238,7 @@ interface StationCanvasProps {
  */
 export function StationCanvas({
   data: runOverride,
-  interactive = true,
+  selection,
   label,
 }: Readonly<StationCanvasProps>) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -241,8 +248,9 @@ export function StationCanvas({
   const time = usePlaybackStore((state) => state.currentTime_s);
   const selected = usePlaybackStore((state) => state.selectedConnectionId);
   const storeFollowed = usePlaybackStore((state) => state.selectedPassengerId);
-  const followed = interactive ? storeFollowed : null;
-  const selectPassenger = usePlaybackStore((state) => state.selectPassenger);
+  const storeSelect = usePlaybackStore((state) => state.selectPassenger);
+  const followed = selection ? selection.passengerId : storeFollowed;
+  const selectPassenger = selection?.select ?? storeSelect;
 
   // Tracks the container's content box; falls back to the fixture's own
   // size (no scaling) when ResizeObserver is unavailable, e.g. in jsdom.
@@ -319,15 +327,12 @@ export function StationCanvas({
   };
   const followingLabel = followed ? `, following passenger ${followed}, press Escape to stop` : "";
   const prefix = label ? `${label}: ` : "";
-  // A view-only canvas takes no clicks, keys or focus.
-  const handlers = interactive
-    ? { onClick: handleClick, onKeyDown: handleKeyDown, tabIndex: 0 }
-    : {};
   // No role="img": the canvas takes clicks and keys, and its aria-label already
   // names it for screen readers (Sonar S6819 prefers the native element).
   return (
     <div ref={containerRef} className="station-canvas-wrap">
-      <canvas ref={canvasRef} className="station-canvas" {...handlers}
+      <canvas ref={canvasRef} className="station-canvas"
+        onClick={handleClick} onKeyDown={handleKeyDown} tabIndex={0}
         width={data.map.width} height={data.map.height}
         aria-label={`${prefix}${data.interchange.name} at ${time.toFixed(1)} simulation seconds${followingLabel}`}>
         Station schematic with platforms, transfer corridor, trains and passengers.
