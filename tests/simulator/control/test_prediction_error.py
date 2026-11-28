@@ -9,17 +9,20 @@ import numpy as np
 import pytest
 
 from simulator.control.interface import (
+    CurrentVisitState,
     IncomingTransfer,
     ObservationSnapshot,
     PlatformState,
     TrainState,
 )
+from simulator.control.planning import FutureVisit
 from simulator.control.prediction_error import (
     PredictionErrorModel,
     PredictionErrorSettings,
     arrival_sigma_s,
 )
 from simulator.engine.random_streams import StreamManager
+from simulator.trains.suspension import LineSuspension
 
 
 class FixedDraws:
@@ -90,6 +93,41 @@ def test_values_without_error_are_copied_unchanged():
     assert seen.platforms == truth.platforms
     assert seen.trains[0].delay_s == truth.trains[0].delay_s
     assert seen.incoming_transfers[0].last_arrival_s == 190.0
+
+
+@pytest.mark.parametrize("planning", [False, True])
+def test_current_visit_clearance_survives_error_without_extra_draws(planning):
+    """Both prediction paths preserve clearance data and draw the same errors."""
+    truth = replace(
+        snapshot(),
+        minimum_gap_s=12.5,
+        suspensions=(LineSuspension("rem", 100, 200),),
+        future_visits=(FutureVisit("A", 0, 1, "S2", "P2", 220, 230, 220, 230),)
+        if planning
+        else (),
+    )
+    with_clearance = replace(truth, current_visit=CurrentVisitState("rem", True))
+    keys = []
+
+    def draw(*key):
+        keys.append(key)
+        return 1.0
+
+    model = PredictionErrorModel(PredictionErrorSettings(), draw)
+    plain = model.apply(truth)
+    plain_keys = tuple(keys)
+    keys.clear()
+    seen = model.apply(with_clearance)
+
+    # Four draws: A's load and arrival, B's load, and the transfer group count.
+    assert len(keys) == 4
+    assert tuple(keys) == plain_keys
+    assert seen.current_visit == CurrentVisitState("rem", True)
+    assert seen.minimum_gap_s == 12.5
+    assert seen.suspensions == truth.suspensions
+    assert seen.platforms == truth.platforms
+    assert seen.trains[0].onboard_load == 330
+    assert replace(seen, current_visit=None) == plain
 
 
 def test_each_value_has_its_own_multiplier():

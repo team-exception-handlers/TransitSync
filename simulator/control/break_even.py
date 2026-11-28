@@ -1,37 +1,46 @@
 # AI contribution: 50% or more AI-generated
-"""Break-even rule for one candidate hold (US-2.2, Task 2.2.2, #42).
+"""Break-even rule for one candidate hold (US-2.2, #42; US-2.4, #206).
 
 Implements Mathematical Foundations section 1:
 
     Benefit(h) = N(h) * H * w_wait
-    Cost(h)    = L * h * w_onboard + downstream cost
+    Cost(h)    = L * delay * w_onboard + downstream cost
     Hold if Benefit(h) > Cost(h)
 
-Both sides are in passenger-seconds. One person delayed 60 s counts the same
-as 60 people delayed 1 s, so the two sides can be compared directly.
+N(h) is the additional passengers who can connect because of the hold, H is
+the time they would otherwise wait for the next train, and L is the number
+already on board.
+Times are seconds; benefit and cost are passenger-seconds. The weights express
+how waiting and riding time are valued.
 
-This is a pure function with no simulator dependency: it takes numbers and
-returns numbers, so it can be checked against values worked out by hand.
-N(h) comes from ``expected_arrivals`` (#41) and the search over hold lengths
-is #43. The downstream cost defaults to 0 until downstream evaluation (#62)
-supplies it.
+Connection protection compares departure with and without a hold, accounting
+for mandatory dispatch and minimum-gap waits. For example, a
+train ready at 100 s but required to wait until 140 s departs at 160 s after
+a requested 60 s hold. That adds 20 s per onboard passenger; only passengers
+who connect after 140 s and by 160 s count in N(h).
+
+Callers supply that delay as ``incremental_delay_s``; omitting it charges the
+full requested hold h. Downstream cost defaults to zero. The result keeps the
+request, estimated departure and extra delay separate for the decision log.
+
+This pure calculation reads no simulator state. The hold search (#43) supplies
+N(h) using ``expected_arrivals`` (#41) and the appropriate departure window.
 """
 
 from dataclasses import dataclass
 
 from simulator.control.validation import finite_number
 
-# Waiting on a platform feels worse than riding, so it is weighted more.
-# Assumed values until the rider survey gives the ratio (section 1)
+# Use these waiting/riding weights until the rider survey sets their ratio (§1).
 DEFAULT_W_WAIT = 2.0
 DEFAULT_W_ONBOARD = 1.0
 
 
 @dataclass(frozen=True, slots=True)
 class BreakEvenWeights:
-    """Weights w_wait and w_onboard, with no unit.
+    """Weights for waiting and riding time, with no unit.
 
-    Raises ``ValueError`` if a weight is negative or not a finite number.
+    Raise ValueError if either weight is negative or not finite.
     """
 
     w_wait: float = DEFAULT_W_WAIT
@@ -52,15 +61,18 @@ class BreakEvenWeights:
 class BreakEvenResult:
     """Both sides of the break-even rule for one hold length.
 
-    ``hold_s`` is in seconds, ``n_caught`` in passengers, and the benefit and
-    cost in passenger-seconds. Value Object: the search (#43) compares these
-    and the decision audit (#44) records them as they are.
+    Value Object: keeps the requested hold separate from its extra delay.
+    Hold, departure and delay are seconds; ``n_caught`` is passengers, and
+    benefit/cost are passenger-seconds. Callers that omit departure timing
+    receive None in the two optional fields.
     """
 
     hold_s: float
     n_caught: float
     benefit_ps: float
     cost_ps: float
+    departure_s: float | None = None
+    incremental_delay_s: float | None = None
 
     @property
     def net_ps(self) -> float:
@@ -80,29 +92,34 @@ def evaluate_hold(
     load: float,
     weights: BreakEvenWeights,
     downstream_cost_ps: float = 0.0,
+    *,
+    incremental_delay_s: float | None = None,
+    departure_s: float | None = None,
 ) -> BreakEvenResult:
-    """Return the benefit and cost of holding ``hold_s`` seconds.
+    """Return the passenger benefit and delay cost of a requested hold.
 
-    Args:
-        hold_s: h, hold length in seconds.
-        n_caught: N(h), extra passengers the hold lets connect.
-        headway_s: H, seconds those passengers would otherwise wait for the
-            next train.
-        load: L, passengers already on board, who each lose ``hold_s``.
-        weights: w_wait and w_onboard.
-        downstream_cost_ps: knock-on delay to later trains, in
-            passenger-seconds.
-
-    Raises:
-        ValueError: any input is negative or not a finite number.
+    ``n_caught`` passengers each save ``headway_s`` seconds of waiting. Each
+    onboard passenger loses ``incremental_delay_s`` seconds, or ``hold_s``
+    when no extra-delay estimate is supplied. Weights scale waiting and riding
+    time; downstream cost adds delay to later trains in passenger-seconds.
+    ``departure_s`` is an optional departure estimate saved with the result.
+    Raise ValueError for negative inputs or values that are not finite.
     """
     hold = finite_number("hold_s", hold_s, 0.0)
     caught = finite_number("n_caught", n_caught, 0.0)
     headway = finite_number("headway_s", headway_s, 0.0)
     onboard = finite_number("load", load, 0.0)
     downstream = finite_number("downstream_cost_ps", downstream_cost_ps, 0.0)
-    # Time saved: each caught passenger avoids waiting a full headway
+    delay = (
+        hold
+        if incremental_delay_s is None
+        else finite_number("incremental_delay_s", incremental_delay_s, 0.0)
+    )
+    if departure_s is not None:
+        finite_number("departure_s", departure_s, 0.0)
     benefit = caught * headway * weights.w_wait
-    # Time lost: everyone on board waits the whole hold, plus later trains
-    cost = onboard * hold * weights.w_onboard + downstream
-    return BreakEvenResult(hold, caught, benefit, cost)
+    # Charge only the extra wait caused by holding when that delay is supplied.
+    cost = onboard * delay * weights.w_onboard + downstream
+    return BreakEvenResult(
+        hold, caught, benefit, cost, departure_s, incremental_delay_s
+    )

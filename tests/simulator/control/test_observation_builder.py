@@ -4,6 +4,7 @@
 import dataclasses
 
 from simulator.control.interface import (
+    CurrentVisitState,
     IncomingTransfer,
     ObservationSnapshot,
     PlatformState,
@@ -12,6 +13,7 @@ from simulator.control.interface import (
 from simulator.control.observation_builder import ObservationBuilder
 from simulator.engine.event_queue import Scheduler
 from simulator.engine.events import DepartureDue
+from simulator.trains.suspension import LineSuspension
 from simulator.trains.train import ScheduledStop, Train
 from simulator.trains.train_component import TrainComponent
 
@@ -47,9 +49,12 @@ def make_trains(initial_deviation_s=0):
     return [first, second]
 
 
-def snapshots_at_each_decision(transfer_sources=(), initial_deviation_s=0):
+def snapshots_at_each_decision(
+    transfer_sources=(), initial_deviation_s=0, *, component=None
+):
     """Run the trains and build a snapshot at every ``DepartureDue``."""
-    component = TrainComponent(make_trains(initial_deviation_s))
+    if component is None:
+        component = TrainComponent(make_trains(initial_deviation_s))
     builder = ObservationBuilder(transfer_sources)
     scheduler = Scheduler()
     component.start(scheduler)
@@ -116,6 +121,37 @@ def test_snapshot_does_not_change_as_the_run_continues():
     assert first.trains[0].next_platform_id == "P2"
 
 
+def test_current_visit_clearance_uses_deciding_stop_and_keeps_copied_history():
+    """Origin status comes from the current stop, even when a next stop exists."""
+    leaders = [
+        Train("leader1", 100, (ScheduledStop("S1", "P1", 0, 20),), line_id="blue"),
+        Train("leader2", 100, (ScheduledStop("S2", "P2", 0, 40),), line_id="green"),
+    ]
+    suspension = LineSuspension("rem", 120, 140)
+    trains = make_trains()
+    trains[1].line_id = "orange"
+    component = TrainComponent(
+        [*leaders, *trains], minimum_gap_s=12.5, suspensions=[suspension]
+    )
+    snapshots = snapshots_at_each_decision(component=component)
+    origin, intermediate, other = [s for s in snapshots if s.train_id in ("A", "B")]
+
+    # Departure at 140 + travel 70 + dwell 30 gives the next decision at 240 s.
+    # Earlier trains left P1 at 20 s and P2 at 40 s.
+    assert origin.current_visit == CurrentVisitState("rem", True)
+    assert origin.trains[0].next_platform_id == "P2"
+    assert origin.minimum_gap_s == 12.5
+    assert origin.suspensions == (suspension,)
+    assert origin.platforms[0].last_departure_s == 20
+    assert intermediate.current_visit == CurrentVisitState("rem", False)
+    assert intermediate.time_s == 240
+    assert intermediate.platforms[1].last_departure_s == 40
+    assert other.current_visit == CurrentVisitState("orange", True)
+    # Later departures must not overwrite a saved snapshot.
+    assert component.platform_states()[0].last_departure_s == 490
+    assert origin.platforms[0].last_departure_s == 20
+
+
 def test_transfer_groups_come_from_every_source():
     first = snapshots_at_each_decision((FixedTransfers(), FixedTransfers()))[0]
     expected = IncomingTransfer("group-1", "P2", 12, 140.0, 190.0, 100.0, 15)
@@ -140,11 +176,17 @@ def test_legacy_train_source_leaves_service_irregularity_unavailable():
     )
     observation = ObservationBuilder().build(decision, LegacySource())
     assert observation.service_irregularity is None
+    assert observation.current_visit is None
 
 
 def test_snapshot_values_are_plain_immutable_data():
     first = snapshots_at_each_decision((FixedTransfers(),))[0]
-    parts = (*first.trains, *first.platforms, *first.incoming_transfers)
+    parts = (
+        *first.trains,
+        *first.platforms,
+        *first.incoming_transfers,
+        first.current_visit,
+    )
     for part in parts:
         for value in dataclasses.astuple(part):
             # Only numbers, text or None: nothing that points into the simulator

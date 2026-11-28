@@ -25,6 +25,11 @@ changes passenger IDs in the event logs of the three seeded runs. Their event
 hashes were recaptured from main c05d95d, which has #418 but none of the
 optimizations, and match on Windows and Linux. Their decision-log hashes and
 both single-run oracles are unchanged.
+
+The saved hashes use decision-log format version 2. #206 changes it to 3.
+These rolling-horizon records have no other changes. Check that every record
+uses version 3, then change only that version number in a copy for the hash
+comparison. Changes to any other fields or their formatting must still fail.
 """
 
 import hashlib
@@ -33,6 +38,7 @@ import sys
 
 import pytest
 
+from simulator.control.decision_audit import DECISION_SCHEMA_VERSION
 from simulator.control.planning import RollingHorizonSettings
 from simulator.control.rolling_horizon import RollingHorizonPlanner
 from simulator.control.strategies.rolling_horizon import RollingHorizonStrategy
@@ -55,6 +61,28 @@ _DECISION_HASHES = {
         "linux": "bb95ac638da34430492d5347a6b4d1153685f79197068bc188906d01e23a49b0",
     },
 }
+
+
+def _schema_2_bytes(raw: bytes) -> bytes:
+    """Return a copy of the audit bytes using version 2 for the saved hashes.
+
+    First check that every original record uses the current version, 3.
+    Handle both saved JSON Lines and the approximate search's JSON array.
+    Leave all other bytes unchanged so the hashes still catch other changes.
+    """
+    assert DECISION_SCHEMA_VERSION == 3
+    records = (
+        json.loads(raw)
+        if raw.startswith(b"[")
+        else [json.loads(line) for line in raw.splitlines()]
+    )
+    assert records
+    for record in records:
+        assert record["schema_version"] == 3
+    header = b'{"schema_version":3,'
+    # Require one matching header per record before replacing version numbers.
+    assert raw.count(header) == len(records)
+    return raw.replace(header, b'{"schema_version":2,')
 
 
 def _for_this_platform(hashes: dict[str, str]) -> str:
@@ -99,11 +127,9 @@ def test_coordinated_logs_match_unoptimized_baseline(
     """
     result, _, _ = run(tmp_path, **options)
     assert hashlib.sha256(result.events_path.read_bytes()).hexdigest() == events
+    audit = _schema_2_bytes(result.decisions_path.read_bytes())
     expected_decisions = _for_this_platform(decisions)
-    assert (
-        hashlib.sha256(result.decisions_path.read_bytes()).hexdigest()
-        == expected_decisions
-    )
+    assert hashlib.sha256(audit).hexdigest() == expected_decisions
 
 
 def test_downstream_refusal_matches_unoptimized_baseline(tmp_path):
@@ -112,7 +138,8 @@ def test_downstream_refusal_matches_unoptimized_baseline(tmp_path):
     assert hashlib.sha256(result.events_path.read_bytes()).hexdigest() == (
         "a6e7c0b76170e27dff0e9f7399bb4c3b6e11fbcf98688943df85bd14a8db8419"
     )
-    assert hashlib.sha256(result.decisions_path.read_bytes()).hexdigest() == (
+    audit = _schema_2_bytes(result.decisions_path.read_bytes())
+    assert hashlib.sha256(audit).hexdigest() == (
         "65634e6e82e577268474ea0a5e41f3d4dbe0e3810e251797123dd7d5eace210e"
     )
 
@@ -125,6 +152,6 @@ def test_approximate_search_audit_matches_unoptimized_baseline():
     )
     strategy.evaluate(observation)
     encoded = json.dumps(strategy.decision_records(), separators=(",", ":")).encode()
-    assert hashlib.sha256(encoded).hexdigest() == (
+    assert hashlib.sha256(_schema_2_bytes(encoded)).hexdigest() == (
         "a5851fb90d54b2612552ea283e412d9edc3f5c88ea9fc22f68f0154e05e7c799"
     )

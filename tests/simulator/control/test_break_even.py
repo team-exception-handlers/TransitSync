@@ -104,6 +104,9 @@ def test_same_inputs_give_the_same_output_and_change_nothing(
         ("headway_s", math.nan),
         ("load", math.inf),
         ("downstream_cost_ps", -10.0),
+        ("incremental_delay_s", -1.0),
+        ("incremental_delay_s", math.inf),
+        ("departure_s", math.nan),
         ("load", "180"),
     ],
 )
@@ -127,3 +130,16 @@ def test_rejects_bad_input_naming_the_field(field_name, value):
 def test_weights_reject_bad_values(w_wait, w_onboard, field_name):
     with pytest.raises(ValueError, match=field_name):
         BreakEvenWeights(w_wait=w_wait, w_onboard=w_onboard)
+
+
+def test_incremental_delay_preserves_requested_duration_and_downstream_cost():
+    # A 60 s request adds 20 s: 100 passengers * 20 s + 500 later-train cost
+    # gives 2500 passenger-seconds.
+    result = evaluate_hold(
+        60, 10, 300, 100, EQUAL, 500, incremental_delay_s=20, departure_s=160
+    )
+    assert result.hold_s == 60
+    assert result.incremental_delay_s == 20
+    assert result.departure_s == 160
+    assert result.benefit_ps == 3000
+    assert result.cost_ps == 2500

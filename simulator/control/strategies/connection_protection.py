@@ -55,13 +55,14 @@ class ConnectionProtectionStrategy(DecisionController):
     def evaluate(self, observation: ObservationSnapshot) -> tuple[HoldAction, ...]:
         """Request the best hold in seconds, or return no action.
         Skip platforms without settings. Log each decision at other platforms.
-        Raise ``ValueError`` if the observation has no data for the deciding train.
+        Raise ValueError if train data, current stop details or platform history
+        is missing.
         """
         platform_id = observation.platform_id
         if platform_id not in self.searches:
             return as_actions(None)
         inputs = HoldInputs.from_observation(observation, self.headways_s[platform_id])
-        result = self.searches[platform_id].run(inputs)
+        result = self.searches[platform_id].run(inputs, departure_context=observation)
         # Keep the reason even when the train should leave without a hold.
         self.audit.record(result)
         hold = None

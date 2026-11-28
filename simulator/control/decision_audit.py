@@ -39,7 +39,7 @@ from simulator.engine.event_log import partial_path
 
 DECISIONS_FILE = "decisions.jsonl"
 # Bump when a record field is added, removed or renamed
-DECISION_SCHEMA_VERSION = 2
+DECISION_SCHEMA_VERSION = 3
 
 KIND_HOLD_SEARCH = "hold_search"
 KIND_ESTIMATES = "estimates"
@@ -158,6 +158,8 @@ def decision_record(result: HoldSearchResult) -> dict[str, Any]:
                 for group in inputs.transfers
             ],
         },
+        "no_hold_departure_s": result.no_hold_departure_s,
+        "departure_context": _departure_context_record(result.departure_context),
         "walking": _walking_record(search.walking),
         "weights": search.weights.to_dict(),
         "hold_search": search.settings.to_dict(),
@@ -166,6 +168,25 @@ def decision_record(result: HoldSearchResult) -> dict[str, Any]:
         "candidates": [
             _candidate_record(candidate, decision) for candidate in result.candidates
         ],
+    }
+
+
+def _departure_context_record(
+    context: ObservationSnapshot | None,
+) -> dict[str, Any] | None:
+    """Save restrictions and platform history so departure estimates can be checked."""
+    if context is None:
+        return None
+    visit = context.current_visit
+    platform = next(
+        p for p in context.platforms if p.platform_id == context.platform_id
+    )
+    return {
+        "line_id": visit.line_id,
+        "is_trip_origin": visit.is_trip_origin,
+        "previous_departure_s": platform.last_departure_s,
+        "minimum_gap_s": context.minimum_gap_s,
+        "suspensions": [asdict(suspension) for suspension in context.suspensions],
     }
 
 
@@ -377,6 +398,8 @@ def _candidate_record(
 ) -> dict[str, Any]:
     return {
         "hold_s": candidate.hold_s,
+        "departure_s": candidate.departure_s,
+        "incremental_delay_s": candidate.incremental_delay_s,
         "n_caught": candidate.n_caught,
         "benefit_ps": candidate.benefit_ps,
         "cost_ps": candidate.cost_ps,

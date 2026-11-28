@@ -1,11 +1,13 @@
 # AI contribution: 50% or more AI-generated
 """Bound observation work before copying or perturbing full-day routes (#61)."""
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
 
 from simulator.control.decision import DecisionPipeline
+from simulator.control.interface import CurrentVisitState
 from simulator.control.observation_builder import ObservationBuilder
 from simulator.control.planning import RollingHorizonSettings
 from simulator.engine.event_queue import Scheduler
@@ -111,6 +113,7 @@ def test_pipeline_passes_configured_window_to_observation_source(window, count):
     )
     DecisionPipeline(probe).decide(decision, component)
     assert len(probe.seen.future_visits) == count
+    assert probe.seen.current_visit is None
 
 
 def test_bounded_view_retains_current_dwelling_visit():
@@ -124,8 +127,30 @@ def test_bounded_view_retains_current_dwelling_visit():
     assert visits[0].departure_s == 140
 
 
+def test_planning_snapshot_rejects_other_departure_at_occupied_platform():
+    """A different scheduled departure means a different visit (#206)."""
+    component = returning_component()
+    scheduler = Scheduler()
+    component.start(scheduler)
+    # Arrival at 90 + 40 = 130 s and departure at 100 + 40 = 140 s
+    # keep P1 occupied at 135 s; the schedule must identify the visit.
+    scheduler.run_until(135, lambda event: component.handle(event, scheduler))
+    decision = DepartureDue(
+        time_s=135, train_id="A", station_id="S1", platform_id="P1", scheduled_s=100
+    )
+    builder = ObservationBuilder()
+    current = builder.build(decision, component, planning=True)
+    historical = builder.build(
+        replace(decision, scheduled_s=99), component, planning=True
+    )
+
+    assert current.current_visit == CurrentVisitState("", True)
+    assert historical.current_visit is None
+
+
 def test_nonplanning_builder_does_not_request_future_visits(monkeypatch):
     component = returning_component()
+    occupied_before = dict(component._at_platform)
 
     def unexpected(*args):
         pytest.fail("nonplanning controller requested a forward snapshot")
@@ -134,4 +159,8 @@ def test_nonplanning_builder_does_not_request_future_visits(monkeypatch):
     decision = DepartureDue(
         time_s=0, train_id="A", station_id="S1", platform_id="P1", scheduled_s=100
     )
-    assert ObservationBuilder().build(decision, component).future_visits == ()
+    assert component.current_visit_state(decision) is None
+    assert dict(component._at_platform) == occupied_before
+    observation = ObservationBuilder().build(decision, component)
+    assert observation.future_visits == ()
+    assert observation.current_visit is None
