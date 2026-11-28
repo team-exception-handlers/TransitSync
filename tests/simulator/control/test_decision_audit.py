@@ -7,12 +7,14 @@ J = 0, -4000, -11000, -19500 at L = 1000 (no hold).
 """
 
 import json
+import math
 
 import pytest
 
 from simulator.control.break_even import BreakEvenWeights
 from simulator.control.decision import DecisionPipeline
 from simulator.control.decision_audit import (
+    DECISION_SCHEMA_VERSION,
     OUTCOME_CHOSEN,
     OUTCOME_LOWER_NET,
     OUTCOME_TIED_LONGER,
@@ -23,9 +25,16 @@ from simulator.control.decision_audit import (
 )
 from simulator.control.expected_arrivals import TransferEstimate
 from simulator.control.hold_search import HoldInputs, HoldSearch, HoldSearchSettings
+from simulator.control.interface import (
+    CurrentVisitState,
+    ObservationSnapshot,
+    PlatformState,
+)
 from simulator.control.strategies.no_control import NoControlStrategy
 from simulator.control.walking_cdf import ShiftedExponentialCdf
 from simulator.engine.event_log import partial_path
+from simulator.engine.events import SCHEMA_VERSION
+from simulator.trains.suspension import LineSuspension
 
 EQUAL = BreakEvenWeights(w_wait=1.0, w_onboard=1.0)
 SETTINGS = HoldSearchSettings(step_s=10.0, max_hold_s=30.0)
@@ -114,25 +123,53 @@ def test_a_walking_cdf_that_is_not_a_dataclass_is_recorded_by_name():
 
 
 def test_a_decision_can_be_recalculated_from_its_record_alone():
-    walking = ShiftedExponentialCdf(mean_s=300.0, min_s=30.0)
-    record = decision_record(result_for(load=50, walking=walking))
-    # Rebuild every number from the record, as a reader of the log would
-    rebuilt = HoldSearch(
-        ShiftedExponentialCdf(record["walking"]["mean_s"], record["walking"]["min_s"]),
-        BreakEvenWeights(**record["weights"]),
-        HoldSearchSettings(**record["hold_search"]),
-    ).run(
-        HoldInputs(
-            record["time_s"],
-            record["train_id"],
-            record["station_id"],
-            record["platform_id"],
-            record["inputs"]["load"],
-            record["inputs"]["headway_s"],
-            tuple(TransferEstimate(**g) for g in record["inputs"]["transfers"]),
-        )
+    context = ObservationSnapshot(
+        100,
+        "green_1",
+        "mcgill",
+        "green",
+        100,
+        (),
+        (PlatformState("rem", 0, 20), PlatformState("green", 0, 50)),
+        (),
+        current_visit=CurrentVisitState("green", True),
+        suspensions=(LineSuspension("green", 100, 140),),
+        minimum_gap_s=100,
     )
-    assert decision_record(rebuilt) == record
+    inputs = HoldInputs(
+        100, "green_1", "mcgill", "green", 50, 300, (TransferEstimate("g1", 80, 100),)
+    )
+    result = HoldSearch(
+        ShiftedExponentialCdf(300, 30), EQUAL, HoldSearchSettings(10, 60)
+    ).run(inputs, departure_context=context)
+    record = json.loads(json.dumps(decision_record(result)))
+    assert DECISION_SCHEMA_VERSION == record["schema_version"] == 3
+    assert SCHEMA_VERSION == 4
+    assert record["time_s"] == 100
+    assert record["no_hold_departure_s"] == 150
+    assert record["departure_context"] == {
+        "line_id": "green",
+        "is_trip_origin": True,
+        "previous_departure_s": 50,
+        "minimum_gap_s": 100,
+        "suspensions": [{"line_id": "green", "start_s": 100, "end_s": 140}],
+    }
+    # Dispatch resumes at 140 s; green's previous departure + gap is
+    # 50 + 100 = 150 s, so the train must wait until 150 s without a hold.
+    for candidate in record["candidates"]:
+        departure = max(150, record["time_s"] + candidate["hold_s"])
+        delta = departure - 150
+        # The feeder arrives at 0; F(x)=1-exp(-(x-30)/270). Count walkers
+        # arriving after 150 s and by the departure with a hold.
+        caught = 80 * (math.exp(-120 / 270) - math.exp(-(departure - 30) / 270))
+        assert candidate["departure_s"] == departure
+        assert candidate["incremental_delay_s"] == delta
+        assert candidate["n_caught"] == pytest.approx(caught, abs=1e-9, rel=0)
+        assert candidate["benefit_ps"] == pytest.approx(caught * 300, abs=1e-6, rel=0)
+        assert candidate["cost_ps"] == 50 * delta
+        assert candidate["net_ps"] == pytest.approx(
+            caught * 300 - 50 * delta, abs=1e-6, rel=0
+        )
 
 
 def test_log_collects_records_in_decision_order():

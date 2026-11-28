@@ -27,9 +27,11 @@ from simulator.control.connection_configuration import (
 )
 from simulator.control.hold_search import HoldSearchSettings
 from simulator.control.interface import (
+    CurrentVisitState,
     HoldAction,
     IncomingTransfer,
     ObservationSnapshot,
+    PlatformState,
     TrainState,
 )
 from simulator.control.settings import ControlSettings
@@ -104,7 +106,8 @@ def decision_snapshot():
         platform_id="green",
         scheduled_departure_s=130,
         trains=(TrainState("green-1", "green", None, None, None, 0, 100, 800),),
-        platforms=(),
+        platforms=(PlatformState("green", 0, None),),
+        current_visit=CurrentVisitState("green", True),
         incoming_transfers=(IncomingTransfer("group", "green", 80, 130, 400, 100, 80),),
     )
 

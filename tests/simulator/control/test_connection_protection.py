@@ -13,9 +13,11 @@ import pytest
 from simulator.control.break_even import BreakEvenWeights
 from simulator.control.hold_search import HoldSearch, HoldSearchSettings
 from simulator.control.interface import (
+    CurrentVisitState,
     HoldAction,
     IncomingTransfer,
     ObservationSnapshot,
+    PlatformState,
     TrainState,
 )
 from simulator.control.strategies.connection_protection import (
@@ -75,7 +77,8 @@ def snapshot(platform="green", load=10, transfers=True):
             TrainState("other", "other", None, None, None, 0, 900, 1000),
             TrainState("deciding", platform, None, None, None, 0, load, 1000),
         ),
-        platforms=(),
+        platforms=(PlatformState(platform, 0, None),),
+        current_visit=CurrentVisitState(platform, True),
         incoming_transfers=groups if transfers else (),
     )
 
@@ -144,7 +147,9 @@ def test_platform_inputs_drive_actions_and_audit(
 def test_unprotected_departure_has_no_action_or_audit():
     """Skip other platforms without needing their walking model or train data."""
     strategy = ConnectionProtectionStrategy(*configuration())
-    observation = replace(snapshot("elsewhere"), trains=())
+    observation = replace(
+        snapshot("elsewhere"), trains=(), current_visit=None, platforms=()
+    )
     assert strategy.evaluate(observation) == ()
     assert strategy.decision_records() == ()
 
@@ -223,3 +228,44 @@ def test_invalid_configuration_fails_at_construction(searches, headways, message
     """
     with pytest.raises(ValueError, match=message):
         ConnectionProtectionStrategy(searches, headways)
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        # The message names the deciding train, platform and time from snapshot()
+        ({"current_visit": None}, "current_visit .* for deciding at green, t=220 s"),
+        ({"platforms": ()}, "platform history for deciding at green, t=220 s"),
+    ],
+)
+def test_protected_departure_requires_clearance(changes, message):
+    strategy = ConnectionProtectionStrategy(*configuration())
+    observation = replace(snapshot(), **changes)
+    with pytest.raises(ValueError, match=message):
+        strategy.evaluate(observation)
+    assert strategy.decision_records() == ()
+
+
+@pytest.mark.parametrize(
+    ("platform", "caught", "benefit"),
+    [
+        ("green", 5.625, 1687.5),
+        ("rem", 2.109375, 540),
+    ],
+)
+def test_both_directions_exclude_their_mandatory_wait(platform, caught, benefit):
+    """Each destination keeps its own walking model, headway and clearance."""
+    strategy = ConnectionProtectionStrategy(*configuration())
+    context = replace(snapshot(platform), platforms=(PlatformState(platform, 0, 145),))
+    [action] = strategy.evaluate(context)
+    [record] = strategy.decision_records()
+    # Ready 220, gap floor 145+90=235; request 30 departs 250, adding 15 s.
+    # M=60: green 60*(.875-.78125)=5.625; REM 60*(.81640625-.78125)=2.109375.
+    assert action.duration_s == 30
+    assert record["no_hold_departure_s"] == 235
+    chosen = record["candidates"][-1]
+    assert chosen["n_caught"] == caught
+    assert chosen["benefit_ps"] == benefit
+    assert chosen["cost_ps"] == 150
+    assert chosen["departure_s"] == 250
+    assert chosen["incremental_delay_s"] == 15

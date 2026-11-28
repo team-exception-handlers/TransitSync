@@ -74,7 +74,7 @@ describe("SourcesView", () => {
     expect(rowOf("Maximum hold").getByText("Operational thresholds")).toBeDefined();
     expect(rowOf("Strategy").getByText("No control")).toBeDefined();
     // A run value with no backend entry still gets a row, marked as unsourced
-    expect(rowOf("Passenger flow").getByText("No source recorded yet")).toBeDefined();
+    expect(rowOf("Transfer volume").getByText("No source recorded yet")).toBeDefined();
   });
 
   it("marks inputs every run uses but Run settings cannot change as fixed, not blank", () => {
@@ -103,7 +103,7 @@ describe("SourcesView", () => {
 
     expect(screen.getByText(/Mock playback uses no run settings/)).toBeDefined();
     expect(rowOf("Maximum hold").getByText("—")).toBeDefined();
-    expect(screen.queryByRole("rowheader", { name: "Passenger flow" })).toBeNull();
+    expect(screen.queryByRole("rowheader", { name: "Transfer volume" })).toBeNull();
   });
 
   it("says so when no sources could be loaded", () => {

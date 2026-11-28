@@ -18,6 +18,7 @@ from api.connection_data import (
 )
 from api.passenger_outcomes import PassengerComparison, match_passengers
 from api.run_results import RunResultsResponse
+from api.scenario_presets import ScenarioPreset, list_presets
 from api.settings import Settings
 from api.simulation_comparison import (
     NO_HOLDING_STRATEGY,
@@ -130,6 +131,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return data
 
     _add_simulation_routes(application, simulation_runs)
+
+    @application.get(
+        "/scenario/presets",
+        response_model=list[ScenarioPreset],
+        tags=["scenario"],
+    )
+    def scenario_presets() -> list[ScenarioPreset]:
+        """Return the time-of-day presets and the conditions each one sets."""
+        return list_presets()
 
     @application.get("/parameters", tags=["parameters"])
     def get_parameters():

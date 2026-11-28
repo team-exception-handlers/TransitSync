@@ -11,10 +11,12 @@ endpoint must register matching `DatasetMetadata` for
 was previously specified by #180; this is an integration contract to coordinate,
 not an existing runtime registration.
 
-The files omit `control` and `operating_rules` so the scenario loader supplies
-its defaults (maximum hold 300 seconds, minimum safe gap 60 seconds). The run
-endpoint is responsible for applying and validating run-settings overrides,
-including strategy, maximum hold, prediction error, passenger flow, and
-disruption settings. These base files are not rewritten when settings change.
+The files omit `control`, `operating_rules` and `parameters` so the scenario
+loader supplies its defaults (maximum hold 300 seconds, minimum safe gap 60
+seconds, 60 transferring passengers per REM train, the GTFS timetable, 300
+passengers on board, a 120-second mean walk). The run endpoint is responsible
+for applying and validating run-settings overrides, including strategy,
+maximum hold, prediction error, the scenario parameters (#258), a time-of-day
+preset, and disruption settings. These base files are not rewritten when settings change.
 
 AI assistance for these JSON files and this note is recorded in `AI_USAGE.md`.

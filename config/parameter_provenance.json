@@ -39,7 +39,7 @@
     "source_name": "Irregularity Regulation Rules (irregularity.py)",
     "source_link": ""
   },
- "base_dwell_s": {
+  "base_dwell_s": {
     "classification": "assumed",
     "source_name": "Dwell model placeholder (dwell.py)",
     "source_link": ""
@@ -69,7 +69,7 @@
     "source_name": "Rider Survey Ratio Estimate (break_even.py)",
     "source_link": ""
   },
- "w_onboard": {
+  "w_onboard": {
     "classification": "assumed",
     "source_name": "Break-even weight assumption until rider survey (break_even.py)",
     "source_link": ""
@@ -84,9 +84,14 @@
     "source_name": "Reference Network GeoJSON (network.json)",
     "source_link": ""
   },
-  "passenger_flow": {
+  "transfer_volume": {
     "classification": "assumed",
-    "source_name": "Scenario demand tier setting (api/simulation_run.py)",
+    "source_name": "Swept transfer group size M (Mathematical Foundations, section 2)",
+    "source_link": ""
+  },
+  "train_headway_s": {
+    "classification": "published",
+    "source_name": "GTFS timetable gap unless set (simulator/trains/frequency.py)",
     "source_link": ""
   },
   "TRAIN_CAPACITY": {
@@ -94,22 +99,17 @@
     "source_name": "Demo constant (api/simulation_run.py)",
     "source_link": ""
   },
-  "WALKING_MEAN_S": {
+  "walking_mean_s": {
     "classification": "assumed",
-    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_name": "Scenario parameter until field walking data is fitted (simulator/scenario_parameters.py)",
     "source_link": ""
   },
   "WALKING_MIN_S": {
     "classification": "assumed",
-    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_name": "Walking-time floor (simulator/scenario_parameters.py)",
     "source_link": ""
   },
   "CORRIDOR_CAPACITY_PER_MINUTE": {
-    "classification": "assumed",
-    "source_name": "Demo constant (api/simulation_run.py)",
-    "source_link": ""
-  },
-  "DEMAND_RATES_PER_MINUTE": {
     "classification": "assumed",
     "source_name": "Demo constant (api/simulation_run.py)",
     "source_link": ""
@@ -124,9 +124,9 @@
     "source_name": "Demo constant (api/simulation_run.py)",
     "source_link": ""
   },
-  "ONBOARD_LOAD": {
+  "onboard_load": {
     "classification": "assumed",
-    "source_name": "Demo constant (api/simulation_run.py)",
+    "source_name": "Scenario parameter until load data exists (simulator/scenario_parameters.py)",
     "source_link": ""
   },
   "UNAFFECTED_THRESHOLD_S": {

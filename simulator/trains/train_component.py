@@ -24,7 +24,7 @@ from typing import Any
 
 from simulator.control.decision import DecisionPipeline
 from simulator.control.decision_audit import EncodedDecisionRecord
-from simulator.control.interface import PlatformState, TrainState
+from simulator.control.interface import CurrentVisitState, PlatformState, TrainState
 from simulator.control.irregularity import ServiceIrregularity
 from simulator.control.planning import FutureVisit
 from simulator.control.settings import ControlSettings
@@ -42,9 +42,10 @@ from simulator.engine.events import (
     TrainDeparture,
 )
 from simulator.passengers.platform_queue import PlatformQueue
+from simulator.trains.departure_timing import departure_timing_s
 from simulator.trains.disruption import DelayInjection
 from simulator.trains.door_throughput import DoorThroughput
-from simulator.trains.suspension import LineSuspension, dispatch_ready_s
+from simulator.trains.suspension import LineSuspension
 from simulator.trains.train import ScheduledStop, Train
 
 Visit = tuple[str, int, int]
@@ -397,6 +398,26 @@ class TrainComponent:
             )
             for platform in sorted(self._visits)
         )
+
+    def current_visit_state(self, decision: DepartureDue) -> CurrentVisitState | None:
+        """Copy the occupied stop's line and origin flag (#206).
+
+        Return None unless the decision matches the occupied visit.
+        Match both platform and scheduled departure, in seconds, to distinguish
+        separate visits to the same platform.
+        """
+        train = self.trains.get(decision.train_id)
+        if train is None or train.id in self._finished:
+            return None
+        visit = (train.id, train.current_trip_index, train.current_stop_index)
+        stop = self._stop(visit)
+        if (
+            stop.platform_id != decision.platform_id
+            or stop.departure_s != decision.scheduled_s
+            or self._occupied_platforms.get(stop.platform_id) != visit
+        ):
+            return None
+        return CurrentVisitState(train.line_id, visit[2] == 0)
 
     def future_visits(
         self, now_s: float, until_s: float = math.inf
@@ -777,14 +798,15 @@ class TrainComponent:
         ready_s = self._ready_departures[visit]
         train = self.trains[visit[0]]
         stop = self._stop(visit)
-        dispatch_s = ready_s
-        if visit[2] == 0:
-            dispatch_s = dispatch_ready_s(train.line_id, ready_s, self.suspensions)
-        safe_s = max(
-            dispatch_s,
-            scheduler.now,
-            self._last_departure.get(platform, -math.inf) + self.minimum_gap_s,
+        _, clearance_s = departure_timing_s(
+            ready_s,
+            line_id=train.line_id,
+            is_trip_origin=visit[2] == 0,
+            suspensions=self.suspensions,
+            previous_departure_s=self._last_departure.get(platform),
+            minimum_gap_s=self.minimum_gap_s,
         )
+        safe_s = max(clearance_s, scheduler.now)
         if safe_s > scheduler.now:
             scheduler.schedule(
                 DepartureClearance(
@@ -806,12 +828,13 @@ class TrainComponent:
         # Keep the original time to avoid rounding errors at suspension boundaries.
         ready_s = self._unheld_ready_s.pop(visit, self._ready_departures[visit])
         # Check when dispatch would be allowed without the hold.
-        dispatch_s = ready_s
-        if visit[2] == 0:
-            dispatch_s = dispatch_ready_s(train.line_id, ready_s, self.suspensions)
-        clearance_s = max(
-            dispatch_s,
-            self._last_departure.get(stop.platform_id, -math.inf) + self.minimum_gap_s,
+        dispatch_s, clearance_s = departure_timing_s(
+            ready_s,
+            line_id=train.line_id,
+            is_trip_origin=visit[2] == 0,
+            suspensions=self.suspensions,
+            previous_departure_s=self._last_departure.get(stop.platform_id),
+            minimum_gap_s=self.minimum_gap_s,
         )
         # Early waiting contributes no lateness.
         dispatch_delay = max(0.0, dispatch_s - stop.departure_s)

@@ -92,6 +92,19 @@ def test_dispatch_resumes_in_order_with_safe_gap():
     assert trains[1].inherited_delay_s == 90
 
 
+def test_departure_gap_does_not_reapply_dispatch_suspension():
+    """A gap can move departure into a closure without a second dispatch check."""
+    trains = [service("leader", 0, 80), service("follower", 90, 99)]
+    events, _ = run(trains, [LineSuspension("green", 100, 200)], gap_s=90)
+    departures = [event for event in events if isinstance(event, TrainDeparture)]
+
+    # Dispatch at readiness 99 is allowed; the gap then requires 80 + 90 = 170.
+    assert [event.time_s for event in departures] == [80, 170]
+    assert departures[1].inherited_delay_s == 71
+    assert departures[1].disruption_delay_s == 0
+    assert departures[1].generated_delay_s == 0
+
+
 def test_only_one_train_occupies_platform_during_a_suspension():
     trains = [
         service(name, arrival_s, departure_s=arrival_s + 30)

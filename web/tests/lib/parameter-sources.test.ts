@@ -27,10 +27,10 @@ describe("buildSourceRows", () => {
   });
 
   it("adds a row with no source for a value the backend does not list", () => {
-    const rows = buildSourceRows({}, { passenger_flow: "High" });
+    const rows = buildSourceRows({}, { transfer_volume: "80 passengers" });
 
     expect(rows).toEqual([{
-      name: "passenger_flow", label: "Passenger flow", value: "High",
+      name: "transfer_volume", label: "Transfer volume", value: "80 passengers",
       classification: null, sourceName: null, sourceLink: null,
     }]);
   });

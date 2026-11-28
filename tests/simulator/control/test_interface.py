@@ -8,6 +8,7 @@ from collections import deque
 import pytest
 
 from simulator.control.interface import (
+    CurrentVisitState,
     DecisionController,
     HoldAction,
     IncomingTransfer,
@@ -84,7 +85,9 @@ def test_strategy_cannot_mutate_observation():
     assert snapshot.time_s == 120.0
 
 
-@pytest.mark.parametrize("value", [TRAIN, PLATFORM, TRANSFER])
+@pytest.mark.parametrize(
+    "value", [TRAIN, PLATFORM, TRANSFER, CurrentVisitState("rem", True)]
+)
 def test_snapshot_parts_are_frozen(value):
     first_field = dataclasses.fields(value)[0].name
     with pytest.raises(dataclasses.FrozenInstanceError):
